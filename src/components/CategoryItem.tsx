@@ -24,7 +24,7 @@ type Props = {
   suggestedMs?: number
 }
 
-export function CategoryItem({ category, weeklyMs, lastTracked, onStart, onStop, onDelete, onRename, onSetGoal, onSetColor, onSetTag, suggestedMs }: Props) {
+export function CategoryItem({ category, weeklyMs, lastTracked, onStart, onStop, onDelete, onRename, onSetGoal, onSetColor, suggestedMs }: Props) {
   const [confirming, setConfirming] = useState(false)
   const [showColorPicker, setShowColorPicker] = useState(false)
   const [selectedTag, setSelectedTag] = useState<string | undefined>(undefined)

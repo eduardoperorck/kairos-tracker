@@ -8,7 +8,6 @@ function makeCategory(overrides: Partial<Category> = {}): Category {
   return {
     id: 'cat-1',
     name: 'Work',
-    accumulatedMs: 0,
     activeEntry: null,
     ...overrides,
   }

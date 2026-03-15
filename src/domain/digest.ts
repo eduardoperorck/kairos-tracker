@@ -1,5 +1,5 @@
 import type { Category, Session } from './timer'
-import { computeWeekMs, computeStreak, toDateString, getWeekDates } from './timer'
+import { computeWeekMs, computeStreak, getWeekDates } from './timer'
 import { computeEnergyPattern, isFlowSession } from './history'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
