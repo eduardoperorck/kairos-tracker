@@ -7,8 +7,10 @@ type Props = {
   startedAt: number | null
   preset: FocusPreset
   allowPostpone: boolean
+  strictMode?: boolean
   onBreakComplete: () => void
   onPostpone: () => void
+  onBreakSkipped?: () => void
 }
 
 function formatCountdown(ms: number): string {
@@ -20,7 +22,7 @@ function formatCountdown(ms: number): string {
 
 const suggestions = getBreakSuggestions()
 
-export function FocusGuard({ activeCategory, startedAt: _startedAt, preset, allowPostpone, onBreakComplete, onPostpone }: Props) {
+export function FocusGuard({ activeCategory, startedAt: _startedAt, preset, allowPostpone, strictMode = false, onBreakComplete, onPostpone, onBreakSkipped }: Props) {
   const [breakStartedAt] = useState(() => Date.now())
   const [remaining, setRemaining] = useState(() => preset.breakMs)
   const [skipped, setSkipped] = useState(false)
@@ -44,18 +46,14 @@ export function FocusGuard({ activeCategory, startedAt: _startedAt, preset, allo
   if (skipped) return null
 
   function handleSkipAttempt() {
-    if (allowPostpone) {
-      // First escape attempt: offer postpone instead
-      setShowSkipConfirm(true)
-    } else {
-      // Postpone already used: require typing SKIP
-      setShowSkipConfirm(true)
-    }
+    if (strictMode) return // strict mode: no skip allowed
+    setShowSkipConfirm(true)
   }
 
   function handleConfirmSkip() {
     if (!allowPostpone && skipInput !== 'SKIP') return
     setSkipped(true)
+    onBreakSkipped?.()
     onBreakComplete()
   }
 
@@ -85,7 +83,9 @@ export function FocusGuard({ activeCategory, startedAt: _startedAt, preset, allo
 
         <p className="mb-8 text-sm text-zinc-400 italic">{suggestions[suggestionIdx]}</p>
 
-        {!showSkipConfirm ? (
+        {strictMode ? (
+          <p className="text-xs text-zinc-700 italic">Strict mode — no skipping</p>
+        ) : !showSkipConfirm ? (
           <button
             className="text-xs text-zinc-700 hover:text-zinc-500 transition-colors"
             onClick={handleSkipAttempt}
@@ -102,7 +102,7 @@ export function FocusGuard({ activeCategory, startedAt: _startedAt, preset, allo
             </button>
             <button
               className="text-xs text-zinc-700 hover:text-zinc-500 transition-colors"
-              onClick={() => { setSkipped(true); onBreakComplete() }}
+              onClick={() => { setSkipped(true); onBreakSkipped?.(); onBreakComplete() }}
             >
               Skip anyway
             </button>

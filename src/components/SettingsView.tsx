@@ -12,6 +12,8 @@ type Props = {
   onWebhookUrlChange: (url: string) => void
   focusPreset: FocusPreset
   onFocusPresetChange: (preset: FocusPreset) => void
+  focusStrictMode: boolean
+  onFocusStrictModeChange: (strict: boolean) => void
 }
 
 function downloadBlob(content: string, filename: string, mimeType: string) {
@@ -79,7 +81,7 @@ function SyncSection({ storage, sessions, categories }: { storage: Storage; sess
 
 // ─── SettingsView ─────────────────────────────────────────────────────────────
 
-export function SettingsView({ categories, sessions, storage, webhookUrl, onWebhookUrlChange, focusPreset, onFocusPresetChange }: Props) {
+export function SettingsView({ categories, sessions, storage, webhookUrl, onWebhookUrlChange, focusPreset, onFocusPresetChange, focusStrictMode, onFocusStrictModeChange }: Props) {
   const [restoreStatus, setRestoreStatus] = useState<string | null>(null)
   const [webhookDraft, setWebhookDraft] = useState(webhookUrl)
   const [apiKeyDraft, setApiKeyDraft] = useState('')
@@ -174,6 +176,27 @@ export function SettingsView({ categories, sessions, storage, webhookUrl, onWebh
               </span>
             </button>
           ))}
+        </div>
+        <div className="mt-3 flex items-center gap-3">
+          <button
+            role="switch"
+            aria-checked={focusStrictMode}
+            onClick={() => {
+              const next = !focusStrictMode
+              onFocusStrictModeChange(next)
+              storage.setSetting('focus_strict_mode', next ? 'true' : 'false')
+            }}
+            className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${
+              focusStrictMode ? 'bg-red-500/60' : 'bg-white/[0.08]'
+            }`}
+          >
+            <span className={`inline-block h-3.5 w-3.5 rounded-full bg-white transition-transform ${
+              focusStrictMode ? 'translate-x-4' : 'translate-x-1'
+            }`} />
+          </button>
+          <span className="text-xs text-zinc-500">
+            Strict mode — {focusStrictMode ? 'no skipping allowed' : 'skipping allowed'}
+          </span>
         </div>
       </section>
 

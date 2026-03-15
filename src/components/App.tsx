@@ -40,6 +40,7 @@ export function App({ storage }: Props) {
 
   // ── FocusGuard state ────────────────────────────────────────────────────────
   const [focusPreset, setFocusPreset] = useState<FocusPreset>(FOCUS_PRESETS[0])
+  const [focusStrictMode, setFocusStrictMode] = useState(false)
   const [breakActive, setBreakActive] = useState(false)
   const [postponedUntil, setPostponedUntil] = useState<number | null>(null)
   const [postponeUsed, setPostponeUsed] = useState(false)
@@ -54,12 +55,14 @@ export function App({ storage }: Props) {
     Promise.all([
       storage.getSetting('webhook_url'),
       storage.getSetting('focus_preset'),
-    ]).then(([url, preset]) => {
+      storage.getSetting('focus_strict_mode'),
+    ]).then(([url, preset, strict]) => {
       setWebhookUrl(url)
       if (preset) {
         const found = FOCUS_PRESETS.find(p => p.name === preset)
         if (found) setFocusPreset(found)
       }
+      if (strict === 'true') setFocusStrictMode(true)
     })
   }, [])
 
@@ -103,6 +106,17 @@ export function App({ storage }: Props) {
     }, 30 * 60_000) // check every 30 min
     return () => clearInterval(id)
   }, [activeStartedAt, activeCategory?.name])
+
+  // ── Daily reminder if no sessions tracked by 20h ────────────────────────────
+  useEffect(() => {
+    const id = setInterval(() => {
+      const hour = new Date().getHours()
+      if (hour === 20 && categories.every(c => c.accumulatedMs === 0)) {
+        notifications.notifyDailyReminder(20)
+      }
+    }, 60_000) // check every minute
+    return () => clearInterval(id)
+  }, [categories])
 
   // ── Tray + global shortcut + idle detection ─────────────────────────────────
   const elapsedStr = activeStartedAt ? formatElapsed(Date.now() - activeStartedAt) : 'No active timer'
@@ -189,6 +203,10 @@ export function App({ storage }: Props) {
           webhooks.onGoalReached(cat.name, goalMs, weeklyAfter)
         }
       }
+
+      // Streak milestone webhook
+      const streak = streaks[id] ?? 0
+      webhooks.onStreakMilestone(cat.name, streak)
     }
   }
 
@@ -216,6 +234,10 @@ export function App({ storage }: Props) {
     const review = createEveningReview(today, mood, notes)
     await storage.saveEveningReview(review)
     setEveningReview(review)
+    // Daily review webhook
+    const totalMs = categories.reduce((sum, c) => sum + c.accumulatedMs, 0)
+    const topCat = categories.slice().sort((a, b) => b.accumulatedMs - a.accumulatedMs)[0]
+    webhooks.onDailyReview(mood, totalMs, topCat?.name ?? '')
   }
 
   function handlePostpone() {
@@ -240,8 +262,12 @@ export function App({ storage }: Props) {
           startedAt={activeStartedAt}
           preset={focusPreset}
           allowPostpone={!postponeUsed}
+          strictMode={focusStrictMode}
           onBreakComplete={() => setBreakActive(true)}
           onPostpone={handlePostpone}
+          onBreakSkipped={() => activeCategory && activeStartedAt
+            ? webhooks.onBreakSkipped(activeCategory.name, Date.now() - activeStartedAt)
+            : undefined}
         />
       )}
 
@@ -367,6 +393,8 @@ export function App({ storage }: Props) {
             onWebhookUrlChange={url => setWebhookUrl(url || null)}
             focusPreset={focusPreset}
             onFocusPresetChange={setFocusPreset}
+            focusStrictMode={focusStrictMode}
+            onFocusStrictModeChange={setFocusStrictMode}
           />
         )}
 
