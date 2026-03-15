@@ -13,6 +13,7 @@ export default defineConfig({
     globals: true,
     alias: {
       '@tauri-apps/plugin-global-shortcut': path.join(stubsDir, 'tauri-plugin-global-shortcut.ts'),
+      '@tauri-apps/plugin-fs': path.join(stubsDir, 'tauri-plugin-fs.ts'),
     },
   },
 } as any)

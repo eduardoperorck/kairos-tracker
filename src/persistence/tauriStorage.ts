@@ -156,5 +156,14 @@ export async function createTauriStorage(): Promise<Storage> {
       const r = rows[0]
       return { date: r.date, mood: r.mood as 1|2|3|4|5, notes: r.notes, createdAt: r.created_at }
     },
+
+    async importSessions(sessions: Session[]): Promise<void> {
+      for (const s of sessions) {
+        await db.execute(
+          'INSERT OR IGNORE INTO sessions (id, category_id, started_at, ended_at, date, tag) VALUES (?, ?, ?, ?, ?, ?)',
+          [s.id, s.categoryId, s.startedAt, s.endedAt, s.date, s.tag ?? null]
+        )
+      }
+    },
   }
 }

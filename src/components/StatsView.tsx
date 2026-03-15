@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { formatElapsed } from '../domain/format'
+import { DigestView } from './DigestView'
 import { computeHourDistribution, computeDayTotals, computeEnergyPattern, isFlowSession } from '../domain/history'
 import { computeWeekMs, getWeekDates, toDateString } from '../domain/timer'
 import type { StatEntry } from '../domain/stats'
@@ -11,6 +12,8 @@ type WeeklyEntry = {
   weeklyGoalMs?: number
 }
 
+import type { Storage } from '../persistence/storage'
+
 type Props = {
   stats: StatEntry[]
   weeklyData: WeeklyEntry[]
@@ -18,6 +21,7 @@ type Props = {
   onBack: () => void
   historySessions?: Session[]
   categories?: Category[]
+  storage?: Storage
 }
 
 function offsetDate(today: string, offsetWeeks: number): string {
@@ -50,7 +54,7 @@ function heatColor(totalMs: number): string {
   return HEATMAP_COLORS[4]
 }
 
-export function StatsView({ stats, weeklyData, streaks, onBack, historySessions = [], categories = [] }: Props) {
+export function StatsView({ stats, weeklyData, streaks, onBack, historySessions = [], categories = [], storage }: Props) {
   const [period, setPeriod] = useState<'today' | 'week' | 'patterns'>('today')
   const [weekOffset, setWeekOffset] = useState(0)
 
@@ -218,6 +222,7 @@ export function StatsView({ stats, weeklyData, streaks, onBack, historySessions 
       ) : period === 'week' ? (
 
         /* This week view */
+        <>
         <ul className="space-y-6">
           {weeklyStats.map(entry => {
             const goalMs = entry.weeklyGoalMs ?? 0
@@ -271,6 +276,17 @@ export function StatsView({ stats, weeklyData, streaks, onBack, historySessions 
             )
           })}
         </ul>
+
+        {storage && (
+          <DigestView
+            categories={categories}
+            sessions={historySessions.filter(s => offsetWeeklyData.some(w => w.id === s.categoryId))}
+            historySessions={historySessions}
+            today={today}
+            storage={storage}
+          />
+        )}
+        </>
 
       ) : (
 

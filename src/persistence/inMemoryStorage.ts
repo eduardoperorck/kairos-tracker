@@ -76,5 +76,11 @@ export function createInMemoryStorage(): Storage {
     async loadEveningReviewByDate(date) {
       return eveningReviewRows.find(r => r.date === date) ?? null
     },
+
+    async importSessions(incoming) {
+      for (const s of incoming) {
+        if (!sessionRows.find(r => r.id === s.id)) sessionRows.push(s)
+      }
+    },
   }
 }

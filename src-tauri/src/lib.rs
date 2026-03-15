@@ -12,6 +12,11 @@ fn get_idle_seconds() -> u64 {
   0
 }
 
+#[tauri::command]
+async fn set_always_on_top(window: tauri::Window, enabled: bool) -> Result<(), String> {
+  window.set_always_on_top(enabled).map_err(|e| e.to_string())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
   tauri::Builder::default()
@@ -29,6 +34,7 @@ pub fn run() {
     .invoke_handler(tauri::generate_handler![
       update_tray_status,
       get_idle_seconds,
+      set_always_on_top,
     ])
     .run(tauri::generate_context!())
     .expect("error while running tauri application");

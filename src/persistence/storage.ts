@@ -25,4 +25,5 @@ export interface Storage {
   loadIntentionsByDate(date: string): Promise<Intention[]>
   saveEveningReview(review: EveningReview): Promise<void>
   loadEveningReviewByDate(date: string): Promise<EveningReview | null>
+  importSessions(sessions: Session[]): Promise<void>
 }

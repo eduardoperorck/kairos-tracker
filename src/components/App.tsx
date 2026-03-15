@@ -5,11 +5,14 @@ import { CategoryItem } from './CategoryItem'
 import { StatsView } from './StatsView'
 import { HistoryView } from './HistoryView'
 import { FocusGuard } from './FocusGuard'
+import { FocusLock } from './FocusLock'
 import { IntentionsView } from './IntentionsView'
+import { SettingsView } from './SettingsView'
 import { useInitStore } from '../hooks/useInitStore'
 import { useTrayStatus } from '../hooks/useTrayStatus'
 import { registerGlobalShortcuts } from '../hooks/useGlobalShortcuts'
 import { useIdleDetection } from '../hooks/useIdleDetection'
+import { useWebhooks } from '../hooks/useWebhooks'
 import { computeStats } from '../domain/stats'
 import { toDateString, getWeekDates, computeWeekMs, computeStreak } from '../domain/timer'
 import { getLastSessionDate, suggestWeeklyGoal } from '../domain/history'
@@ -24,13 +27,20 @@ type Props = { storage: Storage }
 export function App({ storage }: Props) {
   const { categories, sessions, historySessions, addCategory, startTimer, stopTimer, deleteCategory, renameCategory, setWeeklyGoal, setCategoryColor, setPendingTag } = useTimerState()
   const [input, setInput] = useState('')
-  const [view, setView] = useState<'tracker' | 'stats' | 'history' | 'today'>('tracker')
+  const [view, setView] = useState<'tracker' | 'stats' | 'history' | 'today' | 'settings'>('tracker')
   const [breakActive, setBreakActive] = useState(false)
+  const [focusLockActive, setFocusLockActive] = useState(false)
   const focusPreset = FOCUS_PRESETS[0] // Pomodoro default
   const [intentions, setIntentions] = useState<Intention[]>([])
   const [eveningReview, setEveningReview] = useState<EveningReview | null>(null)
+  const [webhookUrl, setWebhookUrl] = useState<string | null>(null)
 
   useInitStore(storage)
+
+  // Load webhook URL from settings
+  useEffect(() => {
+    storage.getSetting('webhook_url').then(url => setWebhookUrl(url))
+  }, [])
 
   const today = useMemo(() => toDateString(Date.now()), [])
 
@@ -65,6 +75,8 @@ export function App({ storage }: Props) {
   async function handleStart(id: string) {
     const prev = categories.find(c => c.activeEntry !== null)
     startTimer(id)
+    const cat = categories.find(c => c.id === id)
+    if (cat) webhooks.onTimerStarted(cat.name, Date.now())
     if (prev && prev.id !== id) {
       const { sessions: s } = useTimerStore.getState()
       await storage.saveSession(s[s.length - 1])
@@ -82,9 +94,15 @@ export function App({ storage }: Props) {
   }
 
   async function handleStop(id: string, tag?: string) {
+    const cat = categories.find(c => c.id === id)
+    const entry = cat?.activeEntry
     stopTimer(id, tag)
     const { sessions: s } = useTimerStore.getState()
-    await storage.saveSession(s[s.length - 1])
+    const saved = s[s.length - 1]
+    await storage.saveSession(saved)
+    if (cat && entry) {
+      webhooks.onTimerStopped(cat.name, entry.startedAt, saved.endedAt, tag)
+    }
   }
 
   async function handleSetGoal(id: string, ms: number) {
@@ -116,6 +134,8 @@ export function App({ storage }: Props) {
   // Compute active category (used by multiple hooks)
   const activeCategory = categories.find(c => c.activeEntry !== null)
   const activeStartedAt = activeCategory?.activeEntry?.startedAt ?? null
+
+  const webhooks = useWebhooks(webhookUrl)
 
   // M26: Update system tray with current timer status
   const elapsedStr = activeStartedAt ? formatElapsed(Date.now() - activeStartedAt) : 'No active timer'
@@ -149,6 +169,14 @@ export function App({ storage }: Props) {
 
   return (
     <div className="min-h-screen bg-[#0f0f0f] text-zinc-100">
+      {focusLockActive && activeCategory && activeStartedAt && (
+        <FocusLock
+          categoryName={activeCategory.name}
+          startedAt={activeStartedAt}
+          onExit={() => setFocusLockActive(false)}
+        />
+      )}
+
       {shouldShowBreak && (
         <FocusGuard
           activeCategory={activeCategory?.name ?? null}
@@ -163,7 +191,7 @@ export function App({ storage }: Props) {
         <div className="mx-auto max-w-xl px-6 h-14 flex items-center justify-between">
           <span className="text-sm font-semibold text-zinc-100">Time Tracker</span>
           <nav className="flex">
-            {(['tracker', 'stats', 'history', 'today'] as const).map(v => (
+            {(['tracker', 'stats', 'history', 'today', 'settings'] as const).map(v => (
               <button
                 key={v}
                 onClick={() => setView(v)}
@@ -171,7 +199,7 @@ export function App({ storage }: Props) {
                   view === v ? 'text-zinc-100' : 'text-zinc-500 hover:text-zinc-300'
                 }`}
               >
-                {v === 'tracker' ? 'Timer' : v === 'stats' ? 'Stats' : v === 'history' ? 'History' : 'Today'}
+                {v === 'tracker' ? 'Timer' : v === 'stats' ? 'Stats' : v === 'history' ? 'History' : v === 'today' ? 'Today' : '⚙'}
                 {view === v && (
                   <span className="absolute bottom-0 left-0 right-0 h-px bg-zinc-100" />
                 )}
@@ -223,6 +251,17 @@ export function App({ storage }: Props) {
               ))}
             </ul>
 
+            {activeCategory && (
+              <div className="mt-4 flex justify-center">
+                <button
+                  onClick={() => setFocusLockActive(true)}
+                  className="text-xs text-zinc-700 hover:text-zinc-400 transition-colors"
+                >
+                  Enter Focus Lock
+                </button>
+              </div>
+            )}
+
             {categories.length === 0 && (
               <p className="mt-16 text-center text-sm text-zinc-700">
                 Add a category to start tracking time.
@@ -240,19 +279,33 @@ export function App({ storage }: Props) {
             streaks={streaks}
             historySessions={historySessions}
             categories={categories}
+            storage={storage}
             onBack={() => setView('tracker')}
           />
         ) : view === 'history' ? (
           <HistoryView
             sessions={historySessions}
             categories={categories}
+            onImportSessions={async (imported) => {
+              await storage.importSessions(imported)
+              const allSessions = await storage.loadSessionsSince(toDateString(Date.now() - 60 * 86_400_000))
+              useTimerStore.setState({ historySessions: allSessions })
+            }}
           />
-        ) : (
+        ) : view === 'today' ? (
           <IntentionsView
             intentions={intentions}
             review={eveningReview}
             onAddIntention={handleAddIntention}
             onSaveReview={handleSaveReview}
+          />
+        ) : (
+          <SettingsView
+            categories={categories}
+            sessions={historySessions}
+            storage={storage}
+            webhookUrl={webhookUrl ?? ''}
+            onWebhookUrlChange={url => setWebhookUrl(url || null)}
           />
         )}
 

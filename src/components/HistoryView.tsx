@@ -1,10 +1,12 @@
-import { groupSessionsByDate, exportSessionsToCSV, isFlowSession } from '../domain/history'
+import { useState, useRef } from 'react'
+import { groupSessionsByDate, exportSessionsToCSV, exportSessionsToJSON, exportSessionsToHTML, isFlowSession, parseTogglCSV } from '../domain/history'
 import { formatElapsed } from '../domain/format'
 import type { Session, Category } from '../domain/timer'
 
 type Props = {
   sessions: Session[]
   categories: Category[]
+  onImportSessions?: (sessions: Session[]) => Promise<void>
 }
 
 function formatTime(ms: number): string {
@@ -21,25 +23,79 @@ function downloadBlob(content: string, filename: string, mimeType: string) {
   URL.revokeObjectURL(url)
 }
 
-export function HistoryView({ sessions, categories }: Props) {
+export function HistoryView({ sessions, categories, onImportSessions }: Props) {
+  const [importStatus, setImportStatus] = useState<string | null>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
   const groups = groupSessionsByDate(sessions, categories)
+
+  async function handleImportFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    const raw = await file.text()
+    const { sessions: parsed, newCategories } = parseTogglCSV(raw, categories)
+    const sessionsWithIds: Session[] = parsed.map((s, i) => ({
+      ...s,
+      id: `import-${Date.now()}-${i}`,
+    }))
+    await onImportSessions?.(sessionsWithIds)
+    setImportStatus(`Imported ${sessionsWithIds.length} sessions${newCategories.length > 0 ? ` (${newCategories.length} new categories)` : ''}.`)
+    if (fileInputRef.current) fileInputRef.current.value = ''
+  }
 
   function handleExportCSV() {
     const csv = exportSessionsToCSV(sessions, categories)
     downloadBlob(csv, 'sessions.csv', 'text/csv')
   }
 
+  function handleExportJSON() {
+    const json = exportSessionsToJSON(sessions, categories)
+    downloadBlob(json, 'sessions.json', 'application/json')
+  }
+
+  function handleExportHTML() {
+    const weeklyStats = categories.map(c => ({ name: c.name, weeklyMs: 0 }))
+    const html = exportSessionsToHTML(sessions, categories, weeklyStats)
+    downloadBlob(html, 'report.html', 'text/html')
+  }
+
   return (
     <div>
       <div className="mb-6 flex items-center justify-between">
         <h2 className="text-sm font-semibold text-zinc-200">History</h2>
-        <button
-          className="rounded-md border border-white/[0.07] bg-white/[0.03] px-3 py-1.5 text-xs text-zinc-400 hover:text-zinc-100 hover:border-white/[0.15] transition-all"
-          onClick={handleExportCSV}
-        >
-          Export CSV
-        </button>
+        <div className="flex gap-2">
+          <input ref={fileInputRef} type="file" accept=".csv" className="hidden" onChange={handleImportFile} />
+          {onImportSessions && (
+            <button
+              className="rounded-md border border-white/[0.07] bg-white/[0.03] px-3 py-1.5 text-xs text-zinc-400 hover:text-zinc-100 hover:border-white/[0.15] transition-all"
+              onClick={() => fileInputRef.current?.click()}
+            >
+              Import Toggl
+            </button>
+          )}
+          <button
+            className="rounded-md border border-white/[0.07] bg-white/[0.03] px-3 py-1.5 text-xs text-zinc-400 hover:text-zinc-100 hover:border-white/[0.15] transition-all"
+            onClick={handleExportCSV}
+          >
+            CSV
+          </button>
+          <button
+            className="rounded-md border border-white/[0.07] bg-white/[0.03] px-3 py-1.5 text-xs text-zinc-400 hover:text-zinc-100 hover:border-white/[0.15] transition-all"
+            onClick={handleExportJSON}
+          >
+            JSON
+          </button>
+          <button
+            className="rounded-md border border-white/[0.07] bg-white/[0.03] px-3 py-1.5 text-xs text-zinc-400 hover:text-zinc-100 hover:border-white/[0.15] transition-all"
+            onClick={handleExportHTML}
+          >
+            HTML
+          </button>
+        </div>
       </div>
+
+      {importStatus && (
+        <p className="mb-4 text-xs text-emerald-400">{importStatus}</p>
+      )}
 
       {groups.length === 0 ? (
         <p className="mt-16 text-center text-sm text-zinc-700">No history yet.</p>
