@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach } from 'vitest'
 import { useTimerStore } from './useTimerStore'
 
 beforeEach(() => {
-  useTimerStore.setState({ categories: [] })
+  useTimerStore.setState({ categories: [], sessions: [], historySessions: [] })
 })
 
 describe('useTimerStore', () => {

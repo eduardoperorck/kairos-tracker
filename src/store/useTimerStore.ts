@@ -5,6 +5,9 @@ import {
   stopCategoryTimer,
   removeCategory,
   renameCategory,
+  setWeeklyGoal as domainSetWeeklyGoal,
+  setCategoryColor as domainSetCategoryColor,
+  setPendingTag as domainSetPendingTag,
   createStore as createDomainStore,
   type Store,
 } from '../domain/store'
@@ -12,9 +15,12 @@ import {
 type Actions = {
   addCategory: (name: string) => void
   startTimer: (id: string) => void
-  stopTimer: (id: string) => void
+  stopTimer: (id: string, tag?: string) => void
   deleteCategory: (id: string) => void
   renameCategory: (id: string, newName: string) => void
+  setWeeklyGoal: (id: string, ms: number) => void
+  setCategoryColor: (id: string, color: string) => void
+  setPendingTag: (id: string, tag: string) => void
 }
 
 export type TimerStore = Store & Actions
@@ -30,8 +36,8 @@ export const useTimerStore = createZustandStore<TimerStore>((set, get) => ({
     set(startCategoryTimer(get(), id))
   },
 
-  stopTimer(id) {
-    set(stopCategoryTimer(get(), id))
+  stopTimer(id, tag) {
+    set(stopCategoryTimer(get(), id, tag))
   },
 
   deleteCategory(id) {
@@ -40,5 +46,17 @@ export const useTimerStore = createZustandStore<TimerStore>((set, get) => ({
 
   renameCategory(id, newName) {
     set(renameCategory(get(), id, newName))
+  },
+
+  setWeeklyGoal(id, ms) {
+    set(domainSetWeeklyGoal(get(), id, ms))
+  },
+
+  setCategoryColor(id, color) {
+    set(domainSetCategoryColor(get(), id, color))
+  },
+
+  setPendingTag(id, tag) {
+    set(domainSetPendingTag(get(), id, tag))
   },
 }))

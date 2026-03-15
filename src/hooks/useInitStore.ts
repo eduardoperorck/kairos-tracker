@@ -1,18 +1,43 @@
 import { useEffect } from 'react'
 import { useTimerStore } from '../store/useTimerStore'
+import { computeTodayMs, toDateString, getWeekDates } from '../domain/timer'
 import type { Storage } from '../persistence/storage'
+
+function daysAgo(n: number, today: string): string {
+  const d = new Date(today + 'T12:00:00Z')
+  d.setUTCDate(d.getUTCDate() - n)
+  return d.toISOString().slice(0, 10)
+}
 
 export function useInitStore(storage: Storage) {
   useEffect(() => {
-    storage.loadCategories().then(persisted => {
-      if (persisted.length === 0) return
+    const today = toDateString(Date.now())
+    const weekDates = getWeekDates(today)
+    const historyStart = daysAgo(60, today)
+
+    Promise.all([
+      storage.loadCategories(),
+      storage.loadSessionsSince(historyStart),
+    ]).then(([persisted, allSessions]) => {
+      const todaySessions = allSessions.filter(s => s.date === today)
+      const weekSet = new Set(weekDates)
+      const weekSessions = allSessions.filter(s => weekSet.has(s.date))
+
+      const categories = persisted.length > 0
+        ? persisted.map(cat => ({
+            id: cat.id,
+            name: cat.name,
+            weeklyGoalMs: cat.weeklyGoalMs,
+            color: cat.color,
+            accumulatedMs: computeTodayMs(todaySessions, cat.id, today),
+            activeEntry: null as null,
+          }))
+        : undefined
+
       useTimerStore.setState({
-        categories: persisted.map(cat => ({
-          id: cat.id,
-          name: cat.name,
-          accumulatedMs: cat.accumulatedMs,
-          activeEntry: null,
-        })),
+        sessions: weekSessions,
+        historySessions: allSessions,
+        ...(categories ? { categories } : {}),
       })
     })
   }, [])

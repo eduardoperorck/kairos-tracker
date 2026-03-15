@@ -10,7 +10,7 @@ function renderApp() {
 }
 
 beforeEach(() => {
-  useTimerStore.setState({ categories: [] })
+  useTimerStore.setState({ categories: [], sessions: [], historySessions: [] })
 })
 
 describe('App', () => {

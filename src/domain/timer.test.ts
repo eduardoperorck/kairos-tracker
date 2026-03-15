@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { createCategory, startTimer, stopTimer, getElapsed } from './timer'
+import { createCategory, startTimer, stopTimer, getElapsed, computeTodayMs, toDateString, getWeekDates, computeWeekMs, computeStreak } from './timer'
 
 describe('createCategory', () => {
   it('creates a category with a name', () => {
@@ -46,6 +46,144 @@ describe('stopTimer', () => {
     const entry = startTimer()
     const stopped = stopTimer(entry)
     expect(stopped.startedAt).toBe(entry.startedAt)
+  })
+})
+
+describe('computeStreak', () => {
+  const today = '2026-03-15'
+
+  it('returns 0 when there are no sessions', () => {
+    expect(computeStreak([], today)).toBe(0)
+  })
+
+  it('returns 1 when only today has a session', () => {
+    expect(computeStreak([today], today)).toBe(1)
+  })
+
+  it('counts consecutive days ending today', () => {
+    const dates = ['2026-03-13', '2026-03-14', '2026-03-15']
+    expect(computeStreak(dates, today)).toBe(3)
+  })
+
+  it('counts consecutive days ending yesterday when today is missing', () => {
+    const dates = ['2026-03-13', '2026-03-14']
+    expect(computeStreak(dates, today)).toBe(2)
+  })
+
+  it('returns 0 when the last session was 2 or more days ago', () => {
+    const dates = ['2026-03-12', '2026-03-13']
+    expect(computeStreak(dates, today)).toBe(0)
+  })
+
+  it('stops counting at a gap in the sequence', () => {
+    // gap on 2026-03-13 breaks the streak
+    const dates = ['2026-03-11', '2026-03-12', '2026-03-14', '2026-03-15']
+    expect(computeStreak(dates, today)).toBe(2)
+  })
+
+  it('handles duplicate dates by deduplicating', () => {
+    const dates = ['2026-03-14', '2026-03-14', '2026-03-15', '2026-03-15']
+    expect(computeStreak(dates, today)).toBe(2)
+  })
+})
+
+describe('computeTodayMs', () => {
+  const today = '2026-03-15'
+  const catId = 'cat-1'
+
+  it('returns 0 when there are no sessions', () => {
+    expect(computeTodayMs([], catId, today)).toBe(0)
+  })
+
+  it('sums duration of sessions matching category and date', () => {
+    const sessions = [
+      { id: '1', categoryId: catId, startedAt: 0, endedAt: 3000, date: today },
+      { id: '2', categoryId: catId, startedAt: 5000, endedAt: 7000, date: today },
+    ]
+    expect(computeTodayMs(sessions, catId, today)).toBe(5000)
+  })
+
+  it('ignores sessions from other categories', () => {
+    const sessions = [
+      { id: '1', categoryId: 'other', startedAt: 0, endedAt: 10000, date: today },
+      { id: '2', categoryId: catId, startedAt: 0, endedAt: 2000, date: today },
+    ]
+    expect(computeTodayMs(sessions, catId, today)).toBe(2000)
+  })
+
+  it('ignores sessions from other dates', () => {
+    const sessions = [
+      { id: '1', categoryId: catId, startedAt: 0, endedAt: 10000, date: '2026-03-14' },
+      { id: '2', categoryId: catId, startedAt: 0, endedAt: 1000, date: today },
+    ]
+    expect(computeTodayMs(sessions, catId, today)).toBe(1000)
+  })
+
+  it('toDateString formats ms timestamp as YYYY-MM-DD', () => {
+    // 2026-03-15T00:00:00.000Z
+    expect(toDateString(1742000400000)).toMatch(/^\d{4}-\d{2}-\d{2}$/)
+  })
+})
+
+describe('getWeekDates', () => {
+  it('returns 7 dates', () => {
+    expect(getWeekDates('2026-03-15')).toHaveLength(7)
+  })
+
+  it('starts on Monday', () => {
+    // 2026-03-15 is a Sunday → week starts 2026-03-09 (Monday)
+    expect(getWeekDates('2026-03-15')[0]).toBe('2026-03-09')
+  })
+
+  it('ends on Sunday', () => {
+    expect(getWeekDates('2026-03-15')[6]).toBe('2026-03-15')
+  })
+
+  it('includes the given date', () => {
+    const dates = getWeekDates('2026-03-11') // Wednesday
+    expect(dates).toContain('2026-03-11')
+  })
+
+  it('dates are consecutive', () => {
+    const dates = getWeekDates('2026-03-15')
+    for (let i = 1; i < dates.length; i++) {
+      const prev = new Date(dates[i - 1] + 'T12:00:00Z')
+      const curr = new Date(dates[i] + 'T12:00:00Z')
+      expect(curr.getTime() - prev.getTime()).toBe(86_400_000)
+    }
+  })
+})
+
+describe('computeWeekMs', () => {
+  const catId = 'cat-1'
+  const weekDates = ['2026-03-09', '2026-03-10', '2026-03-11', '2026-03-12', '2026-03-13', '2026-03-14', '2026-03-15']
+
+  it('returns 0 with no sessions', () => {
+    expect(computeWeekMs([], catId, weekDates)).toBe(0)
+  })
+
+  it('sums sessions within the week', () => {
+    const sessions = [
+      { id: '1', categoryId: catId, startedAt: 0, endedAt: 5000, date: '2026-03-09' },
+      { id: '2', categoryId: catId, startedAt: 0, endedAt: 3000, date: '2026-03-13' },
+    ]
+    expect(computeWeekMs(sessions, catId, weekDates)).toBe(8000)
+  })
+
+  it('ignores sessions outside the week', () => {
+    const sessions = [
+      { id: '1', categoryId: catId, startedAt: 0, endedAt: 9000, date: '2026-03-08' },
+      { id: '2', categoryId: catId, startedAt: 0, endedAt: 1000, date: '2026-03-15' },
+    ]
+    expect(computeWeekMs(sessions, catId, weekDates)).toBe(1000)
+  })
+
+  it('ignores sessions from other categories', () => {
+    const sessions = [
+      { id: '1', categoryId: 'other', startedAt: 0, endedAt: 9000, date: '2026-03-15' },
+      { id: '2', categoryId: catId, startedAt: 0, endedAt: 2000, date: '2026-03-15' },
+    ]
+    expect(computeWeekMs(sessions, catId, weekDates)).toBe(2000)
   })
 })
 

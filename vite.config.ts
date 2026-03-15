@@ -1,6 +1,9 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
+import path from 'path'
+
+const stubsDir = path.resolve(__dirname, 'src/tests/stubs')
 
 export default defineConfig({
   plugins: [react(), tailwindcss()],
@@ -8,5 +11,8 @@ export default defineConfig({
     environment: 'jsdom',
     setupFiles: ['./src/tests/setup.ts'],
     globals: true,
+    alias: {
+      '@tauri-apps/plugin-global-shortcut': path.join(stubsDir, 'tauri-plugin-global-shortcut.ts'),
+    },
   },
 } as any)

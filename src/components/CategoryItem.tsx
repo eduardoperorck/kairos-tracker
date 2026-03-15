@@ -1,117 +1,174 @@
-import { useState, useRef, useEffect } from 'react'
+import { useState } from 'react'
 import { useElapsed } from '../hooks/useElapsed'
-import { formatElapsed } from '../domain/format'
+import { formatElapsed, formatRelativeTime } from '../domain/format'
+import { CategoryName } from './CategoryName'
+import { CategoryGoal } from './CategoryGoal'
 import type { Category } from '../domain/timer'
 
+export const CATEGORY_COLORS = ['#6366f1', '#8b5cf6', '#ec4899', '#f59e0b', '#10b981', '#3b82f6']
+
+const PRESET_TAGS = ['deep work', 'meeting', 'admin', 'learning', 'blocked', 'review']
+
 type Props = {
-  category: Category & { accumulatedMs: number }
+  category: Category & { accumulatedMs: number; pendingTag?: string }
+  weeklyMs: number
+  lastTracked?: number | null
   onStart: () => void
-  onStop: () => void
+  onStop: (tag?: string) => void
   onDelete: () => void
   onRename: (newName: string) => void
+  onSetGoal: (ms: number) => void
+  onSetColor?: (color: string) => void
+  onSetTag?: (tag: string) => void
+  activeTag?: string
+  suggestedMs?: number
 }
 
-export function CategoryItem({ category, onStart, onStop, onDelete, onRename }: Props) {
+export function CategoryItem({ category, weeklyMs, lastTracked, onStart, onStop, onDelete, onRename, onSetGoal, onSetColor, onSetTag, suggestedMs }: Props) {
   const [confirming, setConfirming] = useState(false)
-  const [editing, setEditing] = useState(false)
-  const [draft, setDraft] = useState(category.name)
-  const inputRef = useRef<HTMLInputElement>(null)
+  const [showColorPicker, setShowColorPicker] = useState(false)
+  const [selectedTag, setSelectedTag] = useState<string | undefined>(undefined)
+  const [showTagPicker, setShowTagPicker] = useState(false)
 
   const liveMs = useElapsed(category.activeEntry?.startedAt ?? null)
-  const totalMs = category.activeEntry ? liveMs : category.accumulatedMs
+  const totalMs = category.accumulatedMs + liveMs
   const isRunning = category.activeEntry !== null
-
-  useEffect(() => {
-    if (editing) inputRef.current?.select()
-  }, [editing])
-
-  function commitRename() {
-    const name = draft.trim()
-    if (name && name !== category.name) onRename(name)
-    else setDraft(category.name)
-    setEditing(false)
-  }
-
-  function cancelRename() {
-    setDraft(category.name)
-    setEditing(false)
-  }
+  const goalMs = category.weeklyGoalMs ?? 0
+  const lastTrackedText = !isRunning && lastTracked ? `last tracked ${formatRelativeTime(lastTracked, Date.now())}` : null
+  const dotColor = category.color ?? '#52525b' // zinc-600 default
 
   return (
-    <li className={`flex items-center justify-between rounded-xl border px-5 py-4 transition-colors ${
-      isRunning ? 'border-emerald-700 bg-emerald-950' : 'border-zinc-800 bg-zinc-900'
+    <li className={`group rounded-lg border px-5 py-4 transition-all ${
+      isRunning
+        ? 'border-emerald-500/20 bg-emerald-500/[0.04]'
+        : 'border-white/[0.07] bg-white/[0.02] hover:border-white/[0.11] hover:bg-white/[0.04]'
     }`}>
-      <div className="flex items-center gap-4 min-w-0">
-        <span className={`h-2 w-2 shrink-0 rounded-full ${isRunning ? 'bg-emerald-400' : 'bg-zinc-600'}`} />
-        {editing ? (
-          <input
-            ref={inputRef}
-            aria-label="Rename category"
-            className="rounded bg-zinc-800 px-2 py-0.5 text-sm font-medium text-zinc-100 outline-none ring-1 ring-zinc-500 focus:ring-emerald-500"
-            value={draft}
-            onChange={e => setDraft(e.target.value)}
-            onKeyDown={e => {
-              if (e.key === 'Enter') commitRename()
-              if (e.key === 'Escape') cancelRename()
-            }}
-            onBlur={commitRename}
-          />
-        ) : (
-          <span
-            className="cursor-pointer text-sm font-medium text-zinc-100 hover:text-white"
-            onClick={() => { setEditing(true); setDraft(category.name) }}
-          >
-            {category.name}
-          </span>
-        )}
-      </div>
 
-      <div className="flex items-center gap-2">
-        <span className={`font-mono text-sm tabular-nums ${isRunning ? 'text-emerald-300' : 'text-zinc-500'}`}>
+      {/* Main row */}
+      <div className="flex items-center gap-4">
+
+        {/* Color dot */}
+        <div className="relative shrink-0">
+          <button
+            className="w-2.5 h-2.5 rounded-full transition-all hover:scale-125"
+            style={{ backgroundColor: dotColor }}
+            onClick={() => setShowColorPicker(p => !p)}
+            aria-label="Category color"
+          />
+          {showColorPicker && (
+            <div className="absolute left-0 top-5 z-10 flex gap-1.5 rounded-lg border border-white/[0.1] bg-zinc-900 p-2 shadow-lg">
+              {CATEGORY_COLORS.map(c => (
+                <button
+                  key={c}
+                  className={`w-5 h-5 rounded-full transition-all hover:scale-110 ${category.color === c ? 'ring-2 ring-white/40' : ''}`}
+                  style={{ backgroundColor: c }}
+                  onClick={() => { onSetColor?.(c); setShowColorPicker(false) }}
+                  aria-label={`Color ${c}`}
+                />
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Name */}
+        <div className="flex-1 min-w-0">
+          <CategoryName name={category.name} onRename={onRename} />
+          {lastTrackedText && (
+            <p className="mt-0.5 text-xs text-zinc-700">{lastTrackedText}</p>
+          )}
+        </div>
+
+        {/* Tag selector (when running) */}
+        {isRunning && (
+          <div className="relative shrink-0">
+            <button
+              className="text-xs text-zinc-600 hover:text-zinc-400 transition-colors"
+              onClick={() => setShowTagPicker(p => !p)}
+            >
+              {selectedTag ? `[${selectedTag}]` : '+ tag'}
+            </button>
+            {showTagPicker && (
+              <div className="absolute right-0 top-6 z-10 w-36 rounded-lg border border-white/[0.1] bg-zinc-900 py-1 shadow-lg">
+                {PRESET_TAGS.map(t => (
+                  <button
+                    key={t}
+                    className={`block w-full px-3 py-1.5 text-left text-xs transition-colors ${
+                      selectedTag === t ? 'text-emerald-400' : 'text-zinc-400 hover:text-zinc-100'
+                    }`}
+                    onClick={() => { setSelectedTag(t); setShowTagPicker(false) }}
+                  >
+                    {t}
+                  </button>
+                ))}
+                {selectedTag && (
+                  <button
+                    className="block w-full px-3 py-1.5 text-left text-xs text-zinc-600 hover:text-zinc-400"
+                    onClick={() => { setSelectedTag(undefined); setShowTagPicker(false) }}
+                  >
+                    clear tag
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Elapsed time */}
+        <span className={`font-mono text-sm tabular-nums shrink-0 w-16 text-right transition-colors ${
+          isRunning ? 'text-emerald-400' : 'text-zinc-500'
+        }`}>
           {formatElapsed(totalMs)}
         </span>
 
+        {/* Actions */}
         {confirming ? (
-          <>
+          <div className="flex items-center gap-2 shrink-0">
             <button
-              className="rounded-lg border border-red-700 bg-red-900 px-3 py-1.5 text-xs font-medium text-red-200 transition-colors hover:bg-red-800"
+              className="text-xs font-medium text-red-400 hover:text-red-300 transition-colors"
               onClick={() => { onDelete(); setConfirming(false) }}
             >
               Confirm
             </button>
+            <span className="text-zinc-700">·</span>
             <button
-              className="rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-1.5 text-xs font-medium text-zinc-300 transition-colors hover:bg-zinc-700"
+              className="text-xs text-zinc-500 hover:text-zinc-300 transition-colors"
               onClick={() => setConfirming(false)}
             >
               Cancel
             </button>
-          </>
+          </div>
         ) : (
-          <>
+          <div className="flex items-center gap-2 shrink-0">
+            <button
+              aria-label="Delete"
+              className="text-xs text-zinc-700 hover:text-zinc-400 transition-colors opacity-0 group-hover:opacity-100"
+              onClick={() => setConfirming(true)}
+            >
+              Delete
+            </button>
             {isRunning ? (
               <button
-                className="rounded-lg border border-red-800 bg-red-950 px-3 py-1.5 text-xs font-medium text-red-300 transition-colors hover:bg-red-900"
-                onClick={onStop}
+                aria-label="Stop"
+                className="rounded-md border border-red-500/20 bg-red-500/[0.06] px-3 py-1.5 text-xs font-medium text-red-400 hover:bg-red-500/[0.12] hover:border-red-500/30 transition-all"
+                onClick={() => { onStop(selectedTag); setSelectedTag(undefined) }}
               >
                 Stop
               </button>
             ) : (
               <button
-                className="rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-1.5 text-xs font-medium text-zinc-300 transition-colors hover:bg-zinc-700"
+                aria-label="Start"
+                className="rounded-md border border-white/[0.08] bg-white/[0.04] px-3 py-1.5 text-xs font-medium text-zinc-300 hover:text-zinc-100 hover:border-white/[0.16] hover:bg-white/[0.08] transition-all"
                 onClick={onStart}
               >
                 Start
               </button>
             )}
-            <button
-              className="rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-1.5 text-xs font-medium text-zinc-500 transition-colors hover:border-red-900 hover:text-red-400"
-              onClick={() => setConfirming(true)}
-            >
-              Delete
-            </button>
-          </>
+          </div>
         )}
       </div>
+
+      {/* Weekly goal */}
+      <CategoryGoal weeklyMs={weeklyMs} goalMs={goalMs} onSetGoal={onSetGoal} />
     </li>
   )
 }

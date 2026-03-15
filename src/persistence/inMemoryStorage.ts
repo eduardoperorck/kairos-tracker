@@ -1,7 +1,13 @@
 import type { Storage, PersistedCategory } from './storage'
+import type { Session } from '../domain/timer'
+import type { Intention, EveningReview } from '../domain/intentions'
 
 export function createInMemoryStorage(): Storage {
   const rows = new Map<string, PersistedCategory>()
+  const sessionRows: Session[] = []
+  const settings = new Map<string, string>()
+  const intentionRows: Intention[] = []
+  const eveningReviewRows: EveningReview[] = []
 
   return {
     async loadCategories() {
@@ -14,11 +20,6 @@ export function createInMemoryStorage(): Storage {
       }
     },
 
-    async updateAccumulatedMs(id, ms) {
-      const row = rows.get(id)
-      if (row) rows.set(id, { ...row, accumulatedMs: ms })
-    },
-
     async renameCategory(id, newName) {
       const row = rows.get(id)
       if (row) rows.set(id, { ...row, name: newName })
@@ -26,6 +27,54 @@ export function createInMemoryStorage(): Storage {
 
     async deleteCategory(id) {
       rows.delete(id)
+    },
+
+    async setWeeklyGoal(id, ms) {
+      const row = rows.get(id)
+      if (row) rows.set(id, { ...row, weeklyGoalMs: ms })
+    },
+
+    async setColor(id, color) {
+      const row = rows.get(id)
+      if (row) rows.set(id, { ...row, color })
+    },
+
+    async saveSession(session) {
+      sessionRows.push(session)
+    },
+
+    async loadSessionsByDate(date) {
+      return sessionRows.filter(s => s.date === date)
+    },
+
+    async loadSessionsSince(date) {
+      return sessionRows.filter(s => s.date >= date)
+    },
+
+    async getSetting(key) {
+      return settings.get(key) ?? null
+    },
+
+    async setSetting(key, value) {
+      settings.set(key, value)
+    },
+
+    async saveIntention(intention) {
+      intentionRows.push(intention)
+    },
+
+    async loadIntentionsByDate(date) {
+      return intentionRows.filter(i => i.date === date)
+    },
+
+    async saveEveningReview(review) {
+      const idx = eveningReviewRows.findIndex(r => r.date === review.date)
+      if (idx >= 0) eveningReviewRows[idx] = review
+      else eveningReviewRows.push(review)
+    },
+
+    async loadEveningReviewByDate(date) {
+      return eveningReviewRows.find(r => r.date === date) ?? null
     },
   }
 }

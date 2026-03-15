@@ -1,3 +1,17 @@
+#[tauri::command]
+fn update_tray_status(_category: String, _elapsed: String) {
+  // Update tray tooltip with active timer info
+  // Stub: full implementation requires tray handle
+}
+
+#[tauri::command]
+fn get_idle_seconds() -> u64 {
+  // Returns seconds since last user input
+  // Windows: use GetLastInputInfo via winapi
+  // Returns 0 if not available (browser mode fallback)
+  0
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
   tauri::Builder::default()
@@ -12,6 +26,10 @@ pub fn run() {
       }
       Ok(())
     })
+    .invoke_handler(tauri::generate_handler![
+      update_tray_status,
+      get_idle_seconds,
+    ])
     .run(tauri::generate_context!())
     .expect("error while running tauri application");
 }
