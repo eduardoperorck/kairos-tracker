@@ -1,6 +1,6 @@
 async function sendNotification(title: string, body: string): Promise<void> {
   try {
-    const { sendNotification } = await import('@tauri-apps/plugin-notification')
+    const { sendNotification } = await import(/* @vite-ignore */ '@tauri-apps/plugin-notification')
     await sendNotification({ title, body })
   } catch {
     // fallback: browser Notification API
