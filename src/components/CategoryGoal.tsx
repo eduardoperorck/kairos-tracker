@@ -5,9 +5,10 @@ type Props = {
   weeklyMs: number
   goalMs: number
   onSetGoal: (ms: number) => void
+  suggestedMs?: number
 }
 
-export function CategoryGoal({ weeklyMs, goalMs, onSetGoal }: Props) {
+export function CategoryGoal({ weeklyMs, goalMs, onSetGoal, suggestedMs }: Props) {
   const [editingGoal, setEditingGoal] = useState(false)
   const [goalDraft, setGoalDraft] = useState('')
   const goalInputRef = useRef<HTMLInputElement>(null)
@@ -57,24 +58,42 @@ export function CategoryGoal({ weeklyMs, goalMs, onSetGoal }: Props) {
 
       <div className="mt-2">
         {editingGoal ? (
-          <div className="flex items-center gap-2">
-            <input
-              ref={goalInputRef}
-              aria-label="Weekly goal hours"
-              type="number"
-              min="0.5"
-              step="0.5"
-              placeholder="Hours per week"
-              className="w-36 bg-transparent border-b border-zinc-700 focus:border-zinc-500 py-0.5 text-xs text-zinc-300 placeholder-zinc-700 outline-none transition-colors tabular-nums"
-              value={goalDraft}
-              onChange={e => setGoalDraft(e.target.value)}
-              onKeyDown={e => {
-                if (e.key === 'Enter') commitGoal()
-                if (e.key === 'Escape') cancelGoal()
-              }}
-              onBlur={commitGoal}
-            />
-            <span className="text-xs text-zinc-700">h/week</span>
+          <div className="flex flex-col gap-1.5">
+            <div className="flex items-center gap-2">
+              <input
+                ref={goalInputRef}
+                aria-label="Weekly goal hours"
+                type="number"
+                min="0.5"
+                step="0.5"
+                placeholder="Hours per week"
+                className="w-36 bg-transparent border-b border-zinc-700 focus:border-zinc-500 py-0.5 text-xs text-zinc-300 placeholder-zinc-700 outline-none transition-colors tabular-nums"
+                value={goalDraft}
+                onChange={e => setGoalDraft(e.target.value)}
+                onKeyDown={e => {
+                  if (e.key === 'Enter') commitGoal()
+                  if (e.key === 'Escape') cancelGoal()
+                }}
+                onBlur={e => {
+                  // Only commit on blur if not clicking "Use suggestion"
+                  if (!e.relatedTarget?.closest('[data-suggestion]')) commitGoal()
+                }}
+              />
+              <span className="text-xs text-zinc-700">h/week</span>
+            </div>
+            {suggestedMs && suggestedMs > 0 && (
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-zinc-600">Suggested: {formatElapsed(suggestedMs)}</span>
+                <button
+                  data-suggestion
+                  className="text-xs text-zinc-500 hover:text-zinc-300 underline transition-colors"
+                  onMouseDown={e => e.preventDefault()}
+                  onClick={() => { onSetGoal(suggestedMs); setEditingGoal(false); setGoalDraft('') }}
+                >
+                  Use suggestion
+                </button>
+              </div>
+            )}
           </div>
         ) : (
           <button

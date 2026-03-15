@@ -12,7 +12,7 @@ import { registerGlobalShortcuts } from '../hooks/useGlobalShortcuts'
 import { useIdleDetection } from '../hooks/useIdleDetection'
 import { computeStats } from '../domain/stats'
 import { toDateString, getWeekDates, computeWeekMs, computeStreak } from '../domain/timer'
-import { getLastSessionDate } from '../domain/history'
+import { getLastSessionDate, suggestWeeklyGoal } from '../domain/history'
 import { shouldTriggerBreak, FOCUS_PRESETS } from '../domain/focusGuard'
 import { createIntention, createEveningReview } from '../domain/intentions'
 import { formatElapsed } from '../domain/format'
@@ -210,6 +210,7 @@ export function App({ storage }: Props) {
                   category={category}
                   weeklyMs={computeWeekMs(sessions, category.id, weekDates)}
                   lastTracked={getLastSessionDate(historySessions, category.id)}
+                  suggestedMs={suggestWeeklyGoal(historySessions, category.id)}
                   onStart={() => handleStart(category.id)}
                   onStop={(tag) => handleStop(category.id, tag)}
                   onDelete={() => handleDelete(category.id)}

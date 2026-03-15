@@ -168,7 +168,7 @@ export function CategoryItem({ category, weeklyMs, lastTracked, onStart, onStop,
       </div>
 
       {/* Weekly goal */}
-      <CategoryGoal weeklyMs={weeklyMs} goalMs={goalMs} onSetGoal={onSetGoal} />
+      <CategoryGoal weeklyMs={weeklyMs} goalMs={goalMs} onSetGoal={onSetGoal} suggestedMs={suggestedMs} />
     </li>
   )
 }
