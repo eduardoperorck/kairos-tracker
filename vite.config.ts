@@ -14,6 +14,7 @@ export default defineConfig({
     alias: {
       '@tauri-apps/plugin-global-shortcut': path.join(stubsDir, 'tauri-plugin-global-shortcut.ts'),
       '@tauri-apps/plugin-fs': path.join(stubsDir, 'tauri-plugin-fs.ts'),
+      '@tauri-apps/plugin-notification': path.join(stubsDir, 'tauri-plugin-notification.ts'),
     },
   },
 } as any)

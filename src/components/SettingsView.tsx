@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from 'react'
 import { exportSessionsToJSON } from '../domain/history'
+import { FOCUS_PRESETS, type FocusPreset } from '../domain/focusGuard'
 import type { Category, Session } from '../domain/timer'
 import type { Storage } from '../persistence/storage'
 
@@ -9,6 +10,8 @@ type Props = {
   storage: Storage
   webhookUrl: string
   onWebhookUrlChange: (url: string) => void
+  focusPreset: FocusPreset
+  onFocusPresetChange: (preset: FocusPreset) => void
 }
 
 function downloadBlob(content: string, filename: string, mimeType: string) {
@@ -76,10 +79,18 @@ function SyncSection({ storage, sessions, categories }: { storage: Storage; sess
 
 // ─── SettingsView ─────────────────────────────────────────────────────────────
 
-export function SettingsView({ categories, sessions, storage, webhookUrl, onWebhookUrlChange }: Props) {
+export function SettingsView({ categories, sessions, storage, webhookUrl, onWebhookUrlChange, focusPreset, onFocusPresetChange }: Props) {
   const [restoreStatus, setRestoreStatus] = useState<string | null>(null)
   const [webhookDraft, setWebhookDraft] = useState(webhookUrl)
+  const [apiKeyDraft, setApiKeyDraft] = useState('')
+  const [apiKeySaved, setApiKeySaved] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
+
+  useEffect(() => {
+    storage.getSetting('anthropic_api_key').then(k => {
+      if (k) setApiKeyDraft('••••••••' + k.slice(-4))
+    })
+  }, [])
 
   function handleBackup() {
     const json = exportSessionsToJSON(sessions, categories)
@@ -141,6 +152,57 @@ export function SettingsView({ categories, sessions, storage, webhookUrl, onWebh
         {restoreStatus && (
           <p className="mt-2 text-xs text-emerald-400">{restoreStatus}</p>
         )}
+      </section>
+
+      {/* Focus Guard preset */}
+      <section>
+        <h3 className="mb-3 text-xs font-medium text-zinc-500 uppercase tracking-wider">Focus Guard Preset</h3>
+        <div className="flex flex-wrap gap-2">
+          {FOCUS_PRESETS.map(p => (
+            <button
+              key={p.name}
+              onClick={() => { onFocusPresetChange(p); storage.setSetting('focus_preset', p.name) }}
+              className={`rounded-lg border px-3 py-2 text-xs transition-all ${
+                focusPreset.name === p.name
+                  ? 'border-emerald-500/40 bg-emerald-500/[0.08] text-emerald-400'
+                  : 'border-white/[0.07] bg-white/[0.02] text-zinc-500 hover:text-zinc-200 hover:border-white/[0.15]'
+              }`}
+            >
+              <span className="font-medium">{p.name}</span>
+              <span className="ml-1.5 text-zinc-600">
+                {Math.round(p.workMs / 60_000)}m / {Math.round(p.breakMs / 60_000)}m
+              </span>
+            </button>
+          ))}
+        </div>
+      </section>
+
+      {/* AI API Key */}
+      <section>
+        <h3 className="mb-3 text-xs font-medium text-zinc-500 uppercase tracking-wider">Claude API Key</h3>
+        <p className="mb-2 text-xs text-zinc-600">Used for AI Weekly Digest. Stored locally, never sent anywhere else.</p>
+        <div className="flex gap-2">
+          <input
+            type="password"
+            placeholder="sk-ant-…"
+            className="flex-1 rounded-lg border border-white/[0.07] bg-white/[0.03] px-3 py-2 text-xs text-zinc-100 placeholder-zinc-600 outline-none focus:border-white/[0.15] transition-all"
+            value={apiKeyDraft.startsWith('••') ? '' : apiKeyDraft}
+            onChange={e => { setApiKeyDraft(e.target.value); setApiKeySaved(false) }}
+            onKeyDown={e => e.key === 'Enter' && !apiKeyDraft.startsWith('••') && storage.setSetting('anthropic_api_key', apiKeyDraft).then(() => setApiKeySaved(true))}
+          />
+          <button
+            onClick={() => {
+              if (!apiKeyDraft || apiKeyDraft.startsWith('••')) return
+              storage.setSetting('anthropic_api_key', apiKeyDraft).then(() => {
+                setApiKeySaved(true)
+                setApiKeyDraft('••••••••' + apiKeyDraft.slice(-4))
+              })
+            }}
+            className="rounded-md border border-white/[0.07] bg-white/[0.03] px-3 py-2 text-xs text-zinc-400 hover:text-zinc-100 transition-all"
+          >
+            {apiKeySaved ? 'Saved ✓' : 'Save'}
+          </button>
+        </div>
       </section>
 
       {/* OneDrive / Sync */}

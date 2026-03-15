@@ -13,38 +13,58 @@ import { useTrayStatus } from '../hooks/useTrayStatus'
 import { registerGlobalShortcuts } from '../hooks/useGlobalShortcuts'
 import { useIdleDetection } from '../hooks/useIdleDetection'
 import { useWebhooks } from '../hooks/useWebhooks'
+import { useNotifications } from '../hooks/useNotifications'
 import { computeStats } from '../domain/stats'
 import { toDateString, getWeekDates, computeWeekMs, computeStreak } from '../domain/timer'
 import { getLastSessionDate, suggestWeeklyGoal } from '../domain/history'
-import { shouldTriggerBreak, FOCUS_PRESETS } from '../domain/focusGuard'
+import { shouldTriggerBreak, FOCUS_PRESETS, type FocusPreset } from '../domain/focusGuard'
 import { createIntention, createEveningReview } from '../domain/intentions'
 import { formatElapsed } from '../domain/format'
 import type { Intention, EveningReview } from '../domain/intentions'
 import type { Storage } from '../persistence/storage'
 
+const POSTPONE_MS = 5 * 60_000 // 5 minutes
+
 type Props = { storage: Storage }
 
 export function App({ storage }: Props) {
   const { categories, sessions, historySessions, addCategory, startTimer, stopTimer, deleteCategory, renameCategory, setWeeklyGoal, setCategoryColor, setPendingTag } = useTimerState()
+
+  // ── UI state ────────────────────────────────────────────────────────────────
   const [input, setInput] = useState('')
   const [view, setView] = useState<'tracker' | 'stats' | 'history' | 'today' | 'settings'>('tracker')
-  const [breakActive, setBreakActive] = useState(false)
   const [focusLockActive, setFocusLockActive] = useState(false)
-  const focusPreset = FOCUS_PRESETS[0] // Pomodoro default
   const [intentions, setIntentions] = useState<Intention[]>([])
   const [eveningReview, setEveningReview] = useState<EveningReview | null>(null)
   const [webhookUrl, setWebhookUrl] = useState<string | null>(null)
 
-  useInitStore(storage)
+  // ── FocusGuard state ────────────────────────────────────────────────────────
+  const [focusPreset, setFocusPreset] = useState<FocusPreset>(FOCUS_PRESETS[0])
+  const [breakActive, setBreakActive] = useState(false)
+  const [postponedUntil, setPostponedUntil] = useState<number | null>(null)
+  const [postponeUsed, setPostponeUsed] = useState(false)
 
-  // Load webhook URL from settings
+  // ── Hooks ───────────────────────────────────────────────────────────────────
+  useInitStore(storage)
+  const webhooks = useWebhooks(webhookUrl)
+  const notifications = useNotifications()
+
+  // ── Load settings on mount ──────────────────────────────────────────────────
   useEffect(() => {
-    storage.getSetting('webhook_url').then(url => setWebhookUrl(url))
+    Promise.all([
+      storage.getSetting('webhook_url'),
+      storage.getSetting('focus_preset'),
+    ]).then(([url, preset]) => {
+      setWebhookUrl(url)
+      if (preset) {
+        const found = FOCUS_PRESETS.find(p => p.name === preset)
+        if (found) setFocusPreset(found)
+      }
+    })
   }, [])
 
   const today = useMemo(() => toDateString(Date.now()), [])
 
-  // Load intentions & evening review for today
   useEffect(() => {
     Promise.all([
       storage.loadIntentionsByDate(today),
@@ -54,6 +74,7 @@ export function App({ storage }: Props) {
       setEveningReview(rev)
     })
   }, [today])
+
   const weekDates = useMemo(() => getWeekDates(today), [today])
   const streaks = useMemo(() => Object.fromEntries(
     categories.map(c => [
@@ -62,6 +83,60 @@ export function App({ storage }: Props) {
     ])
   ), [categories, historySessions, today])
 
+  // ── Active category ─────────────────────────────────────────────────────────
+  const activeCategory = categories.find(c => c.activeEntry !== null)
+  const activeStartedAt = activeCategory?.activeEntry?.startedAt ?? null
+
+  // ── Reset break state when active category changes ──────────────────────────
+  useEffect(() => {
+    setBreakActive(false)
+    setPostponedUntil(null)
+    setPostponeUsed(false)
+  }, [activeCategory?.id])
+
+  // ── Long-session notification (every 2h without a break) ────────────────────
+  useEffect(() => {
+    if (!activeStartedAt || !activeCategory) return
+    const id = setInterval(() => {
+      const elapsedH = (Date.now() - activeStartedAt) / 3_600_000
+      if (elapsedH >= 2) notifications.notifyLongSession(activeCategory.name, Math.round(elapsedH))
+    }, 30 * 60_000) // check every 30 min
+    return () => clearInterval(id)
+  }, [activeStartedAt, activeCategory?.name])
+
+  // ── Tray + global shortcut + idle detection ─────────────────────────────────
+  const elapsedStr = activeStartedAt ? formatElapsed(Date.now() - activeStartedAt) : 'No active timer'
+  useTrayStatus(activeCategory?.name ?? null, elapsedStr)
+
+  useEffect(() => {
+    const toggle = () => {
+      const state = useTimerStore.getState()
+      const active = state.categories.find(c => c.activeEntry !== null)
+      if (active) handleStop(active.id)
+      else if (state.categories.length > 0) handleStart(state.categories[0].id)
+    }
+    let cleanup: (() => void) | undefined
+    registerGlobalShortcuts({}, toggle).then(fn => { cleanup = fn })
+    return () => { cleanup?.() }
+  }, [])
+
+  const handleIdle = useCallback(() => {
+    const state = useTimerStore.getState()
+    const active = state.categories.find(c => c.activeEntry !== null)
+    if (active) handleStop(active.id)
+  }, [])
+
+  useIdleDetection(3, handleIdle, useCallback(() => {}, []))
+
+  // ── FocusGuard trigger ──────────────────────────────────────────────────────
+  const now = Date.now()
+  const postponeBlocked = postponedUntil !== null && now < postponedUntil
+  const shouldShowBreak = !breakActive
+    && !postponeBlocked
+    && activeStartedAt !== null
+    && shouldTriggerBreak(activeStartedAt, now, focusPreset.workMs)
+
+  // ── Handlers ────────────────────────────────────────────────────────────────
   async function handleAdd() {
     const name = input.trim()
     if (!name) return
@@ -96,12 +171,24 @@ export function App({ storage }: Props) {
   async function handleStop(id: string, tag?: string) {
     const cat = categories.find(c => c.id === id)
     const entry = cat?.activeEntry
+    const weeklyBefore = computeWeekMs(sessions, id, weekDates)
     stopTimer(id, tag)
     const { sessions: s } = useTimerStore.getState()
     const saved = s[s.length - 1]
     await storage.saveSession(saved)
+
     if (cat && entry) {
       webhooks.onTimerStopped(cat.name, entry.startedAt, saved.endedAt, tag)
+
+      // Notify if goal just reached
+      const goalMs = cat.weeklyGoalMs ?? 0
+      if (goalMs > 0) {
+        const weeklyAfter = weeklyBefore + (saved.endedAt - entry.startedAt)
+        if (weeklyBefore < goalMs && weeklyAfter >= goalMs) {
+          notifications.notifyGoalReached(cat.name, Math.round(goalMs / 3_600_000))
+          webhooks.onGoalReached(cat.name, goalMs, weeklyAfter)
+        }
+      }
     }
   }
 
@@ -131,42 +218,12 @@ export function App({ storage }: Props) {
     setEveningReview(review)
   }
 
-  // Compute active category (used by multiple hooks)
-  const activeCategory = categories.find(c => c.activeEntry !== null)
-  const activeStartedAt = activeCategory?.activeEntry?.startedAt ?? null
+  function handlePostpone() {
+    setPostponedUntil(Date.now() + POSTPONE_MS)
+    setPostponeUsed(true)
+  }
 
-  const webhooks = useWebhooks(webhookUrl)
-
-  // M26: Update system tray with current timer status
-  const elapsedStr = activeStartedAt ? formatElapsed(Date.now() - activeStartedAt) : 'No active timer'
-  useTrayStatus(activeCategory?.name ?? null, elapsedStr)
-
-  // M28: Global shortcut — Ctrl+Shift+T toggles the active timer
-  useEffect(() => {
-    const toggle = () => {
-      const state = useTimerStore.getState()
-      const active = state.categories.find(c => c.activeEntry !== null)
-      if (active) handleStop(active.id)
-      else if (state.categories.length > 0) handleStart(state.categories[0].id)
-    }
-    let cleanup: (() => void) | undefined
-    registerGlobalShortcuts({}, toggle).then(fn => { cleanup = fn })
-    return () => { cleanup?.() }
-  }, [])
-
-  // M30: Auto-pause timer after 3 min of inactivity
-  const handleIdle = useCallback(() => {
-    const state = useTimerStore.getState()
-    const active = state.categories.find(c => c.activeEntry !== null)
-    if (active) handleStop(active.id)
-  }, [])
-
-  useIdleDetection(3, handleIdle, useCallback(() => {}, []))
-
-  // Compute whether focus guard should trigger
-  const shouldShowBreak = !breakActive && activeStartedAt !== null
-    && shouldTriggerBreak(activeStartedAt, Date.now(), focusPreset.workMs)
-
+  // ── Render ──────────────────────────────────────────────────────────────────
   return (
     <div className="min-h-screen bg-[#0f0f0f] text-zinc-100">
       {focusLockActive && activeCategory && activeStartedAt && (
@@ -182,7 +239,9 @@ export function App({ storage }: Props) {
           activeCategory={activeCategory?.name ?? null}
           startedAt={activeStartedAt}
           preset={focusPreset}
+          allowPostpone={!postponeUsed}
           onBreakComplete={() => setBreakActive(true)}
+          onPostpone={handlePostpone}
         />
       )}
 
@@ -306,6 +365,8 @@ export function App({ storage }: Props) {
             storage={storage}
             webhookUrl={webhookUrl ?? ''}
             onWebhookUrlChange={url => setWebhookUrl(url || null)}
+            focusPreset={focusPreset}
+            onFocusPresetChange={setFocusPreset}
           />
         )}
 
