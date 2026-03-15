@@ -5,12 +5,16 @@ A desktop time tracking application built with Tauri, React, TypeScript, and SQL
 ## Features
 
 - Create named categories (e.g. Work, Study, Exercise)
-- Start and stop timers per category
+- Start and stop timers per category — accumulated time persists across pause/resume cycles
 - Only one timer runs at a time — switching categories auto-pauses the previous one
 - Rename categories inline (click the name)
 - Delete categories with inline confirmation
 - Live elapsed time display per category
-- Daily statistics view with per-category progress bars
+- Every session (start → stop) is logged with timestamps for pattern analysis
+- Daily reset — accumulated time resets at midnight, full history preserved
+- Weekly goal per category — set an hour target, track progress inline
+- Statistics dashboard with Today / This Week toggle
+- Daily streak tracking per category
 - Persistent local storage via SQLite
 
 ## Stack
@@ -30,17 +34,17 @@ A desktop time tracking application built with Tauri, React, TypeScript, and SQL
 ```
 src/
   domain/       # Pure business logic (no framework dependencies)
-    timer.ts    # Category & TimerEntry types, startTimer/stopTimer/getElapsed
-    store.ts    # Pure reducer: addCategory, startCategoryTimer, removeCategory, renameCategory...
+    timer.ts    # Category, TimerEntry, Session types; timer functions; computeStreak/computeWeekMs/getWeekDates
+    store.ts    # Pure reducer: addCategory, startCategoryTimer, stopCategoryTimer, setWeeklyGoal...
     format.ts   # formatElapsed(ms) → "mm:ss"
     stats.ts    # computeStats(categories) → sorted StatEntry[]
   components/
-    App.tsx         # Root component, view toggle (tracker / stats)
-    CategoryItem.tsx # Row with inline rename, start/stop, delete confirm
-    StatsView.tsx   # Statistics view with progress bars
+    App.tsx          # Root component, header nav, wires storage ↔ store
+    CategoryItem.tsx # Row: inline rename, start/stop, delete, weekly goal progress
+    StatsView.tsx    # Today / This Week toggle, streaks, goal progress bars
   hooks/
     useElapsed.ts      # Ticking elapsed-ms hook
-    useInitStore.ts    # Loads categories from storage on mount
+    useInitStore.ts    # Loads categories + sessions from storage on mount
   store/
     useTimerStore.ts     # Zustand vanilla store wrapping domain reducer
     useTimerStoreHook.ts # React hook bridge
@@ -123,12 +127,21 @@ Each milestone results in one commit. No large features are implemented in a sin
 | 9 | Build verification & typecheck | — |
 | 10 | Delete category | 12 |
 | 11 | Rename category (inline edit) | 9 |
+| 12 | Fix timer display (accumulated + live) | — |
+| 13 | Session log: domain model | 9 |
+| 14 | Daily scope: computeTodayMs | 5 |
+| 15 | Session persistence (SQLite + Storage interface) | 8 |
+| 16 | Dark minimalist UI redesign | — |
+| 17 | Weekly goal: domain + store + UI + persistence | 14 |
+| 18 | Daily streak tracker: domain + UI | 7 |
+| 19 | Stats: Today / This week toggle + goal progress | 3 |
 
-**Total: 95 tests**
+**Total: 133 tests**
 
 ## Roadmap
 
 - `v0.1` ✅ Manual timer + category switching
 - `v0.2` ✅ SQLite persistence
 - `v0.3` ✅ Stats dashboard
-- `v0.4` — Productivity insights (streaks, daily goals)
+- `v0.4` ✅ Productivity insights (streaks, weekly goals, session log)
+- `v0.5` — Reports (session history view, pattern analysis)
