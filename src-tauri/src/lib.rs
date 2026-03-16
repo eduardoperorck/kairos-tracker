@@ -21,7 +21,7 @@ async fn set_always_on_top(window: tauri::Window, enabled: bool) -> Result<(), S
 pub fn run() {
   tauri::Builder::default()
     .plugin(tauri_plugin_sql::Builder::default().build())
-    .plugin(tauri_plugin_notification::Builder::default().build())
+    .plugin(tauri_plugin_notification::init())
     .setup(|app| {
       if cfg!(debug_assertions) {
         app.handle().plugin(
