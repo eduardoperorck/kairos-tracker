@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useI18n } from '../i18n'
 import type { Intention, EveningReview } from '../domain/intentions'
 
 type Props = {
@@ -9,6 +10,7 @@ type Props = {
 }
 
 export function IntentionsView({ intentions, review, onAddIntention, onSaveReview }: Props) {
+  const { t } = useI18n()
   const [newText, setNewText] = useState('')
   const [done, setDone] = useState<Set<number>>(new Set())
   const [mood, setMood] = useState<1 | 2 | 3 | 4 | 5>(review?.mood ?? 3)
@@ -34,12 +36,12 @@ export function IntentionsView({ intentions, review, onAddIntention, onSaveRevie
     <div className="space-y-8">
       {/* Morning brief */}
       <section>
-        <h2 className="mb-4 text-sm font-semibold text-zinc-200">Today's Intentions</h2>
+        <h2 className="mb-4 text-sm font-semibold text-zinc-200">{t('intentions.title')}</h2>
 
         <div className="mb-4 flex gap-2">
           <input
             className="flex-1 rounded-lg border border-white/[0.07] bg-white/[0.03] px-4 py-2.5 text-sm text-zinc-100 placeholder-zinc-600 outline-none focus:border-white/[0.15] focus:bg-white/[0.05] transition-all"
-            placeholder="What do you intend to accomplish today?"
+            placeholder={t('intentions.placeholder')}
             value={newText}
             onChange={e => setNewText(e.target.value)}
             onKeyDown={e => e.key === 'Enter' && handleAdd()}
@@ -48,18 +50,18 @@ export function IntentionsView({ intentions, review, onAddIntention, onSaveRevie
             className="rounded-lg border border-white/[0.07] bg-white/[0.03] px-4 py-2.5 text-sm text-zinc-400 hover:text-zinc-100 hover:border-white/[0.15] transition-all"
             onClick={handleAdd}
           >
-            Add
+            {t('intentions.add')}
           </button>
         </div>
 
         {intentions.length === 0 ? (
-          <p className="text-sm text-zinc-700">No intentions set yet.</p>
+          <p className="text-sm text-zinc-700">{t('intentions.empty')}</p>
         ) : (
           <ul className="space-y-2">
             {intentions.map((intention, idx) => (
               <li key={idx} className="flex items-center gap-3">
                 <button
-                  aria-label={done.has(idx) ? 'Mark undone' : 'Mark done'}
+                  aria-label={done.has(idx) ? t('intentions.markUndone') : t('intentions.markDone')}
                   onClick={() => toggleDone(idx)}
                   className={`w-4 h-4 rounded border transition-colors shrink-0 ${
                     done.has(idx)
@@ -80,10 +82,10 @@ export function IntentionsView({ intentions, review, onAddIntention, onSaveRevie
 
       {/* Evening review */}
       <section>
-        <h2 className="mb-4 text-sm font-semibold text-zinc-200">Evening Review</h2>
+        <h2 className="mb-4 text-sm font-semibold text-zinc-200">{t('intentions.eveningTitle')}</h2>
 
         <div className="mb-4">
-          <p className="mb-2 text-xs text-zinc-500">How was your day?</p>
+          <p className="mb-2 text-xs text-zinc-500">{t('intentions.howWasDay')}</p>
           <div className="flex gap-2">
             {([1, 2, 3, 4, 5] as const).map(n => (
               <button
@@ -105,7 +107,7 @@ export function IntentionsView({ intentions, review, onAddIntention, onSaveRevie
         <textarea
           className="w-full rounded-lg border border-white/[0.07] bg-white/[0.03] px-4 py-3 text-sm text-zinc-100 placeholder-zinc-600 outline-none focus:border-white/[0.15] focus:bg-white/[0.05] transition-all resize-none"
           rows={3}
-          placeholder="Notes about your day..."
+          placeholder={t('intentions.notesPlaceholder')}
           value={notes}
           onChange={e => setNotes(e.target.value)}
         />
@@ -114,11 +116,11 @@ export function IntentionsView({ intentions, review, onAddIntention, onSaveRevie
           className="mt-3 rounded-lg border border-white/[0.07] bg-white/[0.03] px-4 py-2.5 text-sm text-zinc-400 hover:text-zinc-100 hover:border-white/[0.15] transition-all"
           onClick={() => onSaveReview(mood, notes)}
         >
-          Save Review
+          {t('intentions.saveReview')}
         </button>
 
         {review && (
-          <p className="mt-2 text-xs text-zinc-600">Last saved: mood {review.mood}/5</p>
+          <p className="mt-2 text-xs text-zinc-600">{t('intentions.lastSaved')} {review.mood}/5</p>
         )}
       </section>
     </div>

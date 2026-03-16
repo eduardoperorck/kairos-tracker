@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { formatElapsed } from '../domain/format'
+import { useI18n, DAY_LABELS } from '../i18n'
 import { DigestView } from './DigestView'
 import { computeHourDistribution, computeDayTotals, computeEnergyPattern, isFlowSession } from '../domain/history'
 import { computeWeekMs, getWeekDates, toDateString } from '../domain/timer'
@@ -55,6 +56,7 @@ function heatColor(totalMs: number): string {
 }
 
 export function StatsView({ stats, weeklyData, streaks, onBack, historySessions = [], categories = [], storage }: Props) {
+  const { t, lang } = useI18n()
   const [period, setPeriod] = useState<'today' | 'week' | 'patterns'>('today')
   const [weekOffset, setWeekOffset] = useState(0)
 
@@ -119,10 +121,10 @@ export function StatsView({ stats, weeklyData, streaks, onBack, historySessions 
             onClick={onBack}
             className="text-sm text-zinc-500 hover:text-zinc-200 transition-colors"
           >
-            ← Back
+            {t('stats.back')}
           </button>
           <span className="text-zinc-700">·</span>
-          <h2 className="text-sm font-semibold text-zinc-200">Statistics</h2>
+          <h2 className="text-sm font-semibold text-zinc-200">{t('stats.title')}</h2>
         </div>
 
         {/* Period toggle */}
@@ -131,34 +133,28 @@ export function StatsView({ stats, weeklyData, streaks, onBack, historySessions 
             aria-label="Today"
             onClick={() => setPeriod('today')}
             className={`px-3 py-1 text-xs transition-colors ${
-              period === 'today'
-                ? 'bg-white/[0.08] text-zinc-100'
-                : 'text-zinc-500 hover:text-zinc-300'
+              period === 'today' ? 'bg-white/8 text-zinc-100' : 'text-zinc-500 hover:text-zinc-300'
             }`}
           >
-            Today
+            {t('stats.today')}
           </button>
           <button
             aria-label="This week"
             onClick={() => setPeriod('week')}
             className={`px-3 py-1 text-xs border-l border-white/[0.07] transition-colors ${
-              period === 'week'
-                ? 'bg-white/[0.08] text-zinc-100'
-                : 'text-zinc-500 hover:text-zinc-300'
+              period === 'week' ? 'bg-white/8 text-zinc-100' : 'text-zinc-500 hover:text-zinc-300'
             }`}
           >
-            This week
+            {t('stats.thisWeek')}
           </button>
           <button
             aria-label="Patterns"
             onClick={() => setPeriod('patterns')}
             className={`px-3 py-1 text-xs border-l border-white/[0.07] transition-colors ${
-              period === 'patterns'
-                ? 'bg-white/[0.08] text-zinc-100'
-                : 'text-zinc-500 hover:text-zinc-300'
+              period === 'patterns' ? 'bg-white/8 text-zinc-100' : 'text-zinc-500 hover:text-zinc-300'
             }`}
           >
-            Patterns
+            {t('stats.patterns')}
           </button>
         </div>
       </div>
@@ -170,21 +166,21 @@ export function StatsView({ stats, weeklyData, streaks, onBack, historySessions 
             className="text-xs text-zinc-500 hover:text-zinc-300 transition-colors"
             onClick={() => setWeekOffset(o => o - 1)}
           >
-            ← prev
+            {t('stats.prevWeek')}
           </button>
-          <span className="text-xs text-zinc-400">week of {formatWeekLabel(selectedWeekDates)}</span>
+          <span className="text-xs text-zinc-400">{t('stats.weekOf')} {formatWeekLabel(selectedWeekDates)}</span>
           <button
             className="text-xs text-zinc-500 hover:text-zinc-300 transition-colors disabled:opacity-30"
             onClick={() => setWeekOffset(o => o + 1)}
             disabled={weekOffset >= 0}
           >
-            next →
+            {t('stats.nextWeek')}
           </button>
         </div>
       )}
 
       {isEmpty ? (
-        <p className="mt-16 text-center text-sm text-zinc-700">No data yet.</p>
+        <p className="mt-16 text-center text-sm text-zinc-700">{t('stats.empty')}</p>
       ) : period === 'today' ? (
 
         /* Today view */
@@ -196,7 +192,7 @@ export function StatsView({ stats, weeklyData, streaks, onBack, historySessions 
                   <span className="text-sm font-medium text-zinc-200">{entry.name}</span>
                   {(streaks[entry.id] ?? 0) > 0 && (
                     <span className="text-xs text-zinc-600 tabular-nums">
-                      {streaks[entry.id]}d streak
+                      {streaks[entry.id]}{t('stats.streak')}
                     </span>
                   )}
                 </div>
@@ -237,12 +233,12 @@ export function StatsView({ stats, weeklyData, streaks, onBack, historySessions 
                     <span className="text-sm font-medium text-zinc-200">{entry.name}</span>
                     {(streaks[entry.id] ?? 0) > 0 && (
                       <span className="text-xs text-zinc-600 tabular-nums">
-                        {streaks[entry.id]}d streak
+                        {streaks[entry.id]}{t('stats.streak')}
                       </span>
                     )}
                     {flowCount > 0 && (
                       <span className="text-xs text-amber-500/70 tabular-nums">
-                        {flowCount} flow
+                        {flowCount} {t('stats.flow')}
                       </span>
                     )}
                   </div>
@@ -295,7 +291,7 @@ export function StatsView({ stats, weeklyData, streaks, onBack, historySessions 
 
           {/* Hour distribution chart */}
           <div>
-            <h3 className="mb-4 text-xs font-medium text-zinc-500 uppercase tracking-wider">Hour Distribution</h3>
+            <h3 className="mb-4 text-xs font-medium text-zinc-500 uppercase tracking-wider">{t('stats.hourDist')}</h3>
             <div className="space-y-2">
               {hourDist.sort((a, b) => b.totalMs - a.totalMs).map(slot => (
                 <div key={slot.hour} className="flex items-center gap-3">
@@ -317,11 +313,11 @@ export function StatsView({ stats, weeklyData, streaks, onBack, historySessions 
 
           {/* Heatmap */}
           <div>
-            <h3 className="mb-4 text-xs font-medium text-zinc-500 uppercase tracking-wider">Activity Heatmap (13 weeks)</h3>
+            <h3 className="mb-4 text-xs font-medium text-zinc-500 uppercase tracking-wider">{t('stats.heatmap')}</h3>
             <div className="flex gap-1">
               {/* Day labels */}
               <div className="flex flex-col gap-1 mr-1">
-                {['Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa', 'Su'].map(d => (
+                {DAY_LABELS[lang].map(d => (
                   <div key={d} className="h-3 text-[10px] text-zinc-700 leading-3">{d}</div>
                 ))}
               </div>

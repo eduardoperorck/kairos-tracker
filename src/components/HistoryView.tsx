@@ -1,4 +1,5 @@
 import { useState, useRef } from 'react'
+import { useI18n } from '../i18n'
 import { groupSessionsByDate, exportSessionsToCSV, exportSessionsToJSON, exportSessionsToHTML, isFlowSession, parseTogglCSV } from '../domain/history'
 import { formatElapsed } from '../domain/format'
 import type { Session, Category } from '../domain/timer'
@@ -24,6 +25,7 @@ function downloadBlob(content: string, filename: string, mimeType: string) {
 }
 
 export function HistoryView({ sessions, categories, onImportSessions }: Props) {
+  const { t } = useI18n()
   const [importStatus, setImportStatus] = useState<string | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const groups = groupSessionsByDate(sessions, categories)
@@ -61,7 +63,7 @@ export function HistoryView({ sessions, categories, onImportSessions }: Props) {
   return (
     <div>
       <div className="mb-6 flex items-center justify-between">
-        <h2 className="text-sm font-semibold text-zinc-200">History</h2>
+        <h2 className="text-sm font-semibold text-zinc-200">{t('history.title')}</h2>
         <div className="flex gap-2">
           <input ref={fileInputRef} type="file" accept=".csv" className="hidden" onChange={handleImportFile} />
           {onImportSessions && (
@@ -69,7 +71,7 @@ export function HistoryView({ sessions, categories, onImportSessions }: Props) {
               className="rounded-md border border-white/[0.07] bg-white/[0.03] px-3 py-1.5 text-xs text-zinc-400 hover:text-zinc-100 hover:border-white/[0.15] transition-all"
               onClick={() => fileInputRef.current?.click()}
             >
-              Import Toggl
+              {t('history.importToggl')}
             </button>
           )}
           <button
@@ -98,7 +100,7 @@ export function HistoryView({ sessions, categories, onImportSessions }: Props) {
       )}
 
       {groups.length === 0 ? (
-        <p className="mt-16 text-center text-sm text-zinc-700">No history yet.</p>
+        <p className="mt-16 text-center text-sm text-zinc-700">{t('history.empty')}</p>
       ) : (
         <div className="space-y-8">
           {groups.map(day => (

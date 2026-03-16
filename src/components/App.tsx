@@ -1,4 +1,5 @@
 import { useState, useMemo, useEffect, useCallback } from 'react'
+import { useI18n } from '../i18n'
 import { useTimerState } from '../store/useTimerStoreHook'
 import { useTimerStore } from '../store/useTimerStore'
 import { CategoryItem } from './CategoryItem'
@@ -28,6 +29,7 @@ const POSTPONE_MS = 5 * 60_000 // 5 minutes
 type Props = { storage: Storage }
 
 export function App({ storage }: Props) {
+  const { t } = useI18n()
   const { categories, sessions, historySessions, addCategory, startTimer, stopTimer, deleteCategory, renameCategory, setWeeklyGoal, setCategoryColor, setPendingTag } = useTimerState()
 
   // ── UI state ────────────────────────────────────────────────────────────────
@@ -272,9 +274,9 @@ export function App({ storage }: Props) {
       )}
 
       {/* Header */}
-      <header className="border-b border-white/[0.06]">
-        <div className="mx-auto max-w-xl px-6 h-14 flex items-center justify-between">
-          <span className="text-sm font-semibold text-zinc-100">Time Tracker</span>
+      <header className="border-b border-white/6">
+        <div className="mx-auto max-w-xl lg:max-w-3xl xl:max-w-5xl px-6 h-14 flex items-center justify-between">
+          <span className="text-sm font-semibold text-zinc-100">{t('app.title')}</span>
           <nav className="flex">
             {(['tracker', 'stats', 'history', 'today', 'settings'] as const).map(v => (
               <button
@@ -284,7 +286,7 @@ export function App({ storage }: Props) {
                   view === v ? 'text-zinc-100' : 'text-zinc-500 hover:text-zinc-300'
                 }`}
               >
-                {v === 'tracker' ? 'Timer' : v === 'stats' ? 'Stats' : v === 'history' ? 'History' : v === 'today' ? 'Today' : '⚙'}
+                {v === 'tracker' ? t('nav.timer') : v === 'stats' ? t('nav.stats') : v === 'history' ? t('nav.history') : v === 'today' ? t('nav.today') : '⚙'}
                 {view === v && (
                   <span className="absolute bottom-0 left-0 right-0 h-px bg-zinc-100" />
                 )}
@@ -294,29 +296,29 @@ export function App({ storage }: Props) {
         </div>
       </header>
 
-      <main className="mx-auto max-w-xl px-6 py-8">
+      <main className="mx-auto max-w-xl lg:max-w-3xl xl:max-w-5xl px-6 py-8">
 
         {view === 'tracker' ? (
           <>
             {/* Add category */}
             <div className="mb-6 flex gap-2">
               <input
-                className="flex-1 rounded-lg border border-white/[0.07] bg-white/[0.03] px-4 py-2.5 text-sm text-zinc-100 placeholder-zinc-600 outline-none focus:border-white/[0.15] focus:bg-white/[0.05] transition-all"
-                placeholder="Category name"
+                className="flex-1 rounded-lg border border-white/[0.07] bg-white/3 px-4 py-2.5 text-sm text-zinc-100 placeholder-zinc-600 outline-none focus:border-white/15 focus:bg-white/5 transition-all"
+                placeholder={t('tracker.placeholder')}
                 value={input}
                 onChange={e => setInput(e.target.value)}
                 onKeyDown={e => e.key === 'Enter' && handleAdd()}
               />
               <button
-                className="rounded-lg border border-white/[0.07] bg-white/[0.03] px-4 py-2.5 text-sm text-zinc-400 hover:text-zinc-100 hover:border-white/[0.15] transition-all"
+                className="rounded-lg border border-white/[0.07] bg-white/3 px-4 py-2.5 text-sm text-zinc-400 hover:text-zinc-100 hover:border-white/15 transition-all"
                 onClick={handleAdd}
               >
-                Add
+                {t('tracker.add')}
               </button>
             </div>
 
-            {/* Category list */}
-            <ul className="space-y-2">
+            {/* Category list — 2 columns on large screens */}
+            <ul className="space-y-2 lg:grid lg:grid-cols-2 lg:gap-4 lg:space-y-0">
               {categories.map(category => (
                 <CategoryItem
                   key={category.id}
@@ -342,14 +344,14 @@ export function App({ storage }: Props) {
                   onClick={() => setFocusLockActive(true)}
                   className="text-xs text-zinc-700 hover:text-zinc-400 transition-colors"
                 >
-                  Enter Focus Lock
+                  {t('tracker.focusLock')}
                 </button>
               </div>
             )}
 
             {categories.length === 0 && (
               <p className="mt-16 text-center text-sm text-zinc-700">
-                Add a category to start tracking time.
+                {t('tracker.empty')}
               </p>
             )}
           </>

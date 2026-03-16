@@ -2,6 +2,7 @@ import './index.css'
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import { App } from './components/App'
+import { I18nProvider } from './i18n'
 import { createInMemoryStorage } from './persistence/inMemoryStorage'
 import type { Storage } from './persistence/storage'
 
@@ -16,7 +17,9 @@ async function resolveStorage(): Promise<Storage> {
 resolveStorage().then(storage => {
   createRoot(document.getElementById('root')!).render(
     <StrictMode>
-      <App storage={storage} />
+      <I18nProvider>
+        <App storage={storage} />
+      </I18nProvider>
     </StrictMode>
   )
 })

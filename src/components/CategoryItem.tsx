@@ -3,6 +3,7 @@ import { useElapsed } from '../hooks/useElapsed'
 import { formatElapsed, formatRelativeTime } from '../domain/format'
 import { CategoryName } from './CategoryName'
 import { CategoryGoal } from './CategoryGoal'
+import { useI18n } from '../i18n'
 import type { Category } from '../domain/timer'
 
 export const CATEGORY_COLORS = ['#6366f1', '#8b5cf6', '#ec4899', '#f59e0b', '#10b981', '#3b82f6']
@@ -25,6 +26,7 @@ type Props = {
 }
 
 export function CategoryItem({ category, weeklyMs, lastTracked, onStart, onStop, onDelete, onRename, onSetGoal, onSetColor, suggestedMs }: Props) {
+  const { t } = useI18n()
   const [confirming, setConfirming] = useState(false)
   const [showColorPicker, setShowColorPicker] = useState(false)
   const [selectedTag, setSelectedTag] = useState<string | undefined>(undefined)
@@ -34,7 +36,7 @@ export function CategoryItem({ category, weeklyMs, lastTracked, onStart, onStop,
   const totalMs = category.accumulatedMs + liveMs
   const isRunning = category.activeEntry !== null
   const goalMs = category.weeklyGoalMs ?? 0
-  const lastTrackedText = !isRunning && lastTracked ? `last tracked ${formatRelativeTime(lastTracked, Date.now())}` : null
+  const lastTrackedText = !isRunning && lastTracked ? `${t('category.lastTracked')} ${formatRelativeTime(lastTracked, Date.now())}` : null
   const dotColor = category.color ?? '#52525b' // zinc-600 default
 
   return (
@@ -53,7 +55,7 @@ export function CategoryItem({ category, weeklyMs, lastTracked, onStart, onStop,
             className="w-2.5 h-2.5 rounded-full transition-all hover:scale-125"
             style={{ backgroundColor: dotColor }}
             onClick={() => setShowColorPicker(p => !p)}
-            aria-label="Category color"
+            aria-label={t('category.colorLabel')}
           />
           {showColorPicker && (
             <div className="absolute left-0 top-5 z-10 flex gap-1.5 rounded-lg border border-white/[0.1] bg-zinc-900 p-2 shadow-lg">
@@ -85,7 +87,7 @@ export function CategoryItem({ category, weeklyMs, lastTracked, onStart, onStop,
               className="text-xs text-zinc-600 hover:text-zinc-400 transition-colors"
               onClick={() => setShowTagPicker(p => !p)}
             >
-              {selectedTag ? `[${selectedTag}]` : '+ tag'}
+              {selectedTag ? `[${selectedTag}]` : t('category.addTag')}
             </button>
             {showTagPicker && (
               <div className="absolute right-0 top-6 z-10 w-36 rounded-lg border border-white/[0.1] bg-zinc-900 py-1 shadow-lg">
@@ -105,7 +107,7 @@ export function CategoryItem({ category, weeklyMs, lastTracked, onStart, onStop,
                     className="block w-full px-3 py-1.5 text-left text-xs text-zinc-600 hover:text-zinc-400"
                     onClick={() => { setSelectedTag(undefined); setShowTagPicker(false) }}
                   >
-                    clear tag
+                    {t('category.clearTag')}
                   </button>
                 )}
               </div>
@@ -127,14 +129,14 @@ export function CategoryItem({ category, weeklyMs, lastTracked, onStart, onStop,
               className="text-xs font-medium text-red-400 hover:text-red-300 transition-colors"
               onClick={() => { onDelete(); setConfirming(false) }}
             >
-              Confirm
+              {t('category.confirm')}
             </button>
             <span className="text-zinc-700">·</span>
             <button
               className="text-xs text-zinc-500 hover:text-zinc-300 transition-colors"
               onClick={() => setConfirming(false)}
             >
-              Cancel
+              {t('category.cancel')}
             </button>
           </div>
         ) : (
@@ -144,7 +146,7 @@ export function CategoryItem({ category, weeklyMs, lastTracked, onStart, onStop,
               className="text-xs text-zinc-700 hover:text-zinc-400 transition-colors opacity-0 group-hover:opacity-100"
               onClick={() => setConfirming(true)}
             >
-              Delete
+              {t('category.delete')}
             </button>
             {isRunning ? (
               <button
@@ -152,7 +154,7 @@ export function CategoryItem({ category, weeklyMs, lastTracked, onStart, onStop,
                 className="rounded-md border border-red-500/20 bg-red-500/[0.06] px-3 py-1.5 text-xs font-medium text-red-400 hover:bg-red-500/[0.12] hover:border-red-500/30 transition-all"
                 onClick={() => { onStop(selectedTag); setSelectedTag(undefined) }}
               >
-                Stop
+                {t('category.stop')}
               </button>
             ) : (
               <button
@@ -160,7 +162,7 @@ export function CategoryItem({ category, weeklyMs, lastTracked, onStart, onStop,
                 className="rounded-md border border-white/[0.08] bg-white/[0.04] px-3 py-1.5 text-xs font-medium text-zinc-300 hover:text-zinc-100 hover:border-white/[0.16] hover:bg-white/[0.08] transition-all"
                 onClick={onStart}
               >
-                Start
+                {t('category.start')}
               </button>
             )}
           </div>

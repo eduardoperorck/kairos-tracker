@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from 'react'
 import { exportSessionsToJSON } from '../domain/history'
 import { FOCUS_PRESETS, type FocusPreset } from '../domain/focusGuard'
+import { useI18n } from '../i18n'
 import type { Category, Session } from '../domain/timer'
 import type { Storage } from '../persistence/storage'
 
@@ -29,6 +30,7 @@ function downloadBlob(content: string, filename: string, mimeType: string) {
 // ─── SyncSection ──────────────────────────────────────────────────────────────
 
 function SyncSection({ storage, sessions, categories }: { storage: Storage; sessions: Session[]; categories: Category[] }) {
+  const { t } = useI18n()
   const [syncPath, setSyncPath] = useState('')
   const [syncStatus, setSyncStatus] = useState<string | null>(null)
 
@@ -58,8 +60,8 @@ function SyncSection({ storage, sessions, categories }: { storage: Storage; sess
 
   return (
     <section>
-      <h3 className="mb-3 text-xs font-medium text-zinc-500 uppercase tracking-wider">OneDrive / Folder Sync</h3>
-      <p className="mb-3 text-xs text-zinc-600">Export a JSON snapshot to a folder (e.g. OneDrive) for multi-device sync.</p>
+      <h3 className="mb-3 text-xs font-medium text-zinc-500 uppercase tracking-wider">{t('settings.sync')}</h3>
+      <p className="mb-3 text-xs text-zinc-600">{t('settings.syncDesc')}</p>
       <div className="flex gap-2 mb-2">
         <input
           type="text"
@@ -69,10 +71,10 @@ function SyncSection({ storage, sessions, categories }: { storage: Storage; sess
           onChange={e => setSyncPath(e.target.value)}
           onKeyDown={e => e.key === 'Enter' && handleSaveSyncPath()}
         />
-        <button onClick={handleSaveSyncPath} className="rounded-md border border-white/[0.07] bg-white/[0.03] px-3 py-2 text-xs text-zinc-400 hover:text-zinc-100 transition-all">Save</button>
+        <button onClick={handleSaveSyncPath} className="rounded-md border border-white/[0.07] bg-white/3 px-3 py-2 text-xs text-zinc-400 hover:text-zinc-100 transition-all">{t('settings.syncSave')}</button>
       </div>
-      <button onClick={handleManualSync} className="rounded-md border border-white/[0.07] bg-white/[0.03] px-4 py-2 text-xs text-zinc-400 hover:text-zinc-100 hover:border-white/[0.15] transition-all">
-        Sync Now
+      <button onClick={handleManualSync} className="rounded-md border border-white/[0.07] bg-white/3 px-4 py-2 text-xs text-zinc-400 hover:text-zinc-100 hover:border-white/15 transition-all">
+        {t('settings.syncNow')}
       </button>
       {syncStatus && <p className="mt-2 text-xs text-emerald-400">{syncStatus}</p>}
     </section>
@@ -82,6 +84,7 @@ function SyncSection({ storage, sessions, categories }: { storage: Storage; sess
 // ─── SettingsView ─────────────────────────────────────────────────────────────
 
 export function SettingsView({ categories, sessions, storage, webhookUrl, onWebhookUrlChange, focusPreset, onFocusPresetChange, focusStrictMode, onFocusStrictModeChange }: Props) {
+  const { t, lang, setLang } = useI18n()
   const [restoreStatus, setRestoreStatus] = useState<string | null>(null)
   const [webhookDraft, setWebhookDraft] = useState(webhookUrl)
   const [apiKeyDraft, setApiKeyDraft] = useState('')
@@ -131,24 +134,44 @@ export function SettingsView({ categories, sessions, storage, webhookUrl, onWebh
 
   return (
     <div className="space-y-8">
-      <h2 className="text-sm font-semibold text-zinc-200">Settings</h2>
+      <h2 className="text-sm font-semibold text-zinc-200">{t('settings.title')}</h2>
+
+      {/* Language */}
+      <section>
+        <h3 className="mb-3 text-xs font-medium text-zinc-500 uppercase tracking-wider">{t('settings.language')}</h3>
+        <div className="flex gap-2">
+          {(['en', 'pt'] as const).map(l => (
+            <button
+              key={l}
+              onClick={() => setLang(l)}
+              className={`rounded-lg border px-4 py-2 text-xs transition-all ${
+                lang === l
+                  ? 'border-emerald-500/40 bg-emerald-500/8 text-emerald-400'
+                  : 'border-white/[0.07] bg-white/2 text-zinc-500 hover:text-zinc-200 hover:border-white/15'
+              }`}
+            >
+              {l === 'en' ? 'English' : 'Português'}
+            </button>
+          ))}
+        </div>
+      </section>
 
       {/* Backup & Restore */}
       <section>
-        <h3 className="mb-3 text-xs font-medium text-zinc-500 uppercase tracking-wider">Backup & Restore</h3>
+        <h3 className="mb-3 text-xs font-medium text-zinc-500 uppercase tracking-wider">{t('settings.backup')}</h3>
         <div className="flex gap-2 flex-wrap">
           <button
             onClick={handleBackup}
-            className="rounded-md border border-white/[0.07] bg-white/[0.03] px-4 py-2 text-xs text-zinc-400 hover:text-zinc-100 hover:border-white/[0.15] transition-all"
+            className="rounded-md border border-white/[0.07] bg-white/3 px-4 py-2 text-xs text-zinc-400 hover:text-zinc-100 hover:border-white/15 transition-all"
           >
-            Download Backup (JSON)
+            {t('settings.downloadBackup')}
           </button>
           <input ref={fileInputRef} type="file" accept=".json" className="hidden" onChange={handleRestoreFile} />
           <button
             onClick={() => fileInputRef.current?.click()}
-            className="rounded-md border border-white/[0.07] bg-white/[0.03] px-4 py-2 text-xs text-zinc-400 hover:text-zinc-100 hover:border-white/[0.15] transition-all"
+            className="rounded-md border border-white/[0.07] bg-white/3 px-4 py-2 text-xs text-zinc-400 hover:text-zinc-100 hover:border-white/15 transition-all"
           >
-            Restore from Backup
+            {t('settings.restoreBackup')}
           </button>
         </div>
         {restoreStatus && (
@@ -158,7 +181,7 @@ export function SettingsView({ categories, sessions, storage, webhookUrl, onWebh
 
       {/* Focus Guard preset */}
       <section>
-        <h3 className="mb-3 text-xs font-medium text-zinc-500 uppercase tracking-wider">Focus Guard Preset</h3>
+        <h3 className="mb-3 text-xs font-medium text-zinc-500 uppercase tracking-wider">{t('settings.focusPreset')}</h3>
         <div className="flex flex-wrap gap-2">
           {FOCUS_PRESETS.map(p => (
             <button
@@ -195,15 +218,15 @@ export function SettingsView({ categories, sessions, storage, webhookUrl, onWebh
             }`} />
           </button>
           <span className="text-xs text-zinc-500">
-            Strict mode — {focusStrictMode ? 'no skipping allowed' : 'skipping allowed'}
+            {t('settings.strictMode')} — {focusStrictMode ? t('settings.strictOn') : t('settings.strictOff')}
           </span>
         </div>
       </section>
 
       {/* AI API Key */}
       <section>
-        <h3 className="mb-3 text-xs font-medium text-zinc-500 uppercase tracking-wider">Claude API Key</h3>
-        <p className="mb-2 text-xs text-zinc-600">Used for AI Weekly Digest. Stored locally, never sent anywhere else.</p>
+        <h3 className="mb-3 text-xs font-medium text-zinc-500 uppercase tracking-wider">{t('settings.apiKey')}</h3>
+        <p className="mb-2 text-xs text-zinc-600">{t('settings.apiKeyDesc')}</p>
         <div className="flex gap-2">
           <input
             type="password"
@@ -223,7 +246,7 @@ export function SettingsView({ categories, sessions, storage, webhookUrl, onWebh
             }}
             className="rounded-md border border-white/[0.07] bg-white/[0.03] px-3 py-2 text-xs text-zinc-400 hover:text-zinc-100 transition-all"
           >
-            {apiKeySaved ? 'Saved ✓' : 'Save'}
+            {apiKeySaved ? t('settings.saved') : t('settings.save')}
           </button>
         </div>
       </section>
@@ -233,8 +256,8 @@ export function SettingsView({ categories, sessions, storage, webhookUrl, onWebh
 
       {/* Webhooks */}
       <section>
-        <h3 className="mb-3 text-xs font-medium text-zinc-500 uppercase tracking-wider">Webhooks</h3>
-        <p className="mb-3 text-xs text-zinc-600">POST to this URL on timer start/stop events.</p>
+        <h3 className="mb-3 text-xs font-medium text-zinc-500 uppercase tracking-wider">{t('settings.webhooks')}</h3>
+        <p className="mb-3 text-xs text-zinc-600">{t('settings.webhooksDesc')}</p>
         <div className="flex gap-2">
           <input
             type="url"
@@ -246,9 +269,9 @@ export function SettingsView({ categories, sessions, storage, webhookUrl, onWebh
           />
           <button
             onClick={handleSaveWebhook}
-            className="rounded-md border border-white/[0.07] bg-white/[0.03] px-3 py-2 text-xs text-zinc-400 hover:text-zinc-100 transition-all"
+            className="rounded-md border border-white/[0.07] bg-white/3 px-3 py-2 text-xs text-zinc-400 hover:text-zinc-100 transition-all"
           >
-            Save
+            {t('settings.save')}
           </button>
         </div>
       </section>
