@@ -83,8 +83,8 @@ const en = {
 
 const pt: typeof en = {
   'app.title': 'Time Tracker',
-  'nav.timer': 'Timer',
-  'nav.stats': 'Stats',
+  'nav.timer': 'Tempo',
+  'nav.stats': 'Dados',
   'nav.history': 'Histórico',
   'nav.today': 'Hoje',
   'nav.settings': 'Config.',
