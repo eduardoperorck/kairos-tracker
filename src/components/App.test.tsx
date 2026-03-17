@@ -62,12 +62,14 @@ describe('App', () => {
     expect(screen.getByRole('button', { name: 'Stop' })).toBeInTheDocument()
   })
 
-  it('clicking Stop returns the button to Start', async () => {
+  it('clicking Stop shows session name dialog, then returns to Start on Skip', async () => {
     renderApp()
     await userEvent.type(screen.getByPlaceholderText('Category name'), 'Work')
     await userEvent.click(screen.getByRole('button', { name: 'Add' }))
     await userEvent.click(screen.getByRole('button', { name: 'Start' }))
     await userEvent.click(screen.getByRole('button', { name: 'Stop' }))
+    // SessionNameSuggestion dialog appears — skip it
+    await userEvent.click(screen.getByRole('button', { name: 'Skip' }))
     expect(screen.getByRole('button', { name: 'Start' })).toBeInTheDocument()
   })
 

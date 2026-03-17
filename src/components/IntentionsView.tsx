@@ -1,6 +1,8 @@
 import { useState } from 'react'
 import { useI18n } from '../i18n'
+import { MVDWidget } from './MVDWidget'
 import type { Intention, EveningReview } from '../domain/intentions'
+import type { MVDItem } from '../domain/minimumViableDay'
 
 type Props = {
   intentions: Intention[]
@@ -8,9 +10,11 @@ type Props = {
   onAddIntention: (text: string) => void
   onSaveReview: (mood: 1 | 2 | 3 | 4 | 5, notes: string) => void
   onExportMarkdown?: (doneSet: Set<number>) => void
+  mvdItems?: MVDItem[]
+  onMVDChange?: (items: MVDItem[]) => void
 }
 
-export function IntentionsView({ intentions, review, onAddIntention, onSaveReview, onExportMarkdown }: Props) {
+export function IntentionsView({ intentions, review, onAddIntention, onSaveReview, onExportMarkdown, mvdItems = [], onMVDChange }: Props) {
   const { t } = useI18n()
   const [newText, setNewText] = useState('')
   const [done, setDone] = useState<Set<number>>(new Set())
@@ -35,6 +39,11 @@ export function IntentionsView({ intentions, review, onAddIntention, onSaveRevie
 
   return (
     <div className="space-y-8">
+      {/* Minimum Viable Day */}
+      {onMVDChange && (
+        <MVDWidget items={mvdItems} onChange={onMVDChange} />
+      )}
+
       {/* Morning brief */}
       <section>
         <h2 className="mb-4 text-sm font-semibold text-zinc-200">{t('intentions.title')}</h2>

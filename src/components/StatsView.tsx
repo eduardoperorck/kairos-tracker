@@ -4,11 +4,19 @@ import { formatElapsed } from '../domain/format'
 import { useI18n, DAY_LABELS } from '../i18n'
 import { DigestView } from './DigestView'
 import { ShareWeekButton } from './WeeklyStatCard'
+import { BurnoutRiskBadge } from './BurnoutRiskBadge'
+import { MakerManagerBadge } from './MakerManagerBadge'
+import { DistractionBudgetWidget } from './DistractionBudgetWidget'
+import { CodeQualityView } from './CodeQualityView'
+import { AccountabilityView } from './AccountabilityView'
+import { ScreenshotTimeline } from './ScreenshotTimeline'
 import { useGitHubActivity } from '../hooks/useGitHubActivity'
 import { computeHourDistribution, computeDayTotals, computeEnergyPattern, isFlowSession } from '../domain/history'
 import { computeWeekMs, getWeekDates, toDateString } from '../domain/timer'
 import type { StatEntry } from '../domain/stats'
 import type { Session, Category } from '../domain/timer'
+import type { CaptureBlock } from '../domain/passiveCapture'
+import type { GitCommit } from '../domain/codeQuality'
 
 type WeeklyEntry = {
   id: string
@@ -28,6 +36,15 @@ type Props = {
   storage?: Storage
   onWrapped?: () => void
   githubUsername?: string | null
+  // N2, N3, N6 — passive capture data
+  captureBlocks?: CaptureBlock[]
+  // I3 — git commits for code quality view
+  gitCommits?: GitCommit[]
+  // I6 — screenshots
+  screenshotsEnabled?: boolean
+  // I7 — accountability
+  nickname?: string
+  weeklyGoalMs?: number
 }
 
 function offsetDate(today: string, offsetWeeks: number): string {
@@ -60,7 +77,7 @@ function heatColor(totalMs: number): string {
   return HEATMAP_COLORS[4]
 }
 
-export function StatsView({ stats, weeklyData, streaks, onBack, historySessions = [], categories = [], storage, onWrapped, githubUsername }: Props) {
+export function StatsView({ stats, weeklyData, streaks, onBack, historySessions = [], categories = [], storage, onWrapped, githubUsername, captureBlocks = [], gitCommits = [], screenshotsEnabled = false, nickname = 'Anonymous', weeklyGoalMs = 0 }: Props) {
   const { t, lang } = useI18n()
   const [period, setPeriod] = useState<'today' | 'week' | 'patterns'>('today')
   const githubCommits = useGitHubActivity(githubUsername ?? null)
@@ -380,6 +397,39 @@ export function StatsView({ stats, weeklyData, streaks, onBack, historySessions 
               })}
             </div>
           </div>
+
+          {/* N2 Burnout Risk */}
+          <BurnoutRiskBadge sessions={historySessions} today={today} />
+
+          {/* N3 Maker vs. Manager */}
+          <MakerManagerBadge blocks={captureBlocks} />
+
+          {/* N6 Distraction Budget */}
+          <DistractionBudgetWidget blocks={captureBlocks} />
+
+          {/* I3 Code Quality × Focus */}
+          <CodeQualityView commits={gitCommits} sessions={historySessions} />
+
+          {/* I6 Screenshot Timeline */}
+          {storage && (
+            <div>
+              <h3 className="mb-2 text-xs font-medium text-zinc-500 uppercase tracking-wider">
+                {t('screenshot.title')}
+              </h3>
+              <ScreenshotTimeline date={today} enabled={screenshotsEnabled} />
+            </div>
+          )}
+
+          {/* I7 Accountability Partner */}
+          {storage && (
+            <AccountabilityView
+              sessions={historySessions}
+              categories={categories}
+              storage={storage}
+              nickname={nickname}
+              weeklyGoalMs={weeklyGoalMs}
+            />
+          )}
 
         </div>
       )}

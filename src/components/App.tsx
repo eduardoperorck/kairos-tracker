@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect, useCallback } from 'react'
+import { useState, useMemo, useEffect, useCallback, useRef } from 'react'
 import { useI18n } from '../i18n'
 import { useTimerState } from '../store/useTimerStoreHook'
 import { useTimerStore } from '../store/useTimerStore'
@@ -26,8 +26,10 @@ import type { CategoryInsights } from './CategoryItem'
 import { shouldTriggerBreak, FOCUS_PRESETS, type FocusPreset } from '../domain/focusGuard'
 import { createIntention, createEveningReview } from '../domain/intentions'
 import { formatElapsed } from '../domain/format'
+import { useInputActivity } from '../hooks/useInputActivity'
 import type { Intention, EveningReview } from '../domain/intentions'
 import type { Storage } from '../persistence/storage'
+import type { MVDItem } from '../domain/minimumViableDay'
 
 const POSTPONE_MS = 5 * 60_000 // 5 minutes
 
@@ -51,6 +53,14 @@ export function App({ storage }: Props) {
   const [claudeApiKey, setClaudeApiKey] = useState<string | null>(null)
   const [githubUsername, setGithubUsername] = useState<string | null>(null)
   const [wrappedOpen, setWrappedOpen] = useState(false)
+  const [mvdItems, setMvdItems] = useState<MVDItem[]>(() => {
+    try { return JSON.parse(localStorage.getItem('mvd_items') ?? '[]') } catch { return [] }
+  })
+  // N1: track last category switch
+  const [lastSwitch, setLastSwitch] = useState<{ at: number; fromName: string } | null>(null)
+  // N5: idle tracking
+  const [idleMs, setIdleMs] = useState(0)
+  const lastActivityRef = useRef(Date.now())
 
   // ── FocusGuard state ────────────────────────────────────────────────────────
   const [focusPreset, setFocusPreset] = useState<FocusPreset>(FOCUS_PRESETS[0])
@@ -64,6 +74,7 @@ export function App({ storage }: Props) {
   useInitStore(storage)
   const webhooks = useWebhooks(webhookUrl)
   const notifications = useNotifications()
+  const inputActivity = useInputActivity()
 
   // ── Load settings on mount ──────────────────────────────────────────────────
   useEffect(() => {
@@ -150,6 +161,24 @@ export function App({ storage }: Props) {
     return () => clearInterval(id)
   }, [categories])
 
+  // ── Idle tracking (N5 Dead Time) ────────────────────────────────────────────
+  useEffect(() => {
+    const onActivity = () => { lastActivityRef.current = Date.now(); setIdleMs(0) }
+    window.addEventListener('keydown', onActivity, true)
+    window.addEventListener('mousemove', onActivity, true)
+    const id = setInterval(() => setIdleMs(Date.now() - lastActivityRef.current), 5_000)
+    return () => {
+      window.removeEventListener('keydown', onActivity, true)
+      window.removeEventListener('mousemove', onActivity, true)
+      clearInterval(id)
+    }
+  }, [])
+
+  // ── Persist MVD items ────────────────────────────────────────────────────────
+  useEffect(() => {
+    localStorage.setItem('mvd_items', JSON.stringify(mvdItems))
+  }, [mvdItems])
+
   // ── Command palette keyboard shortcut ───────────────────────────────────────
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
@@ -217,6 +246,9 @@ export function App({ storage }: Props) {
 
   async function handleStart(id: string) {
     const prev = categories.find(c => c.activeEntry !== null)
+    if (prev && prev.id !== id) {
+      setLastSwitch({ at: Date.now(), fromName: prev.name })
+    }
     startTimer(id)
     const cat = categories.find(c => c.id === id)
     if (cat) webhooks.onTimerStarted(cat.name, Date.now())
@@ -394,6 +426,10 @@ export function App({ storage }: Props) {
             onSetColor={handleSetColor}
             onSetTag={handleSetTag}
             onFocusLock={() => setFocusLockActive(true)}
+            switchedAt={lastSwitch?.at ?? null}
+            switchedFromCategory={lastSwitch?.fromName ?? ''}
+            idleMs={idleMs}
+            inputActivity={inputActivity}
             onNLPConfirm={async (entry) => {
               const startedAt = new Date(entry.date + 'T' + String(entry.startHour).padStart(2, '0') + ':00:00').getTime()
               const session = {
@@ -425,6 +461,7 @@ export function App({ storage }: Props) {
             onBack={() => setView('tracker')}
             onWrapped={() => setWrappedOpen(true)}
             githubUsername={githubUsername}
+            nickname={githubUsername ?? 'Anonymous'}
           />
         ) : view === 'history' ? (
           <HistoryView
@@ -442,6 +479,8 @@ export function App({ storage }: Props) {
             review={eveningReview}
             onAddIntention={handleAddIntention}
             onSaveReview={handleSaveReview}
+            mvdItems={mvdItems}
+            onMVDChange={setMvdItems}
             onExportMarkdown={(doneSet) => {
               const daySessions = historySessions.filter(s => s.date === today)
               const md = exportDayAsMarkdown(
