@@ -183,7 +183,7 @@ Never use `--no-verify`.
 
 ## Current Status (as of 2026-03-17)
 
-**Version: v2.0 — Parts 9, 8 (domain), and 10 (domain) complete. 334 tests passing.**
+**Version: v2.1 — 62 milestones complete. 422 tests. 80.37% line coverage.**
 
 This session covered:
 - **Part 9 (C1)**: Removed web demo artifacts (demoStorage.ts, vite.web.config.ts, build:web)
@@ -194,5 +194,6 @@ This session covered:
 - **Part 8 Rust**: get_active_window() and get_git_log() commands added to lib.rs
 - **Part 10**: llm.ts (Ollama + Claude abstraction), adaptiveCycles, focusDebt, distractionRecovery + full test suites
 - **UI**: FocusDebtBanner, RecommendationsView, TrackerView, AI backend status in Settings
+- **Coverage session**: SettingsView.test, FocusLock.test, HistoryView.test + extended storage/llm/domain tests → 67% → 80%+
 
-The project is in a stable, releasable state. TypeScript strict — zero errors.
+The project is in a stable, releasable state. TypeScript strict — zero errors. 422 tests, 0 skipped hooks.

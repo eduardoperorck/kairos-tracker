@@ -1499,17 +1499,53 @@ Pontos aprendidos nesta sessão:
 - **App.tsx como orquestrador.** A extração para `TrackerView.tsx` não apenas facilita testes — ela documenta visualmente qual componente é responsável por quê.
 - **Domínio primeiro, UI depois.** `focusDebt.ts`, `passiveCapture.ts`, `deepWorkScore.ts` foram escritos e testados completamente antes de qualquer componente React tocá-los. O padrão funciona na 62ª feature da mesma forma que na 1ª.
 
-### Números finais (v2.0 — 2026-03-17)
+---
+
+## 2026-03-17 · Sessão Noturna — Cobertura de Testes ≥80%
+
+### Objetivo
+
+Cobertura global estava em 67.2% após todas as features estarem implementadas. Meta: ≥80% de line coverage.
+
+### O que foi feito
+
+Criados e ampliados 8 arquivos de teste cobrindo as maiores lacunas:
+
+**Novos arquivos:**
+- `SettingsView.test.tsx` — 14 testes: renderização, toggle strict mode, seleção de preset, backup/restore (válido, JSON inválido, não-array), webhooks, validação de sync path (path traversal)
+- `FocusLock.test.tsx` — 7 testes: render, handler de saída, SVG circular timer, cycleMs customizado
+- `HistoryView.test.tsx` — 15 testes: estado vazio, sessões com flow/tags, agrupamento por data (mais recente primeiro), botões de export, importação Toggl
+
+**Ampliados:**
+- `storage.test.ts` — `setWeeklyGoal`, `setColor`, `loadSessionsSince`, `getSetting/setSetting`, `saveIntention`, `loadIntentionsByDate`, `saveEveningReview`, `loadEveningReviewByDate`, `importSessions` → persistence 100%
+- `llm.test.ts` — `getLLMStatus` (ollama/claude/none), `callLLM` (todos os paths + códigos de erro 401/429) → llm.ts 97%
+- `focusDebt.test.ts` — `getDebtColor`, `getDebtDescription`, `sessionOver3h`, `lateNightSession`
+- `focusRecommendations.test.ts` — peak-hours, context-switching fragmentado, tracking-consistency
+- `contextSwitching.test.ts` — `getSwitchStatusColor`, `getSwitchStatusEmoji`, classificação moderate
+
+### Resultado
+
+| Métrica | Antes | Depois |
+|---------|-------|--------|
+| Testes | 334 | 422 |
+| Line coverage | 69.38% | 80.37% |
+| Statement coverage | 67.2% | 78.04% |
+| Arquivos de teste | 30 | 38 |
+
+---
+
+### Números finais (v2.1 — 2026-03-17)
 
 | Métrica | Valor |
 |---------|-------|
 | Milestones concluídos | 62 |
-| Testes escritos | 334 |
+| Testes escritos | 422 |
 | Arquivos de domínio | 13 |
 | Componentes React | 22 |
 | Hooks customizados | 7 |
 | Issues de segurança corrigidas | 13 |
 | Erros TypeScript | 0 |
+| Line coverage | 80.37% |
 | Linhas de código | ~8.500 |
 | Dependências de produção | 8 |
 | Tempo total de desenvolvimento | 3 dias |
