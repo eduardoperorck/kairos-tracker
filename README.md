@@ -246,7 +246,7 @@ Every feature followed the TDD workflow in CLAUDE.md:
 2. Implement minimal code to pass (GREEN)
 3. Refactor without breaking tests
 
-62 milestones. 422 tests. 80%+ line coverage. Zero skipped hooks. TypeScript strict — zero errors.
+62 milestones. 422 tests. 80%+ line coverage. Zero skipped hooks. TypeScript strict — zero errors. Version 0.1.0 (pre-release).
 
 ---
 

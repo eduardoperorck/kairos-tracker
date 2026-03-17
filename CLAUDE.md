@@ -183,7 +183,7 @@ Never use `--no-verify`.
 
 ## Current Status (as of 2026-03-17)
 
-**Version: v2.1 — 62 milestones complete. 422 tests. 80.37% line coverage.**
+**Version: 0.1.0 (unreleased) — 62 milestones complete. 422 tests. 80.37% line coverage.**
 
 This session covered:
 - **Part 9 (C1)**: Removed web demo artifacts (demoStorage.ts, vite.web.config.ts, build:web)
@@ -196,4 +196,4 @@ This session covered:
 - **UI**: FocusDebtBanner, RecommendationsView, TrackerView, AI backend status in Settings
 - **Coverage session**: SettingsView.test, FocusLock.test, HistoryView.test + extended storage/llm/domain tests → 67% → 80%+
 
-The project is in a stable, releasable state. TypeScript strict — zero errors. 422 tests, 0 skipped hooks.
+The project is feature-complete and stable, pending first public release (v1.0.0). TypeScript strict — zero errors. 422 tests, 0 skipped hooks.

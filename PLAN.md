@@ -252,7 +252,7 @@ Sem biblioteca externa. `src/i18n.tsx` com todas as strings, `useI18n()` hook, b
 
 ---
 
-## 2026-03-15–16 · v1.0 — Visibilidade e Impacto
+## 2026-03-15–16 · Fase 2 — Visibilidade e Impacto
 
 > Um projeto excelente que ninguém consegue ver não existe. README, CI e visuais são tão importantes quanto o código.
 
@@ -292,7 +292,7 @@ Banner no topo do tracker com status em tempo real: pico, neutro ou vale. `compu
 
 ---
 
-## 2026-03-16 · v1.1 — Utilizável, Chamativo e Viral
+## 2026-03-16 · Fase 3 — Utilizável, Chamativo e Viral
 
 > Um projeto que ninguém consegue testar não existe. Um projeto sem mecânica de compartilhamento não cresce.
 
@@ -839,7 +839,7 @@ useEffect(() => {
 
 ### QA2 · Cobertura de Testes — Componentes sem Testes
 
-Quatro componentes adicionados na v1.1 não têm nenhum teste. Todos têm lógica não-trivial ou chamadas externas.
+Quatro componentes adicionados na Fase 3 não têm nenhum teste. Todos têm lógica não-trivial ou chamadas externas.
 
 #### `WeeklyStatCard.test.tsx`
 - Renderiza sem crash com dados vazios
@@ -1534,10 +1534,11 @@ Criados e ampliados 8 arquivos de teste cobrindo as maiores lacunas:
 
 ---
 
-### Números finais (v2.1 — 2026-03-17)
+### Estado atual (0.1.0-dev — 2026-03-17, ainda não lançado)
 
 | Métrica | Valor |
 |---------|-------|
+| Versão | 0.1.0 (pré-lançamento) |
 | Milestones concluídos | 62 |
 | Testes escritos | 422 |
 | Arquivos de domínio | 13 |

@@ -1,0 +1,21 @@
+{
+  "name": "@productivity-challenge/cli",
+  "version": "0.1.0",
+  "description": "CLI companion for Time Tracker",
+  "type": "module",
+  "bin": {
+    "time-tracker": "./dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "node --loader ts-node/esm src/index.ts"
+  },
+  "dependencies": {
+    "better-sqlite3": "^9.4.3"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.8",
+    "@types/node": "^20.0.0",
+    "typescript": "^5.9.3"
+  }
+}
