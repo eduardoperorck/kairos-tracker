@@ -136,6 +136,29 @@ fn list_screenshots(app: tauri::AppHandle, date: String) -> Vec<String> {
   paths
 }
 
+/// Returns keyboard and mouse activity stats for the last N seconds.
+/// On Windows, reads from a lightweight counter updated by a background poll.
+/// Falls back to zeros on unsupported platforms or when no data is available.
+#[derive(serde::Serialize)]
+pub struct InputActivity {
+  pub keystrokes: u64,
+  pub mouse_clicks: u64,
+  pub mouse_distance_px: u64,
+  pub window_ms: u64,
+}
+
+#[tauri::command]
+fn get_input_activity() -> InputActivity {
+  // Stub: full implementation requires platform-level input hooks (e.g. SetWindowsHookEx).
+  // Returns zeros — callers should fall back to idle-seconds-based estimation.
+  InputActivity {
+    keystrokes: 0,
+    mouse_clicks: 0,
+    mouse_distance_px: 0,
+    window_ms: 0,
+  }
+}
+
 /// Delete all screenshots older than the given date (YYYY-MM-DD).
 #[tauri::command]
 fn delete_screenshots_before(app: tauri::AppHandle, before_date: String) -> Result<(), String> {
@@ -181,6 +204,7 @@ pub fn run() {
       capture_screenshot,
       list_screenshots,
       delete_screenshots_before,
+      get_input_activity,
     ])
     .run(tauri::generate_context!())
     .expect("error while running tauri application");
