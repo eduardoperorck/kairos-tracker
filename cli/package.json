@@ -1,6 +1,6 @@
 {
   "name": "@productivity-challenge/cli",
-  "version": "0.1.0",
+  "version": "1.0.0-alpha",
   "description": "CLI companion for Time Tracker",
   "type": "module",
   "bin": {

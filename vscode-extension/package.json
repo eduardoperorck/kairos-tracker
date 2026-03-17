@@ -1,0 +1,42 @@
+{
+  "name": "time-tracker-vscode",
+  "displayName": "Time Tracker",
+  "description": "Shows your Time Tracker active timer in the VS Code status bar",
+  "version": "1.0.0-alpha",
+  "publisher": "productivity-challenge",
+  "engines": { "vscode": "^1.85.0" },
+  "categories": ["Other"],
+  "activationEvents": ["onStartupFinished"],
+  "main": "./dist/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "timeTracker.start",
+        "title": "Time Tracker: Start Timer"
+      },
+      {
+        "command": "timeTracker.stop",
+        "title": "Time Tracker: Stop Timer"
+      },
+      {
+        "command": "timeTracker.status",
+        "title": "Time Tracker: Show Status"
+      }
+    ]
+  },
+  "scripts": {
+    "build": "esbuild src/extension.ts --bundle --outfile=dist/extension.js --external:vscode --format=cjs --platform=node",
+    "package": "vsce package"
+  },
+  "devDependencies": {
+    "@types/vscode": "^1.85.0",
+    "@types/node": "^20.0.0",
+    "esbuild": "^0.20.0",
+    "typescript": "^5.9.3",
+    "@vscode/vsce": "^2.22.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/pichau/productivity-challenge"
+  }
+}
