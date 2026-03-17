@@ -118,3 +118,135 @@ describe('deleteCategory', () => {
     expect(await storage.loadCategories()).toHaveLength(1)
   })
 })
+
+describe('setWeeklyGoal', () => {
+  it('sets weeklyGoalMs on a category', async () => {
+    await storage.saveCategory('id-1', 'Work')
+    await storage.setWeeklyGoal('id-1', 7_200_000)
+    const [cat] = await storage.loadCategories()
+    expect(cat.weeklyGoalMs).toBe(7_200_000)
+  })
+
+  it('is a no-op for non-existent id', async () => {
+    await storage.setWeeklyGoal('nonexistent', 3_600_000)
+    expect(await storage.loadCategories()).toHaveLength(0)
+  })
+})
+
+describe('setColor', () => {
+  it('sets color on a category', async () => {
+    await storage.saveCategory('id-1', 'Work')
+    await storage.setColor('id-1', '#ff0000')
+    const [cat] = await storage.loadCategories()
+    expect(cat.color).toBe('#ff0000')
+  })
+
+  it('is a no-op for non-existent id', async () => {
+    await storage.setColor('nonexistent', '#ff0000')
+    expect(await storage.loadCategories()).toHaveLength(0)
+  })
+})
+
+describe('loadSessionsSince', () => {
+  const makeSession = (overrides: Partial<Session> = {}): Session => ({
+    id: 's-1', categoryId: 'cat-1', startedAt: 0, endedAt: 3000, date: '2026-03-15', ...overrides,
+  })
+
+  it('returns all sessions on or after the given date', async () => {
+    await storage.saveSession(makeSession({ id: 's-1', date: '2026-03-14' }))
+    await storage.saveSession(makeSession({ id: 's-2', date: '2026-03-15' }))
+    await storage.saveSession(makeSession({ id: 's-3', date: '2026-03-16' }))
+    const result = await storage.loadSessionsSince('2026-03-15')
+    expect(result).toHaveLength(2)
+    expect(result.map(s => s.id).sort()).toEqual(['s-2', 's-3'])
+  })
+
+  it('returns empty when no sessions match', async () => {
+    await storage.saveSession(makeSession({ date: '2026-03-10' }))
+    expect(await storage.loadSessionsSince('2026-03-15')).toHaveLength(0)
+  })
+})
+
+describe('getSetting / setSetting', () => {
+  it('returns null for unknown key', async () => {
+    expect(await storage.getSetting('nonexistent')).toBeNull()
+  })
+
+  it('stores and retrieves a setting', async () => {
+    await storage.setSetting('theme', 'dark')
+    expect(await storage.getSetting('theme')).toBe('dark')
+  })
+
+  it('overwrites an existing setting', async () => {
+    await storage.setSetting('theme', 'dark')
+    await storage.setSetting('theme', 'light')
+    expect(await storage.getSetting('theme')).toBe('light')
+  })
+})
+
+describe('saveIntention / loadIntentionsByDate', () => {
+  it('returns empty for a date with no intentions', async () => {
+    expect(await storage.loadIntentionsByDate('2026-03-15')).toHaveLength(0)
+  })
+
+  it('saves and loads an intention', async () => {
+    const intention = { id: 'i-1', date: '2026-03-15', text: 'deep work', done: false }
+    await storage.saveIntention(intention)
+    const loaded = await storage.loadIntentionsByDate('2026-03-15')
+    expect(loaded).toHaveLength(1)
+    expect(loaded[0]).toEqual(intention)
+  })
+
+  it('only returns intentions for the requested date', async () => {
+    await storage.saveIntention({ id: 'i-1', date: '2026-03-15', text: 'task a', done: false })
+    await storage.saveIntention({ id: 'i-2', date: '2026-03-16', text: 'task b', done: false })
+    expect(await storage.loadIntentionsByDate('2026-03-15')).toHaveLength(1)
+  })
+})
+
+describe('saveEveningReview / loadEveningReviewByDate', () => {
+  it('returns null when no review saved', async () => {
+    expect(await storage.loadEveningReviewByDate('2026-03-15')).toBeNull()
+  })
+
+  it('saves and loads an evening review', async () => {
+    const review = { date: '2026-03-15', moodScore: 4, wins: 'shipped feature', blockers: 'none' }
+    await storage.saveEveningReview(review)
+    const loaded = await storage.loadEveningReviewByDate('2026-03-15')
+    expect(loaded).toEqual(review)
+  })
+
+  it('overwrites review for the same date', async () => {
+    const r1 = { date: '2026-03-15', moodScore: 3, wins: 'first', blockers: '' }
+    const r2 = { date: '2026-03-15', moodScore: 5, wins: 'second', blockers: '' }
+    await storage.saveEveningReview(r1)
+    await storage.saveEveningReview(r2)
+    const loaded = await storage.loadEveningReviewByDate('2026-03-15')
+    expect(loaded?.moodScore).toBe(5)
+    expect(loaded?.wins).toBe('second')
+  })
+})
+
+describe('importSessions', () => {
+  const makeSession = (overrides: Partial<Session> = {}): Session => ({
+    id: 's-1', categoryId: 'cat-1', startedAt: 0, endedAt: 3000, date: '2026-03-15', ...overrides,
+  })
+
+  it('imports sessions that do not already exist', async () => {
+    await storage.importSessions([makeSession({ id: 's-import-1' }), makeSession({ id: 's-import-2', date: '2026-03-16' })])
+    const all = await storage.loadSessionsSince('2026-03-15')
+    expect(all).toHaveLength(2)
+  })
+
+  it('does not duplicate sessions with the same id', async () => {
+    const s = makeSession({ id: 's-dup' })
+    await storage.saveSession(s)
+    await storage.importSessions([s])
+    const loaded = await storage.loadSessionsByDate('2026-03-15')
+    expect(loaded).toHaveLength(1)
+  })
+
+  it('handles empty array without error', async () => {
+    await expect(storage.importSessions([])).resolves.not.toThrow()
+  })
+})

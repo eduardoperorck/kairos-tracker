@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { computeContextSwitches } from './contextSwitching'
+import { computeContextSwitches, getSwitchStatusColor, getSwitchStatusEmoji } from './contextSwitching'
 import type { CaptureBlock } from './passiveCapture'
 
 function makeBlock(startedAt: number, endedAt: number, process = 'Code.exe'): CaptureBlock {
@@ -36,5 +36,48 @@ describe('computeContextSwitches', () => {
     }
     const m = computeContextSwitches(blocks, 2 * 3600000)
     expect(m.status).toBe('fragmented')
+  })
+
+  it('classifies as moderate between 6 and 15 switches/h', () => {
+    const now = Date.now()
+    const blocks: CaptureBlock[] = []
+    // 10 blocks over 1 hour = 9 switches = ~9/h = moderate
+    for (let i = 0; i < 10; i++) {
+      blocks.push(makeBlock(
+        now - (10 - i) * 360000,
+        now - (9 - i) * 360000,
+        i % 2 === 0 ? 'Code.exe' : 'chrome.exe'
+      ))
+    }
+    const m = computeContextSwitches(blocks, 2 * 3600000)
+    expect(m.status).toBe('moderate')
+  })
+})
+
+describe('getSwitchStatusColor', () => {
+  it('returns emerald for focused', () => {
+    expect(getSwitchStatusColor('focused')).toContain('emerald')
+  })
+
+  it('returns yellow for moderate', () => {
+    expect(getSwitchStatusColor('moderate')).toContain('yellow')
+  })
+
+  it('returns red for fragmented', () => {
+    expect(getSwitchStatusColor('fragmented')).toContain('red')
+  })
+})
+
+describe('getSwitchStatusEmoji', () => {
+  it('returns green circle for focused', () => {
+    expect(getSwitchStatusEmoji('focused')).toBe('🟢')
+  })
+
+  it('returns yellow circle for moderate', () => {
+    expect(getSwitchStatusEmoji('moderate')).toBe('🟡')
+  })
+
+  it('returns red circle for fragmented', () => {
+    expect(getSwitchStatusEmoji('fragmented')).toBe('🔴')
   })
 })

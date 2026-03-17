@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { computeFocusDebt, getDebtLevel, buildDebtEventsFromSessions } from './focusDebt'
+import { computeFocusDebt, getDebtLevel, getDebtColor, getDebtDescription, buildDebtEventsFromSessions } from './focusDebt'
 
 describe('computeFocusDebt', () => {
   it('returns 0 for no events', () => {
@@ -34,6 +34,42 @@ describe('getDebtLevel', () => {
   })
 })
 
+describe('getDebtColor', () => {
+  it('returns emerald for minimal', () => {
+    expect(getDebtColor('minimal')).toContain('emerald')
+  })
+
+  it('returns yellow for moderate', () => {
+    expect(getDebtColor('moderate')).toContain('yellow')
+  })
+
+  it('returns orange for high', () => {
+    expect(getDebtColor('high')).toContain('orange')
+  })
+
+  it('returns red for critical', () => {
+    expect(getDebtColor('critical')).toContain('red')
+  })
+})
+
+describe('getDebtDescription', () => {
+  it('returns healthy message for minimal', () => {
+    expect(getDebtDescription('minimal')).toContain('healthy')
+  })
+
+  it('returns accumulating message for moderate', () => {
+    expect(getDebtDescription('moderate')).toContain('accumulating')
+  })
+
+  it('returns high debt message for high', () => {
+    expect(getDebtDescription('high')).toContain('High')
+  })
+
+  it('returns critical message for critical', () => {
+    expect(getDebtDescription('critical')).toContain('Critical')
+  })
+})
+
 describe('buildDebtEventsFromSessions', () => {
   it('detects flow sessions', () => {
     const now = Date.now()
@@ -47,5 +83,30 @@ describe('buildDebtEventsFromSessions', () => {
   it('adds break skips', () => {
     const events = buildDebtEventsFromSessions([], 3)
     expect(events.filter(e => e.type === 'breakSkipped').length).toBe(3)
+  })
+
+  it('detects sessionOver3h', () => {
+    const now = Date.now()
+    const sessions = [
+      { startedAt: now - 4 * 3_600_000, endedAt: now, date: '2026-01-01' }
+    ]
+    const events = buildDebtEventsFromSessions(sessions, 0)
+    expect(events.some(e => e.type === 'sessionOver3h')).toBe(true)
+  })
+
+  it('detects late night session', () => {
+    // Create a timestamp at 23:00 local time today
+    const now = new Date()
+    now.setHours(23, 0, 0, 0)
+    const startedAt = now.getTime()
+    const sessions = [
+      { startedAt, endedAt: startedAt + 30 * 60_000, date: '2026-01-01' }
+    ]
+    const events = buildDebtEventsFromSessions(sessions, 0)
+    expect(events.some(e => e.type === 'lateNightSession')).toBe(true)
+  })
+
+  it('returns no events for empty sessions and zero skips', () => {
+    expect(buildDebtEventsFromSessions([], 0)).toHaveLength(0)
   })
 })
