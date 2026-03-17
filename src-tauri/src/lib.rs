@@ -77,6 +77,86 @@ async fn set_always_on_top(window: tauri::Window, enabled: bool) -> Result<(), S
   window.set_always_on_top(enabled).map_err(|e| e.to_string())
 }
 
+/// Capture a screenshot and save it as JPEG to the given path.
+/// Uses PowerShell [System.Drawing] — no extra crates needed.
+/// Returns Err if screenshots are unavailable on this platform.
+#[tauri::command]
+fn capture_screenshot(output_path: String) -> Result<(), String> {
+  // Security: reject path traversal and non-absolute paths
+  if output_path.contains("..") || output_path.is_empty() {
+    return Err("Invalid path".into());
+  }
+  #[cfg(target_os = "windows")]
+  {
+    let script = format!(
+      r#"Add-Type -AssemblyName System.Windows.Forms,System.Drawing;
+$s=[System.Windows.Forms.Screen]::PrimaryScreen.Bounds;
+$bmp=New-Object System.Drawing.Bitmap($s.Width,$s.Height);
+$g=[System.Drawing.Graphics]::FromImage($bmp);
+$g.CopyFromScreen($s.Location,[System.Drawing.Point]::Empty,$s.Size);
+$enc=[System.Drawing.Imaging.ImageCodecInfo]::GetImageEncoders()|Where-Object{{$_.MimeType -eq 'image/jpeg'}};
+$p=New-Object System.Drawing.Imaging.EncoderParameters(1);
+$p.Param[0]=New-Object System.Drawing.Imaging.EncoderParameter([System.Drawing.Imaging.Encoder]::Quality,[long]60);
+$bmp.Save('{}', $enc, $p);"#,
+      output_path.replace('\'', "''")
+    );
+    let out = std::process::Command::new("powershell")
+      .args(["-NonInteractive", "-Command", &script])
+      .output()
+      .map_err(|e| e.to_string())?;
+    if !out.status.success() {
+      let stderr = String::from_utf8_lossy(&out.stderr);
+      return Err(format!("Screenshot failed: {}", stderr));
+    }
+    Ok(())
+  }
+  #[cfg(not(target_os = "windows"))]
+  {
+    Err("Screenshots are only supported on Windows.".into())
+  }
+}
+
+/// List screenshot file paths for a given date (YYYY-MM-DD).
+/// Screenshots are stored in: {app_data}/screenshots/{date}/
+#[tauri::command]
+fn list_screenshots(app: tauri::AppHandle, date: String) -> Vec<String> {
+  // Validate date format
+  if date.len() != 10 || date.contains("..") {
+    return vec![];
+  }
+  let Ok(data_dir) = app.path().app_data_dir() else { return vec![] };
+  let dir = data_dir.join("screenshots").join(&date);
+  let Ok(entries) = std::fs::read_dir(&dir) else { return vec![] };
+  let mut paths: Vec<String> = entries
+    .filter_map(|e| e.ok())
+    .filter(|e| e.path().extension().map(|x| x == "jpg").unwrap_or(false))
+    .filter_map(|e| e.path().to_str().map(String::from))
+    .collect();
+  paths.sort();
+  paths
+}
+
+/// Delete all screenshots older than the given date (YYYY-MM-DD).
+#[tauri::command]
+fn delete_screenshots_before(app: tauri::AppHandle, before_date: String) -> Result<(), String> {
+  if before_date.len() != 10 || before_date.contains("..") {
+    return Err("Invalid date".into());
+  }
+  let Ok(data_dir) = app.path().app_data_dir() else {
+    return Err("Cannot resolve app data dir".into());
+  };
+  let screenshots_dir = data_dir.join("screenshots");
+  let Ok(entries) = std::fs::read_dir(&screenshots_dir) else { return Ok(()) };
+  for entry in entries.filter_map(|e| e.ok()) {
+    let name = entry.file_name().to_string_lossy().to_string();
+    // Directory names are dates: compare lexicographically
+    if name.len() == 10 && name < before_date {
+      let _ = std::fs::remove_dir_all(entry.path());
+    }
+  }
+  Ok(())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
   tauri::Builder::default()
@@ -98,6 +178,9 @@ pub fn run() {
       set_always_on_top,
       get_active_window,
       get_git_log,
+      capture_screenshot,
+      list_screenshots,
+      delete_screenshots_before,
     ])
     .run(tauri::generate_context!())
     .expect("error while running tauri application");

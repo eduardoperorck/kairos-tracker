@@ -49,13 +49,13 @@ describe('generateRecommendations', () => {
   })
 
   it('warns about fragmented context switching', () => {
-    const now = Date.now()
+    const base = Date.now()
     // Create 20 blocks each 1 minute apart to get high switch rate
     const blocks = Array.from({ length: 20 }, (_, i) => ({
       process: `App${i % 2 === 0 ? 'A' : 'B'}.exe`,
       title: `Window ${i}`,
-      startedAt: now - (20 - i) * 60_000,
-      endedAt: now - (19 - i) * 60_000,
+      startedAt: base - (20 - i) * 60_000,
+      endedAt: base - (19 - i) * 60_000,
       categoryId: null,
       confirmed: false,
     }))
@@ -64,7 +64,6 @@ describe('generateRecommendations', () => {
   })
 
   it('recommends peak hours when enough sessions exist', () => {
-    const now = Date.now()
     // Build 10+ sessions all in the same hour (9am) to create clear peak
     const sessions = Array.from({ length: 12 }, (_, i) => ({
       id: `s${i}`,

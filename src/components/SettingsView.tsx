@@ -113,6 +113,90 @@ function SyncSection({ storage, sessions, categories }: { storage: Storage; sess
   )
 }
 
+// ─── ScreenshotSettingsSection ────────────────────────────────────────────────
+
+const RETENTION_OPTIONS = [
+  { value: '7', label: '7 days' },
+  { value: '30', label: '30 days' },
+  { value: 'never', label: 'Never auto-delete' },
+]
+
+function ScreenshotSettingsSection({ storage }: { storage: Storage }) {
+  const { t } = useI18n()
+  const [enabled, setEnabled] = useState(false)
+  const [retention, setRetention] = useState('7')
+
+  useEffect(() => {
+    Promise.all([
+      storage.getSetting('screenshots_enabled'),
+      storage.getSetting('screenshots_retention'),
+    ]).then(([e, r]) => {
+      if (e) setEnabled(e === 'true')
+      if (r) setRetention(r)
+    })
+  }, [])
+
+  async function toggle() {
+    const next = !enabled
+    setEnabled(next)
+    await storage.setSetting('screenshots_enabled', next ? 'true' : 'false')
+  }
+
+  async function handleRetentionChange(value: string) {
+    setRetention(value)
+    await storage.setSetting('screenshots_retention', value)
+  }
+
+  return (
+    <section>
+      <h3 className="mb-3 text-xs font-medium text-zinc-500 uppercase tracking-wider">
+        {t('screenshot.title')}
+      </h3>
+      <p className="mb-3 text-xs text-zinc-600">
+        Capture a screenshot every 5 minutes while a timer is active. Stored locally, never uploaded.
+        <span className="ml-1 text-zinc-700">Opt-in only.</span>
+      </p>
+      <div className="flex items-center gap-3 mb-3">
+        <button
+          role="switch"
+          aria-checked={enabled}
+          onClick={toggle}
+          className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${
+            enabled ? 'bg-emerald-500/60' : 'bg-white/[0.08]'
+          }`}
+        >
+          <span className={`inline-block h-3.5 w-3.5 rounded-full bg-white transition-transform ${
+            enabled ? 'translate-x-4' : 'translate-x-1'
+          }`} />
+        </button>
+        <span className="text-xs text-zinc-500">
+          {t('screenshot.enable')} — {enabled ? 'on' : 'off'}
+        </span>
+      </div>
+      {enabled && (
+        <div className="flex items-center gap-3">
+          <span className="text-xs text-zinc-600">Retention:</span>
+          <div className="flex gap-2">
+            {RETENTION_OPTIONS.map(opt => (
+              <button
+                key={opt.value}
+                onClick={() => handleRetentionChange(opt.value)}
+                className={`rounded px-3 py-1 text-xs transition-all ${
+                  retention === opt.value
+                    ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/30'
+                    : 'border border-white/[0.07] text-zinc-500 hover:text-zinc-200'
+                }`}
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+    </section>
+  )
+}
+
 // ─── SettingsView ─────────────────────────────────────────────────────────────
 
 export function SettingsView({ categories, sessions, storage, webhookUrl, onWebhookUrlChange, focusPreset, onFocusPresetChange, focusStrictMode, onFocusStrictModeChange }: Props) {
@@ -323,6 +407,9 @@ export function SettingsView({ categories, sessions, storage, webhookUrl, onWebh
           </button>
         </div>
       </section>
+
+      {/* Screenshots */}
+      <ScreenshotSettingsSection storage={storage} />
 
       {/* OneDrive / Sync */}
       <SyncSection storage={storage} sessions={sessions} categories={categories} />

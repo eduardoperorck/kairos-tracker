@@ -71,8 +71,8 @@ describe('SettingsView — renders', () => {
   it('renders strict mode toggle', () => {
     const storage = makeStorage()
     renderWithI18n(<SettingsView {...makeDefaultProps(storage)} />)
-    const toggle = screen.getByRole('switch')
-    expect(toggle).toBeTruthy()
+    // Two switches: strict mode + screenshot enable — check at least one exists
+    expect(screen.getAllByRole('switch').length).toBeGreaterThanOrEqual(1)
   })
 
   it('renders Webhooks section', () => {
@@ -83,19 +83,20 @@ describe('SettingsView — renders', () => {
 })
 
 describe('SettingsView — strict mode toggle', () => {
-  it('calls onFocusStrictModeChange when toggle is clicked', () => {
+  it('calls onFocusStrictModeChange when strict mode toggle is clicked', () => {
     const storage = makeStorage()
     const onFocusStrictModeChange = vi.fn()
     renderWithI18n(<SettingsView {...makeDefaultProps(storage, { onFocusStrictModeChange })} />)
-    fireEvent.click(screen.getByRole('switch'))
+    // Strict mode toggle is the first switch in the DOM
+    fireEvent.click(screen.getAllByRole('switch')[0])
     expect(onFocusStrictModeChange).toHaveBeenCalledWith(true)
   })
 
   it('shows strict mode as enabled when focusStrictMode=true', () => {
     const storage = makeStorage()
     renderWithI18n(<SettingsView {...makeDefaultProps(storage, { focusStrictMode: true })} />)
-    const toggle = screen.getByRole('switch')
-    expect(toggle.getAttribute('aria-checked')).toBe('true')
+    const strictToggle = screen.getAllByRole('switch')[0]
+    expect(strictToggle.getAttribute('aria-checked')).toBe('true')
   })
 })
 

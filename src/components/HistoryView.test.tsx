@@ -10,8 +10,8 @@ function renderWithI18n(ui: ReactNode) {
 }
 
 const categories: Category[] = [
-  { id: 'c1', name: 'Work', accumulatedMs: 0, activeEntry: null },
-  { id: 'c2', name: 'Study', accumulatedMs: 0, activeEntry: null },
+  { id: 'c1', name: 'Work', activeEntry: null },
+  { id: 'c2', name: 'Study', activeEntry: null },
 ]
 
 function makeSession(overrides: Partial<Session> = {}): Session {

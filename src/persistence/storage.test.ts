@@ -190,7 +190,7 @@ describe('saveIntention / loadIntentionsByDate', () => {
   })
 
   it('saves and loads an intention', async () => {
-    const intention = { id: 'i-1', date: '2026-03-15', text: 'deep work', done: false }
+    const intention = { date: '2026-03-15', text: 'deep work', createdAt: 0 }
     await storage.saveIntention(intention)
     const loaded = await storage.loadIntentionsByDate('2026-03-15')
     expect(loaded).toHaveLength(1)
@@ -198,8 +198,8 @@ describe('saveIntention / loadIntentionsByDate', () => {
   })
 
   it('only returns intentions for the requested date', async () => {
-    await storage.saveIntention({ id: 'i-1', date: '2026-03-15', text: 'task a', done: false })
-    await storage.saveIntention({ id: 'i-2', date: '2026-03-16', text: 'task b', done: false })
+    await storage.saveIntention({ date: '2026-03-15', text: 'task a', createdAt: 0 })
+    await storage.saveIntention({ date: '2026-03-16', text: 'task b', createdAt: 0 })
     expect(await storage.loadIntentionsByDate('2026-03-15')).toHaveLength(1)
   })
 })
@@ -210,20 +210,20 @@ describe('saveEveningReview / loadEveningReviewByDate', () => {
   })
 
   it('saves and loads an evening review', async () => {
-    const review = { date: '2026-03-15', moodScore: 4, wins: 'shipped feature', blockers: 'none' }
+    const review = { date: '2026-03-15', mood: 4 as const, notes: 'shipped feature', createdAt: 0 }
     await storage.saveEveningReview(review)
     const loaded = await storage.loadEveningReviewByDate('2026-03-15')
     expect(loaded).toEqual(review)
   })
 
   it('overwrites review for the same date', async () => {
-    const r1 = { date: '2026-03-15', moodScore: 3, wins: 'first', blockers: '' }
-    const r2 = { date: '2026-03-15', moodScore: 5, wins: 'second', blockers: '' }
+    const r1 = { date: '2026-03-15', mood: 3 as const, notes: 'first', createdAt: 0 }
+    const r2 = { date: '2026-03-15', mood: 5 as const, notes: 'second', createdAt: 1 }
     await storage.saveEveningReview(r1)
     await storage.saveEveningReview(r2)
     const loaded = await storage.loadEveningReviewByDate('2026-03-15')
-    expect(loaded?.moodScore).toBe(5)
-    expect(loaded?.wins).toBe('second')
+    expect(loaded?.mood).toBe(5)
+    expect(loaded?.notes).toBe('second')
   })
 })
 

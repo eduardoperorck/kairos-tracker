@@ -1299,6 +1299,334 @@ I4 (Focus Debt)    ← menor esforço, maior impacto, dados já existem
 
 ---
 
+## Parte 12 — Inovações Adicionais
+
+> Funcionalidades identificadas após análise aprofundada do projeto.
+> N8 (Minimum Viable Day) removido — não é prioridade nesta rodada.
+
+---
+
+### N1 · Attention Residue Timer
+
+Baseado na pesquisa de Sophie Leroy (2009): após uma interrupção, parte da atenção permanece "presa" na tarefa anterior por 20+ minutos. Nenhum tracker mede isso.
+
+Quando uma interrupção detectada encerra (Zoom fecha, Slack fecha), um contador silencioso é exibido:
+
+```
+Atenção residual: 14 min desde o fim da reunião
+Seu tempo médio de recuperação é 18 min.
+```
+
+**Integração com I5 (DRT):** soma atenção residual ao tempo de recuperação, gerando o **custo real total de cada interrupção** = duração da interrupção + atenção residual que ficou.
+
+**Domain:** `attentionResidue.ts`
+```typescript
+function computeResidualDuration(interruptionEndedAt: number, userAvgDrtMs: number): number
+function isInResidualWindow(interruptionEndedAt: number, now: number, avgDrtMs: number): boolean
+```
+
+---
+
+### N2 · Burnout Risk Indicator
+
+Indicador **leading** — detecta risco *antes* do burnout acontecer, baseado em tendências de múltiplas semanas.
+
+```typescript
+// src/domain/burnoutRisk.ts
+type BurnoutSignals = {
+  focusDebtTrend: 'rising' | 'stable' | 'falling'     // dívida acumulando semana a semana?
+  dwsTrend: 'declining' | 'stable' | 'improving'       // qualidade cognitiva caindo?
+  sessionDurationTrend: 'shortening' | 'stable'        // sessões ficando menores?
+  daysWithoutRest: number                               // dias consecutivos sem descanso real
+  weeklyHoursTrend: 'escalating' | 'stable'            // hora extra virando padrão?
+}
+
+type BurnoutLevel = 'sustainable' | 'watch' | 'risk'
+
+function computeBurnoutRisk(signals: BurnoutSignals): BurnoutLevel
+```
+
+**Display:** semáforo persistente nas Settings e StatsView.
+```
+🟢 Sustentável   — todos os sinais estáveis
+🟡 Atenção       — 2 sinais negativos simultâneos
+🔴 Risco         — 3+ sinais negativos por 7+ dias
+```
+
+Com nível 🔴: *"Seus últimos 14 dias mostram padrão de burnout. DWS caindo 18%, sessões 23% mais curtas, 11 dias sem descanso real."*
+
+**Por que é único:** outros apps dizem "você trabalhou muito hoje". Este diz "você está em trajetória de colapso há 2 semanas".
+
+---
+
+### N3 · Maker vs. Manager Mode
+
+Conceito de Paul Graham aplicado como dado pessoal verificável — um dos textos mais citados na comunidade dev.
+
+```typescript
+// src/domain/makerManager.ts
+type DayMode = 'maker' | 'manager' | 'mixed'
+
+function classifyDay(blocks: CaptureBlock[], sessions: Session[]): DayMode {
+  // Maker: blocos > 90 min · < 3 switches/h · zero calls detectadas
+  // Manager: blocos < 30 min · > 10 switches/h · 2+ calls
+  // Mixed: manhã maker, tarde manager (padrão mais comum)
+}
+```
+
+**Insight semanal no StatsView:**
+```
+Esta semana: 2 Maker · 2 Manager · 1 Mixed
+
+Maker days:   DWS médio 81 · commits: 23 · flow sessions: 4
+Manager days: DWS médio 34 · commits: 4  · flow sessions: 0
+
+"Proteja as manhãs de terça e quinta — seus únicos Maker days consistentes."
+```
+
+**Trend de 30 dias:** ratio Maker/Manager ao longo do tempo. Se declining → sinal para burnout (N2).
+
+---
+
+### N4 · AI Session Naming
+
+Problema atual: sessões ficam com nomes genéricos ("Work · 2h 30m"). Com o histórico de janelas do P1, o app nomeia retroativamente via Ollama/Claude.
+
+```typescript
+// Ao encerrar uma sessão com histórico de blocos passivos:
+async function suggestSessionName(
+  blocks: CaptureBlock[],
+  backend: LLMBackend
+): Promise<string>
+
+// Input para o LLM: lista de processos + títulos de janela da sessão
+// Output: uma frase descritiva concisa
+// Exemplo: "Refatoração da camada de storage + escrita de testes"
+```
+
+**UX:** ao encerrar a sessão, aparece por 5 segundos:
+```
+Sessão encerrada: Work · 2h 12m
+Sugestão: "Refatoração camada storage + testes"
+[ Aceitar ] [ Editar ] [ Ignorar ]
+```
+
+Sem API key / Ollama: nomes permanecem como estão. Com backend: histórico passa a ser legível.
+
+**Depende de:** P1 (blocos de janela) + I1 (LLM backend)
+
+---
+
+### N5 · Dead Time Recovery
+
+Quando idle detection detecta inatividade > 10 min com timer rodando, ao retornar o app exibe um popover sobre o gap:
+
+```
+Você estava ausente de 12:30 às 13:15 (45 min)
+
+O que estava fazendo?
+[ Almoço ] [ Reunião ] [ Pausa ] [ Telefone ] [ Outro ]
+```
+
+Clique em qualquer opção → gap preenchido na Activity Timeline (P6) com a tag correspondente. Histórico do dia completo sem rastreamento manual.
+
+**Gap não respondido:** fica cinza na timeline com label "não rastreado". Visível, não bloqueante.
+
+**Diferença do auto-pause atual:** o auto-pause pergunta se quer *adicionar* o tempo ausente ao Work. O Dead Time Recovery pergunta o que *realmente aconteceu* — pode ser qualquer coisa, não necessariamente Work.
+
+---
+
+### N6 · Distraction Budget
+
+Tolerance budgeting: usuário define X minutos de distração permitida por dia. Cada minuto em apps da lista de distrações (P1 rules) consome o orçamento.
+
+```typescript
+// src/domain/distractionBudget.ts
+type BudgetStatus = {
+  dailyBudgetMs: number
+  usedMs: number
+  remainingMs: number
+  byApp: Record<string, number>
+  exceeded: boolean
+}
+
+function computeDailyBudget(blocks: CaptureBlock[], budgetMs: number): BudgetStatus
+```
+
+**Display no tracker:**
+```
+Orçamento de distração:  ██████░░░░  18 / 30 min
+  YouTube  12 min · Reddit  6 min
+```
+
+Ao exceder: notificação leve uma vez — sem bloqueio, sem punição. Só consciência.
+
+**Configuração:** slider em Settings (0 = "disciplina total" → 60 min = "permissivo"). Default: 30 min.
+
+---
+
+### N7 · Input Intelligence — Keyboard + Mouse como Proxy Cognitivo
+
+**A biométrica de produtividade mais completa possível sem hardware externo.**
+
+Rust captura via low-level hooks (`WH_KEYBOARD_LL` + `WH_MOUSE_LL`) — **zero conteúdo gravado**, apenas métricas físicas agregadas em janelas de 5 minutos.
+
+#### Rust backend
+
+```rust
+#[tauri::command]
+fn start_input_hooks() { /* registra WH_KEYBOARD_LL + WH_MOUSE_LL */ }
+
+#[tauri::command]
+fn get_input_snapshot() -> InputSnapshot { /* retorna agregado da última janela */ }
+
+struct InputSnapshot {
+    window_start:      u64,
+    // Keyboard
+    keypress_count:    u32,
+    wpm:               f32,
+    cadence_variance:  f32,   // ritmo regular vs. errático — proxy de foco
+    backspace_ratio:   f32,   // erros de digitação → proxy de fadiga
+    // Mouse
+    distance_px:       f32,   // distância total percorrida
+    avg_velocity:      f32,   // velocidade média
+    click_count:       u32,
+    misclick_rate:     f32,   // clicks duplos rápidos no mesmo alvo = erro
+    scroll_events:     u32,
+    idle_ratio:        f32,   // % do tempo sem movimento
+    // Combinado
+    mouse_kb_ratio:    f32,   // 0.0 = só teclado · 1.0 = só mouse
+}
+```
+
+#### O que cada combinação significa
+
+| Keyboard | Mouse | Estado inferido |
+|---|---|---|
+| WPM alto + cadência regular | idle 80%+ | **Deep coding** |
+| WPM alto + backspace alto | mouse baixo | **Debug / dificuldade** |
+| WPM baixo + scroll alto | velocidade alta | **Revisão / browsing** |
+| Tudo baixo | idle alto | **Fadiga cognitiva** |
+| Mouse veloz + keyboard mínimo | muitos clicks | **Design / navegação** |
+| Bursts alternados teclado↔mouse | tudo alto | **Flow state signature** |
+
+#### Cognitive Load Score (CLS 0–100)
+
+```typescript
+// src/domain/inputIntelligence.ts
+type CognitiveState = 'deep_work' | 'reviewing' | 'struggling' | 'fatigued' | 'idle'
+
+type InputSnapshot = {
+  windowStart:       number
+  wpm:               number
+  cadenceVariance:   number
+  backspaceRatio:    number
+  mouseDistancePx:   number
+  mouseVelocity:     number
+  misclickRate:      number
+  mouseIdleRatio:    number
+  scrollEvents:      number
+  mouseKbRatio:      number
+}
+
+function computeCLS(snap: InputSnapshot, baseline: InputSnapshot): number
+function inferCognitiveState(snap: InputSnapshot, baseline: InputSnapshot): CognitiveState
+```
+
+**Baseline personalizada:** nas primeiras 2 semanas, o app aprende os padrões do usuário.
+*"Seu deep coding baseline: WPM 68, backspace 11%, mouse idle 76%."*
+Desvios > 1.5σ do baseline disparam insights.
+
+#### Display
+
+**Tracker (tempo real):**
+```
+CLS  ████████░░  76   deep work
+     WPM 71 · mouse 18% idle · backspace 9%
+```
+
+**StatsView (tendência semanal):**
+```
+Seg  ████████████████  CLS 82  pico 10–12h
+Ter  ████████████░░░░  CLS 64  queda após 15h
+Qui  ████████░░░░░░░░  CLS 43  ← reuniões fragmentaram
+```
+
+**Correlações geradas:**
+- *"Seu CLS cai 28 pts na hora após uma reunião — attention residue confirmado."*
+- *"WPM < 50 + misclick > 15% prediz sessões de baixa qualidade nas próximas 2h."*
+- *"mouse:teclado > 0.7 indica revisão, não criação — raro entrar em flow nesse estado."*
+
+#### Privacidade explícita (exibida nas Settings)
+
+```
+Input Intelligence ativo
+Capturando: contagens, velocidades, distâncias
+NÃO capturando: teclas pressionadas, posição do cursor, conteúdo
+Armazenamento: agregados de 5 min no SQLite local
+Desativar: Settings → Input Intelligence → off
+```
+
+---
+
+### N9 · Cognitive Peak Window → Export .ics
+
+Com `computeEnergyPattern()` já implementado, gerar um arquivo `.ics` semanal recorrente com blocos de calendário baseados nos padrões reais do usuário:
+
+```
+Segunda a Sexta (recorrente):
+  09:00–11:00  🔴 Foco Profundo  (pico histórico — 87% das flow sessions)
+  12:00–13:00  🟡 Admin/Reuniões (vale histórico — 23% menos foco)
+  15:00–17:00  🔴 Foco Profundo  (segundo pico)
+```
+
+**Implementação:**
+```typescript
+// src/domain/calendarExport.ts
+function exportEnergyCalendar(pattern: EnergyPattern, weeks: number): string
+// Retorna string .ics válida (RFC 5545)
+// Evento recorrente com RRULE:FREQ=WEEKLY
+```
+
+Botão "Export Calendar" no StatsView → abre save-file dialog → `.ics` importável no Google Calendar, Outlook, Apple Calendar.
+
+**Impacto real:** agenda do usuário passa a refletir a neurologia dele, não preferências aleatórias. Argumento concreto para não aceitar reuniões nos horários de pico.
+
+---
+
+## Tabela Resumo — Parte 12
+
+| # | Feature | Depende de | Esforço | Status |
+|---|---------|-----------|---------|--------|
+| **N1** | Attention Residue Timer | P1 + I5 | Baixo | ⬜ |
+| **N2** | Burnout Risk Indicator | dados existentes | Baixo | ⬜ |
+| **N3** | Maker vs. Manager Mode | P1 + dados existentes | Baixo | ⬜ |
+| **N4** | AI Session Naming | P1 + I1 (Ollama) | Baixo | ⬜ |
+| **N5** | Dead Time Recovery | idle detection (existe) | Baixo | ⬜ |
+| **N6** | Distraction Budget | P1 rules | Baixo | ⬜ |
+| **N7** | Input Intelligence (KB+Mouse) | Rust hooks (novo) | Médio | ⬜ |
+| **N9** | Cognitive Peak → .ics export | computeEnergyPattern (existe) | Baixo | ⬜ |
+
+**Independentes (podem começar agora):**
+```
+N2 (Burnout Risk)   ← só domain logic sobre dados existentes
+N3 (Maker/Manager)  ← só domain logic sobre dados existentes
+N9 (.ics export)    ← computeEnergyPattern já existe
+N5 (Dead Time)      ← idle detection já existe
+```
+
+**Após P1 estável:**
+```
+N1 → N4 → N6
+```
+
+**Rust novo (qualquer momento):**
+```
+N7 (Input Intelligence) ← independente, só precisa de novo Rust hook
+```
+
+---
+
 ## Parte 11 — Fechamento desta Rodada: Testes, Cobertura e Build de Produção
 
 > **Esta é a última etapa desta rodada de desenvolvimento.**

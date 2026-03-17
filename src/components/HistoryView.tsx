@@ -2,11 +2,14 @@ import { useState, useRef } from 'react'
 import { useI18n } from '../i18n'
 import { groupSessionsByDate, exportSessionsToCSV, exportSessionsToJSON, exportSessionsToHTML, isFlowSession, parseTogglCSV } from '../domain/history'
 import { formatElapsed } from '../domain/format'
+import { ActivityTimeline } from './ActivityTimeline'
 import type { Session, Category } from '../domain/timer'
+import type { CaptureBlock } from '../domain/passiveCapture'
 
 type Props = {
   sessions: Session[]
   categories: Category[]
+  captureBlocks?: CaptureBlock[]
   onImportSessions?: (sessions: Session[]) => Promise<void>
 }
 
@@ -24,7 +27,7 @@ function downloadBlob(content: string, filename: string, mimeType: string) {
   URL.revokeObjectURL(url)
 }
 
-export function HistoryView({ sessions, categories, onImportSessions }: Props) {
+export function HistoryView({ sessions, categories, captureBlocks = [], onImportSessions }: Props) {
   const { t } = useI18n()
   const [importStatus, setImportStatus] = useState<string | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -109,7 +112,16 @@ export function HistoryView({ sessions, categories, onImportSessions }: Props) {
                 <span className="text-xs font-medium text-zinc-500 uppercase tracking-wider">{day.date}</span>
                 <span className="font-mono text-xs text-zinc-600">{formatElapsed(day.totalMs)}</span>
               </div>
-              <ul className="space-y-2">
+              {/* Activity timeline for blocks that fall on this day */}
+              {(() => {
+                const dayStart = new Date(day.date + 'T00:00:00Z').getTime()
+                const dayEnd = dayStart + 86_400_000
+                const dayBlocks = captureBlocks.filter(b => b.startedAt >= dayStart && b.startedAt < dayEnd)
+                return dayBlocks.length > 0
+                  ? <ActivityTimeline blocks={dayBlocks} categories={categories} />
+                  : null
+              })()}
+              <ul className="space-y-2 mt-3">
                 {day.sessions.map((s, i) => {
                   const duration = s.endedAt - s.startedAt
                   const flow = isFlowSession(s)
