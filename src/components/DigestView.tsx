@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import { buildDigestPayload, formatDigestPrompt, callDigestAPI } from '../domain/digest'
 import type { Category, Session } from '../domain/timer'
 import type { Storage } from '../persistence/storage'
@@ -15,10 +15,13 @@ export function DigestView({ categories, sessions, historySessions, today, stora
   const [digest, setDigest] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const lastGeneratedRef = useRef(0)
   const [apiKeyInput, setApiKeyInput] = useState('')
   const [showKeyInput, setShowKeyInput] = useState(false)
 
   async function handleGenerate() {
+    const now = Date.now()
+    if (now - lastGeneratedRef.current < 10_000) return  // 10-second cooldown
     setError(null)
     let apiKey = await storage.getSetting('anthropic_api_key')
 
@@ -27,6 +30,7 @@ export function DigestView({ categories, sessions, historySessions, today, stora
       return
     }
 
+    lastGeneratedRef.current = now
     setLoading(true)
     try {
       const payload = buildDigestPayload(categories, sessions, historySessions, today)

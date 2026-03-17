@@ -8,7 +8,25 @@ export type WebhookEvent =
   | { type: 'focus.break_skipped'; category: string; sessionMs: number }
   | { type: 'daily.review'; mood: number; totalMs: number; topCategory: string }
 
+function isSafeWebhookUrl(url: string): boolean {
+  try {
+    const parsed = new URL(url)
+    if (parsed.protocol !== 'https:') return false
+    const host = parsed.hostname.toLowerCase()
+    // Block localhost and private IP ranges
+    if (host === 'localhost' || host === '127.0.0.1' || host === '::1') return false
+    if (/^10\./.test(host)) return false
+    if (/^172\.(1[6-9]|2\d|3[01])\./.test(host)) return false
+    if (/^192\.168\./.test(host)) return false
+    if (/^169\.254\./.test(host)) return false  // link-local
+    return true
+  } catch {
+    return false
+  }
+}
+
 async function postWebhook(url: string, event: WebhookEvent): Promise<void> {
+  if (!isSafeWebhookUrl(url)) return
   try {
     await fetch(url, {
       method: 'POST',

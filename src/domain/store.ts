@@ -5,6 +5,7 @@ export type Store = {
   categories: (Category & { accumulatedMs: number; pendingTag?: string })[]
   sessions: Session[]
   historySessions: Session[]
+  initError?: boolean
 }
 
 export function createStore(): Store {

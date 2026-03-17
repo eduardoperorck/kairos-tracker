@@ -253,6 +253,65 @@ export function parseTogglCSV(raw: string, existingCategories: Category[]): {
   return { sessions, newCategories: Array.from(newCatNames) }
 }
 
+// ─── exportDayAsMarkdown ─────────────────────────────────────────────────────
+
+import type { EveningReview } from './intentions'
+import { formatElapsed } from './format'
+
+export function exportDayAsMarkdown(
+  date: string,
+  sessions: Session[],
+  categories: Category[],
+  intentions: { text: string; done?: boolean }[],
+  review: EveningReview | null
+): string {
+  const catMap = new Map(categories.map(c => [c.id, c]))
+
+  // Time tracked per category
+  const msById: Record<string, number> = {}
+  const flowById: Record<string, number> = {}
+  for (const s of sessions) {
+    msById[s.categoryId] = (msById[s.categoryId] ?? 0) + (s.endedAt - s.startedAt)
+    if (isFlowSession(s)) flowById[s.categoryId] = (flowById[s.categoryId] ?? 0) + 1
+  }
+
+  const totalMs = Object.values(msById).reduce((a, b) => a + b, 0)
+
+  const timeLines = Object.entries(msById)
+    .sort((a, b) => b[1] - a[1])
+    .map(([id, ms]) => {
+      const cat = catMap.get(id)
+      const goalMs = cat?.weeklyGoalMs
+      const pct = goalMs ? ` (goal: ${formatElapsed(goalMs)} · ${Math.round((ms / goalMs) * 100)}%)` : ''
+      const flows = flowById[id] ? ` · ${flowById[id]} flow sessions` : ''
+      return `- ${cat?.name ?? id}: ${formatElapsed(ms)}${pct}${flows}`
+    })
+    .join('\n')
+
+  const intentionLines = intentions
+    .map(i => `- [${i.done ? 'x' : ' '}] ${i.text}`)
+    .join('\n')
+
+  const lines: string[] = [
+    `# ${date} · Productivity Review`,
+    '',
+    '## Time Tracked',
+    timeLines || '- No sessions recorded',
+    '',
+    `**Total:** ${formatElapsed(totalMs)}${review ? ` · Mood: ${review.mood}/5` : ''}`,
+  ]
+
+  if (intentions.length > 0) {
+    lines.push('', '## Intentions', intentionLines)
+  }
+
+  if (review) {
+    lines.push('', '## Evening Notes', review.notes || '_(no notes)_')
+  }
+
+  return lines.join('\n')
+}
+
 // ─── suggestWeeklyGoal ───────────────────────────────────────────────────────
 
 export function suggestWeeklyGoal(sessions: Session[], categoryId: string, recentWeeks = 4): number {

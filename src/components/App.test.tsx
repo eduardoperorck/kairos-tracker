@@ -4,9 +4,10 @@ import userEvent from '@testing-library/user-event'
 import { App } from './App'
 import { useTimerStore } from '../store/useTimerStore'
 import { createInMemoryStorage } from '../persistence/inMemoryStorage'
+import { I18nProvider } from '../i18n'
 
 function renderApp() {
-  return render(<App storage={createInMemoryStorage()} />)
+  return render(<I18nProvider><App storage={createInMemoryStorage()} /></I18nProvider>)
 }
 
 beforeEach(() => {
@@ -16,7 +17,7 @@ beforeEach(() => {
 describe('App', () => {
   it('renders the app title', () => {
     renderApp()
-    expect(screen.getByText('Time Tracker')).toBeInTheDocument()
+    expect(screen.getAllByText('Time Tracker').length).toBeGreaterThan(0)
   })
 
   it('renders an input and add button', () => {

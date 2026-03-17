@@ -1,7 +1,10 @@
 import { useState } from 'react'
+import { RecommendationsView } from './RecommendationsView'
 import { formatElapsed } from '../domain/format'
 import { useI18n, DAY_LABELS } from '../i18n'
 import { DigestView } from './DigestView'
+import { ShareWeekButton } from './WeeklyStatCard'
+import { useGitHubActivity } from '../hooks/useGitHubActivity'
 import { computeHourDistribution, computeDayTotals, computeEnergyPattern, isFlowSession } from '../domain/history'
 import { computeWeekMs, getWeekDates, toDateString } from '../domain/timer'
 import type { StatEntry } from '../domain/stats'
@@ -23,6 +26,8 @@ type Props = {
   historySessions?: Session[]
   categories?: Category[]
   storage?: Storage
+  onWrapped?: () => void
+  githubUsername?: string | null
 }
 
 function offsetDate(today: string, offsetWeeks: number): string {
@@ -55,9 +60,10 @@ function heatColor(totalMs: number): string {
   return HEATMAP_COLORS[4]
 }
 
-export function StatsView({ stats, weeklyData, streaks, onBack, historySessions = [], categories = [], storage }: Props) {
+export function StatsView({ stats, weeklyData, streaks, onBack, historySessions = [], categories = [], storage, onWrapped, githubUsername }: Props) {
   const { t, lang } = useI18n()
   const [period, setPeriod] = useState<'today' | 'week' | 'patterns'>('today')
+  const githubCommits = useGitHubActivity(githubUsername ?? null)
   const [weekOffset, setWeekOffset] = useState(0)
 
   const today = toDateString(Date.now())
@@ -126,9 +132,17 @@ export function StatsView({ stats, weeklyData, streaks, onBack, historySessions 
           <span className="text-zinc-700">·</span>
           <h2 className="text-sm font-semibold text-zinc-200">{t('stats.title')}</h2>
         </div>
-
-        {/* Period toggle */}
-        <div className="flex rounded-md border border-white/[0.07] overflow-hidden">
+        <div className="flex items-center gap-3">
+          {onWrapped && (
+            <button
+              onClick={onWrapped}
+              className="text-xs text-zinc-500 hover:text-zinc-300 transition-colors"
+            >
+              {t('wrapped.open')}
+            </button>
+          )}
+          {/* Period toggle */}
+          <div className="flex rounded-md border border-white/[0.07] overflow-hidden">
           <button
             aria-label="Today"
             onClick={() => setPeriod('today')}
@@ -156,6 +170,7 @@ export function StatsView({ stats, weeklyData, streaks, onBack, historySessions 
           >
             {t('stats.patterns')}
           </button>
+          </div>
         </div>
       </div>
 
@@ -273,6 +288,16 @@ export function StatsView({ stats, weeklyData, streaks, onBack, historySessions 
           })}
         </ul>
 
+        <div className="mt-4 flex justify-end">
+          <ShareWeekButton
+            weekLabel={formatWeekLabel(selectedWeekDates)}
+            stats={weeklyStats.map(e => ({ id: e.id, name: e.name, weeklyMs: e.weeklyMs, weeklyGoalMs: e.weeklyGoalMs, color: (categories ?? []).find(c => c.id === e.id)?.color }))}
+            totalMs={weeklyTotal}
+            topStreak={Math.max(...Object.values(streaks), 0)}
+            flowCount={[...weekFlowMap.values()].reduce((a, b) => a + b, 0)}
+          />
+        </div>
+
         {storage && (
           <DigestView
             categories={categories}
@@ -337,12 +362,17 @@ export function StatsView({ stats, weeklyData, streaks, onBack, historySessions 
                       d.setUTCDate(monday.getUTCDate() + dayIdx)
                       const dateStr = d.toISOString().slice(0, 10)
                       const total = dayTotalMap.get(dateStr) ?? 0
+                      const ghCommits = githubCommits.get(dateStr) ?? 0
                       return (
                         <div
                           key={dayIdx}
-                          title={`${dateStr}: ${formatElapsed(total)}`}
-                          className={`w-3 h-3 rounded-sm ${heatColor(total)}`}
-                        />
+                          title={`${dateStr}: ${formatElapsed(total)}${ghCommits > 0 ? ` · ${ghCommits} commits` : ''}`}
+                          className={`relative w-3 h-3 rounded-sm ${heatColor(total)}`}
+                        >
+                          {ghCommits > 0 && (
+                            <span className="absolute bottom-0 right-0 w-1 h-1 rounded-full bg-amber-400 opacity-90" />
+                          )}
+                        </div>
                       )
                     })}
                   </div>
@@ -353,6 +383,12 @@ export function StatsView({ stats, weeklyData, streaks, onBack, historySessions 
 
         </div>
       )}
+
+      <RecommendationsView
+        sessions={historySessions}
+        blocks={[]}
+        daysTracked={new Set(historySessions.map(s => s.date)).size}
+      />
     </div>
   )
 }

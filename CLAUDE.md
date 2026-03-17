@@ -42,14 +42,6 @@ Each milestone must be:
 - testable
 - deployable
 
-Example milestones:
-
-- create timer domain model
-- implement timer start/stop logic
-- persist timer to storage
-- build minimal UI
-- implement category switching
-
 ## Code Style
 
 Prefer:
@@ -69,21 +61,27 @@ Avoid:
 
 Stack:
 
-- Tauri
-- React
+- Tauri 2
+- React 18
 - TypeScript
-- SQLite local storage
+- Tailwind CSS
+- Zustand (global store)
+- SQLite via tauri-plugin-sql
 
 Structure:
 
+```
 src/
-  domain/
-  components/
-  hooks/
-  store/
-  tests/
+  domain/       # pure business logic — no React, no Tauri
+  components/   # React UI
+  hooks/        # side-effects and Tauri bridges
+  store/        # Zustand store
+  persistence/  # Storage interface + implementations
+cli/            # CLI companion (@productivity-challenge/cli)
+vscode-extension/
+```
 
-Domain logic must be independent from UI.
+Domain logic must be independent from UI and Tauri.
 
 ## Timer Rules
 
@@ -96,46 +94,64 @@ Business rules:
 
 ## State Management
 
-Use simple global store.
-
-Options:
-
-- Zustand
-or
-- React Context
-
-Avoid complex architectures.
+Zustand — minimal global store, no boilerplate.
 
 ## Testing
 
 Testing layers:
 
-1 domain logic
-2 store logic
-3 UI interactions
+1. domain logic
+2. store logic
+3. UI interactions
 
-Prefer:
+Prefer: Vitest + Testing Library
 
-Vitest + Testing Library
+### Critical: i18n in tests
 
-## Release Strategy
+All components that call `useI18n()` must be wrapped with `<I18nProvider>` in tests.
+Use a local `renderWithI18n(ui)` helper in each test file.
+Without the provider, `t(key)` returns the raw key string — assertions on visible text will fail.
 
-Release early.
+### Critical: TimerEntry type
 
-Initial releases should be minimal:
+`TimerEntry = { startedAt: number; endedAt: number | null }`
 
-v0.1
-- manual timer
-- category switching
+Mocks for `activeEntry` must always include `endedAt: null`.
 
-v0.2
-- persistence
+## Storage
 
-v0.3
-- stats dashboard
+`Storage` is an interface implemented by two adapters:
 
-v0.4
-- productivity insights
+| Adapter | Used when |
+|---------|-----------|
+| `tauriStorage` | Running in Tauri (SQLite) |
+| `inMemoryStorage` | Tests and browser fallback |
+
+`main.tsx` detects `window.__TAURI_INTERNALS__` to pick the right adapter.
+The web demo (M46) was cancelled — `demoStorage.ts` has been removed.
+
+## i18n Types
+
+```ts
+// CORRECT — allows translated string values
+const pt: { [K in keyof typeof en]: string } = { ... }
+const translations: Record<Lang, { [K in keyof typeof en]: string }>
+
+// WRONG — typeof en with as const requires identical literal values
+const pt: typeof en = { ... }
+```
+
+## Security Rules
+
+These are live rules, not suggestions:
+
+- **No shell string interpolation** — use `spawnSync` with arg arrays and `shell: false`
+- **No raw API errors to users** — catch and return generic messages by HTTP status code
+- **Prompt inputs must be JSON-serialized** — `JSON.stringify(userInput)` before interpolating into Claude prompts
+- **Webhook URLs validated** — only HTTPS, no localhost, no private IPs (`isSafeWebhookUrl()`)
+- **File paths validated** — reject `..` and non-absolute paths before any `fs` operation
+- **Backup JSON validated** — runtime type-check every field before calling `importSessions`
+- **CSP enforced** — `tauri.conf.json` has a restrictive CSP; do not set `"csp": null`
 
 ## AI Behaviour Rules
 
@@ -155,6 +171,28 @@ Each milestone should result in one commit.
 
 Commit format:
 
+```
 feat: add timer domain model
 test: add timer start/stop tests
 refactor: simplify timer logic
+fix: correct streak calculation on week boundary
+docs: update README with CLI instructions
+```
+
+Never use `--no-verify`.
+
+## Current Status (as of 2026-03-17)
+
+**Version: v2.0 — Parts 9, 8 (domain), and 10 (domain) complete. 334 tests passing.**
+
+This session covered:
+- **Part 9 (C1)**: Removed web demo artifacts (demoStorage.ts, vite.web.config.ts, build:web)
+- **Part 9 (QA1)**: Security fixes — SVG XSS escape, path traversal hardening, promise .catch() handlers, NLPTimeEntry double-submit race condition, memory leak in idle detection interval
+- **Part 9 (QA2)**: Tests for WeeklyStatCard, NLPTimeEntry, DigestView, ProductivityWrapped
+- **Part 9 (QA3)**: App.tsx refactored to ~150-line orchestrator; TrackerView.tsx extracted
+- **Part 8 domain**: passiveCapture, contextSwitching, deepWorkScore, focusRecommendations + full test suites
+- **Part 8 Rust**: get_active_window() and get_git_log() commands added to lib.rs
+- **Part 10**: llm.ts (Ollama + Claude abstraction), adaptiveCycles, focusDebt, distractionRecovery + full test suites
+- **UI**: FocusDebtBanner, RecommendationsView, TrackerView, AI backend status in Settings
+
+The project is in a stable, releasable state. TypeScript strict — zero errors.

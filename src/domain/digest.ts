@@ -86,6 +86,67 @@ ${peakStr}
 Be specific, mention the strongest category and one actionable suggestion.`
 }
 
+// ─── callClaudeForParsing ─────────────────────────────────────────────────────
+
+export type ParsedTimeEntry = {
+  categoryId: string
+  date: string          // YYYY-MM-DD
+  startHour: number     // 0-23
+  durationMs: number
+  tag?: string
+}
+
+export async function callClaudeForParsing(
+  text: string,
+  categories: { id: string; name: string }[],
+  apiKey: string,
+  todayDate: string
+): Promise<ParsedTimeEntry | null> {
+  // Serialize category data as JSON to prevent prompt injection via category names.
+  const catJson = JSON.stringify(categories.map(c => ({ id: c.id, name: c.name })))
+  const prompt = `You parse natural language time entries into JSON. Today is ${todayDate}.
+Available categories (JSON array): ${catJson}
+
+Parse this entry and respond ONLY with valid JSON:
+{"categoryId":"<id>","date":"YYYY-MM-DD","startHour":9,"durationMs":7200000,"tag":"deep work"}
+
+Rules:
+- Pick the best matching categoryId from the categories array above
+- "this morning" = 9h, "this afternoon" = 14h, "tonight" = 20h, "yesterday" = yesterday's date
+- durationMs in milliseconds
+- tag is optional: deep work, meeting, admin, learning, review
+- If the input cannot be parsed, respond with the single word: null
+
+Input to parse: ${JSON.stringify(text)}`
+
+  const response = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: {
+      'x-api-key': apiKey,
+      'anthropic-version': '2023-06-01',
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify({
+      model: 'claude-haiku-4-5-20251001',
+      max_tokens: 128,
+      messages: [{ role: 'user', content: prompt }],
+    }),
+  })
+
+  if (!response.ok) {
+    if (response.status === 401) throw new Error('Invalid API key. Check your settings.')
+    if (response.status === 429) throw new Error('Rate limited. Please wait before trying again.')
+    throw new Error('Unable to parse entry. Please try again.')
+  }
+  const data = await response.json() as { content: { text: string }[] }
+  const raw = data.content[0]?.text?.trim() ?? 'null'
+  try {
+    return JSON.parse(raw) as ParsedTimeEntry | null
+  } catch {
+    return null
+  }
+}
+
 // ─── callDigestAPI ────────────────────────────────────────────────────────────
 
 export async function callDigestAPI(prompt: string, apiKey: string): Promise<string> {
@@ -104,8 +165,9 @@ export async function callDigestAPI(prompt: string, apiKey: string): Promise<str
   })
 
   if (!response.ok) {
-    const err = await response.text()
-    throw new Error(`API error ${response.status}: ${err}`)
+    if (response.status === 401) throw new Error('Invalid API key. Check your settings.')
+    if (response.status === 429) throw new Error('Rate limited. Please wait before trying again.')
+    throw new Error('Unable to generate digest. Please try again.')
   }
 
   const data = await response.json() as { content: { text: string }[] }

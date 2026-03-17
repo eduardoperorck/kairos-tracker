@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from 'react'
 import { exportSessionsToJSON } from '../domain/history'
 import { FOCUS_PRESETS, type FocusPreset } from '../domain/focusGuard'
+import { getLLMStatus } from '../domain/llm'
 import { useI18n } from '../i18n'
 import type { Category, Session } from '../domain/timer'
 import type { Storage } from '../persistence/storage'
@@ -27,6 +28,32 @@ function downloadBlob(content: string, filename: string, mimeType: string) {
   URL.revokeObjectURL(url)
 }
 
+// ─── AIBackendStatus ──────────────────────────────────────────────────────────
+
+function AIBackendStatus({ apiKey }: { apiKey: string }) {
+  const { t } = useI18n()
+  const [status, setStatus] = useState<{ backend: string; model?: string; available: boolean } | null>(null)
+
+  useEffect(() => {
+    getLLMStatus(apiKey.startsWith('••') ? null : apiKey || null).then(setStatus)
+  }, [apiKey])
+
+  if (!status) return null
+
+  const label = status.backend === 'ollama' ? t('settings.aiBackendOllama')
+    : status.backend === 'claude' ? t('settings.aiBackendClaude')
+    : t('settings.aiBackendNone')
+
+  const color = status.available ? 'text-emerald-400' : 'text-zinc-600'
+  const dot = status.available ? '●' : '○'
+
+  return (
+    <p className={`text-xs ${color}`}>
+      {dot} {label}{status.model ? ` — ${status.model}` : ''}
+    </p>
+  )
+}
+
 // ─── SyncSection ──────────────────────────────────────────────────────────────
 
 function SyncSection({ storage, sessions, categories }: { storage: Storage; sessions: Session[]; categories: Category[] }) {
@@ -46,6 +73,11 @@ function SyncSection({ storage, sessions, categories }: { storage: Storage; sess
   async function handleManualSync() {
     const path = await storage.getSetting('sync_path')
     if (!path) { setSyncStatus('No sync path configured.'); return }
+    // Block path traversal: reject paths containing '..' segments
+    if (path.includes('..') || path.includes('\\\\') || (!path.startsWith('/') && !/^[A-Za-z]:[/\\]/.test(path))) {
+      setSyncStatus('Invalid sync path.')
+      return
+    }
     const json = exportSessionsToJSON(sessions, categories)
     try {
       const { writeTextFile } = await import(/* @vite-ignore */ '@tauri-apps/plugin-fs')
@@ -89,11 +121,17 @@ export function SettingsView({ categories, sessions, storage, webhookUrl, onWebh
   const [webhookDraft, setWebhookDraft] = useState(webhookUrl)
   const [apiKeyDraft, setApiKeyDraft] = useState('')
   const [apiKeySaved, setApiKeySaved] = useState(false)
+  const [githubUsername, setGithubUsername] = useState('')
+  const [githubSaved, setGithubSaved] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
-    storage.getSetting('anthropic_api_key').then(k => {
+    Promise.all([
+      storage.getSetting('anthropic_api_key'),
+      storage.getSetting('github_username'),
+    ]).then(([k, gh]) => {
       if (k) setApiKeyDraft('••••••••' + k.slice(-4))
+      if (gh) setGithubUsername(gh)
     })
   }, [])
 
@@ -108,17 +146,23 @@ export function SettingsView({ categories, sessions, storage, webhookUrl, onWebh
     if (!file) return
     try {
       const raw = await file.text()
-      const data = JSON.parse(raw) as Array<{
-        id: string; categoryId: string; startedAt: number; endedAt: number; date: string; tag?: string
-      }>
-      const sessions: Session[] = data.map(d => ({
-        id: d.id,
-        categoryId: d.categoryId,
-        startedAt: d.startedAt,
-        endedAt: d.endedAt,
-        date: d.date,
-        tag: d.tag,
-      }))
+      const data = JSON.parse(raw)
+      if (!Array.isArray(data)) throw new Error('Invalid format')
+      const sessions: Session[] = data.map((d: unknown) => {
+        if (typeof d !== 'object' || d === null) throw new Error('Invalid session')
+        const s = d as Record<string, unknown>
+        if (typeof s.id !== 'string' || typeof s.categoryId !== 'string' ||
+            typeof s.startedAt !== 'number' || typeof s.endedAt !== 'number' ||
+            typeof s.date !== 'string') throw new Error('Invalid session fields')
+        return {
+          id: s.id,
+          categoryId: s.categoryId,
+          startedAt: s.startedAt,
+          endedAt: s.endedAt,
+          date: s.date,
+          tag: typeof s.tag === 'string' ? s.tag : undefined,
+        }
+      })
       await storage.importSessions(sessions)
       setRestoreStatus(`Restored ${sessions.length} sessions.`)
     } catch {
@@ -247,6 +291,35 @@ export function SettingsView({ categories, sessions, storage, webhookUrl, onWebh
             className="rounded-md border border-white/[0.07] bg-white/[0.03] px-3 py-2 text-xs text-zinc-400 hover:text-zinc-100 transition-all"
           >
             {apiKeySaved ? t('settings.saved') : t('settings.save')}
+          </button>
+        </div>
+      </section>
+
+      {/* AI Backend status */}
+      <section>
+        <h3 className="mb-3 text-xs font-medium text-zinc-500 uppercase tracking-wider">{t('settings.aiBackend')}</h3>
+        <p className="mb-2 text-xs text-zinc-600">{t('settings.ollamaDesc')}</p>
+        <AIBackendStatus apiKey={apiKeyDraft} />
+      </section>
+
+      {/* GitHub Correlation */}
+      <section>
+        <h3 className="mb-3 text-xs font-medium text-zinc-500 uppercase tracking-wider">{t('github.correlation')}</h3>
+        <p className="mb-2 text-xs text-zinc-600">Show your GitHub commit activity overlaid on the heatmap.</p>
+        <div className="flex gap-2">
+          <input
+            type="text"
+            placeholder="GitHub username"
+            className="flex-1 rounded-lg border border-white/[0.07] bg-white/[0.03] px-3 py-2 text-xs text-zinc-100 placeholder-zinc-600 outline-none focus:border-white/[0.15] transition-all"
+            value={githubUsername}
+            onChange={e => setGithubUsername(e.target.value)}
+            onKeyDown={e => e.key === 'Enter' && storage.setSetting('github_username', githubUsername).then(() => setGithubSaved(true))}
+          />
+          <button
+            onClick={() => storage.setSetting('github_username', githubUsername).then(() => setGithubSaved(true))}
+            className="rounded-md border border-white/[0.07] bg-white/3 px-3 py-2 text-xs text-zinc-400 hover:text-zinc-100 transition-all"
+          >
+            {githubSaved ? t('settings.saved') : t('settings.save')}
           </button>
         </div>
       </section>

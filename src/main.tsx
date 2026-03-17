@@ -3,7 +3,6 @@ import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import { App } from './components/App'
 import { I18nProvider } from './i18n'
-import { createInMemoryStorage } from './persistence/inMemoryStorage'
 import type { Storage } from './persistence/storage'
 
 async function resolveStorage(): Promise<Storage> {
@@ -11,6 +10,8 @@ async function resolveStorage(): Promise<Storage> {
     const { createTauriStorage } = await import('./persistence/tauriStorage')
     return createTauriStorage()
   }
+  // Browser fallback: in-memory storage (data not persisted across reloads)
+  const { createInMemoryStorage } = await import('./persistence/inMemoryStorage')
   return createInMemoryStorage()
 }
 

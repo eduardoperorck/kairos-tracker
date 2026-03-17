@@ -2,7 +2,7 @@ import { useState, useMemo, useEffect, useCallback } from 'react'
 import { useI18n } from '../i18n'
 import { useTimerState } from '../store/useTimerStoreHook'
 import { useTimerStore } from '../store/useTimerStore'
-import { CategoryItem } from './CategoryItem'
+import { TrackerView } from './TrackerView'
 import { StatsView } from './StatsView'
 import { HistoryView } from './HistoryView'
 import { FocusGuard } from './FocusGuard'
@@ -16,8 +16,13 @@ import { useIdleDetection } from '../hooks/useIdleDetection'
 import { useWebhooks } from '../hooks/useWebhooks'
 import { useNotifications } from '../hooks/useNotifications'
 import { computeStats } from '../domain/stats'
+import { exportDayAsMarkdown } from '../domain/history'
 import { toDateString, getWeekDates, computeWeekMs, computeStreak } from '../domain/timer'
-import { getLastSessionDate, suggestWeeklyGoal } from '../domain/history'
+import { computeEnergyPattern, isFlowSession } from '../domain/history'
+import { CommandPalette } from './CommandPalette'
+import { OnboardingWizard } from './OnboardingWizard'
+import { ProductivityWrapped } from './ProductivityWrapped'
+import type { CategoryInsights } from './CategoryItem'
 import { shouldTriggerBreak, FOCUS_PRESETS, type FocusPreset } from '../domain/focusGuard'
 import { createIntention, createEveningReview } from '../domain/intentions'
 import { formatElapsed } from '../domain/format'
@@ -36,9 +41,16 @@ export function App({ storage }: Props) {
   const [input, setInput] = useState('')
   const [view, setView] = useState<'tracker' | 'stats' | 'history' | 'today' | 'settings'>('tracker')
   const [focusLockActive, setFocusLockActive] = useState(false)
+  const [paletteOpen, setPaletteOpen] = useState(false)
+  const [onboardingDone, setOnboardingDone] = useState(
+    () => localStorage.getItem('onboarding_complete') === 'true'
+  )
   const [intentions, setIntentions] = useState<Intention[]>([])
   const [eveningReview, setEveningReview] = useState<EveningReview | null>(null)
   const [webhookUrl, setWebhookUrl] = useState<string | null>(null)
+  const [claudeApiKey, setClaudeApiKey] = useState<string | null>(null)
+  const [githubUsername, setGithubUsername] = useState<string | null>(null)
+  const [wrappedOpen, setWrappedOpen] = useState(false)
 
   // ── FocusGuard state ────────────────────────────────────────────────────────
   const [focusPreset, setFocusPreset] = useState<FocusPreset>(FOCUS_PRESETS[0])
@@ -46,6 +58,7 @@ export function App({ storage }: Props) {
   const [breakActive, setBreakActive] = useState(false)
   const [postponedUntil, setPostponedUntil] = useState<number | null>(null)
   const [postponeUsed, setPostponeUsed] = useState(false)
+  const [breakSkipCount, setBreakSkipCount] = useState(0)
 
   // ── Hooks ───────────────────────────────────────────────────────────────────
   useInitStore(storage)
@@ -58,13 +71,19 @@ export function App({ storage }: Props) {
       storage.getSetting('webhook_url'),
       storage.getSetting('focus_preset'),
       storage.getSetting('focus_strict_mode'),
-    ]).then(([url, preset, strict]) => {
+      storage.getSetting('anthropic_api_key'),
+      storage.getSetting('github_username'),
+    ]).then(([url, preset, strict, apiKey, ghUser]) => {
       setWebhookUrl(url)
+      setClaudeApiKey(apiKey)
+      setGithubUsername(ghUser)
       if (preset) {
         const found = FOCUS_PRESETS.find(p => p.name === preset)
         if (found) setFocusPreset(found)
       }
       if (strict === 'true') setFocusStrictMode(true)
+    }).catch(err => {
+      console.error('[App] Failed to load settings:', err)
     })
   }, [])
 
@@ -77,6 +96,8 @@ export function App({ storage }: Props) {
     ]).then(([ints, rev]) => {
       setIntentions(ints)
       setEveningReview(rev)
+    }).catch(err => {
+      console.error('[App] Failed to load daily data:', err)
     })
   }, [today])
 
@@ -87,6 +108,15 @@ export function App({ storage }: Props) {
       computeStreak(historySessions.filter(s => s.categoryId === c.id).map(s => s.date), today),
     ])
   ), [categories, historySessions, today])
+
+  const categoryInsights = useMemo((): Record<string, CategoryInsights> =>
+    Object.fromEntries(categories.map(c => {
+      const catSessions = historySessions.filter(s => s.categoryId === c.id)
+      const { peakHours } = computeEnergyPattern(catSessions, 30)
+      const flowCount = sessions.filter(s => s.categoryId === c.id && isFlowSession(s)).length
+      return [c.id, { streak: streaks[c.id] ?? 0, flowCount, peakHour: peakHours[0] ?? null }]
+    })),
+  [categories, historySessions, sessions, streaks])
 
   // ── Active category ─────────────────────────────────────────────────────────
   const activeCategory = categories.find(c => c.activeEntry !== null)
@@ -107,7 +137,7 @@ export function App({ storage }: Props) {
       if (elapsedH >= 2) notifications.notifyLongSession(activeCategory.name, Math.round(elapsedH))
     }, 30 * 60_000) // check every 30 min
     return () => clearInterval(id)
-  }, [activeStartedAt, activeCategory?.name])
+  }, [activeStartedAt, activeCategory?.id])
 
   // ── Daily reminder if no sessions tracked by 20h ────────────────────────────
   useEffect(() => {
@@ -119,6 +149,15 @@ export function App({ storage }: Props) {
     }, 60_000) // check every minute
     return () => clearInterval(id)
   }, [categories])
+
+  // ── Command palette keyboard shortcut ───────────────────────────────────────
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (e.key === 'k' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); setPaletteOpen(p => !p) }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [])
 
   // ── Tray + global shortcut + idle detection ─────────────────────────────────
   const elapsedStr = activeStartedAt ? formatElapsed(Date.now() - activeStartedAt) : 'No active timer'
@@ -153,6 +192,19 @@ export function App({ storage }: Props) {
     && shouldTriggerBreak(activeStartedAt, now, focusPreset.workMs)
 
   // ── Handlers ────────────────────────────────────────────────────────────────
+  async function handleOnboardingComplete({ categories: names, preset: presetName }: { categories: string[]; preset: string }) {
+    for (const name of names) {
+      addCategory(name)
+      const { categories: next } = useTimerStore.getState()
+      const created = next[next.length - 1]
+      await storage.saveCategory(created.id, created.name)
+    }
+    const found = FOCUS_PRESETS.find(p => p.name === presetName)
+    if (found) { setFocusPreset(found); await storage.setSetting('focus_preset', presetName) }
+    localStorage.setItem('onboarding_complete', 'true')
+    setOnboardingDone(true)
+  }
+
   async function handleAdd() {
     const name = input.trim()
     if (!name) return
@@ -250,10 +302,30 @@ export function App({ storage }: Props) {
   // ── Render ──────────────────────────────────────────────────────────────────
   return (
     <div className="min-h-screen bg-[#0f0f0f] text-zinc-100">
+      {!onboardingDone && categories.length === 0 && (
+        <OnboardingWizard onComplete={handleOnboardingComplete} />
+      )}
+
+      {wrappedOpen && (
+        <ProductivityWrapped sessions={historySessions} categories={categories} onClose={() => setWrappedOpen(false)} />
+      )}
+
+      {paletteOpen && (
+        <CommandPalette
+          categories={categories}
+          activeId={activeCategory?.id ?? null}
+          onStart={id => { handleStart(id); setPaletteOpen(false) }}
+          onStop={() => { activeCategory && handleStop(activeCategory.id); setPaletteOpen(false) }}
+          onNavigate={v => { setView(v); setPaletteOpen(false) }}
+          onClose={() => setPaletteOpen(false)}
+        />
+      )}
+
       {focusLockActive && activeCategory && activeStartedAt && (
         <FocusLock
           categoryName={activeCategory.name}
           startedAt={activeStartedAt}
+          cycleMs={focusPreset.workMs}
           onExit={() => setFocusLockActive(false)}
         />
       )}
@@ -267,9 +339,12 @@ export function App({ storage }: Props) {
           strictMode={focusStrictMode}
           onBreakComplete={() => setBreakActive(true)}
           onPostpone={handlePostpone}
-          onBreakSkipped={() => activeCategory && activeStartedAt
-            ? webhooks.onBreakSkipped(activeCategory.name, Date.now() - activeStartedAt)
-            : undefined}
+          onBreakSkipped={() => {
+            setBreakSkipCount(c => c + 1)
+            if (activeCategory && activeStartedAt) {
+              webhooks.onBreakSkipped(activeCategory.name, Date.now() - activeStartedAt)
+            }
+          }}
         />
       )}
 
@@ -299,62 +374,42 @@ export function App({ storage }: Props) {
       <main className="mx-auto max-w-xl lg:max-w-3xl xl:max-w-5xl px-6 py-8">
 
         {view === 'tracker' ? (
-          <>
-            {/* Add category */}
-            <div className="mb-6 flex gap-2">
-              <input
-                className="flex-1 rounded-lg border border-white/[0.07] bg-white/3 px-4 py-2.5 text-sm text-zinc-100 placeholder-zinc-600 outline-none focus:border-white/15 focus:bg-white/5 transition-all"
-                placeholder={t('tracker.placeholder')}
-                value={input}
-                onChange={e => setInput(e.target.value)}
-                onKeyDown={e => e.key === 'Enter' && handleAdd()}
-              />
-              <button
-                className="rounded-lg border border-white/[0.07] bg-white/3 px-4 py-2.5 text-sm text-zinc-400 hover:text-zinc-100 hover:border-white/15 transition-all"
-                onClick={handleAdd}
-              >
-                {t('tracker.add')}
-              </button>
-            </div>
-
-            {/* Category list — 2 columns on large screens */}
-            <ul className="space-y-2 lg:grid lg:grid-cols-2 lg:gap-4 lg:space-y-0">
-              {categories.map(category => (
-                <CategoryItem
-                  key={category.id}
-                  category={category}
-                  weeklyMs={computeWeekMs(sessions, category.id, weekDates)}
-                  lastTracked={getLastSessionDate(historySessions, category.id)}
-                  suggestedMs={suggestWeeklyGoal(historySessions, category.id)}
-                  onStart={() => handleStart(category.id)}
-                  onStop={(tag) => handleStop(category.id, tag)}
-                  onDelete={() => handleDelete(category.id)}
-                  onRename={newName => handleRename(category.id, newName)}
-                  onSetGoal={ms => handleSetGoal(category.id, ms)}
-                  onSetColor={color => handleSetColor(category.id, color)}
-                  onSetTag={tag => handleSetTag(category.id, tag)}
-                  activeTag={category.pendingTag}
-                />
-              ))}
-            </ul>
-
-            {activeCategory && (
-              <div className="mt-4 flex justify-center">
-                <button
-                  onClick={() => setFocusLockActive(true)}
-                  className="text-xs text-zinc-700 hover:text-zinc-400 transition-colors"
-                >
-                  {t('tracker.focusLock')}
-                </button>
-              </div>
-            )}
-
-            {categories.length === 0 && (
-              <p className="mt-16 text-center text-sm text-zinc-700">
-                {t('tracker.empty')}
-              </p>
-            )}
-          </>
+          <TrackerView
+            input={input}
+            setInput={setInput}
+            categories={categories}
+            sessions={sessions}
+            historySessions={historySessions}
+            weekDates={weekDates}
+            categoryInsights={categoryInsights}
+            activeCategory={activeCategory}
+            claudeApiKey={claudeApiKey}
+            breakSkipCount={breakSkipCount}
+            onAdd={handleAdd}
+            onStart={handleStart}
+            onStop={handleStop}
+            onDelete={handleDelete}
+            onRename={handleRename}
+            onSetGoal={handleSetGoal}
+            onSetColor={handleSetColor}
+            onSetTag={handleSetTag}
+            onFocusLock={() => setFocusLockActive(true)}
+            onNLPConfirm={async (entry) => {
+              const startedAt = new Date(entry.date + 'T' + String(entry.startHour).padStart(2, '0') + ':00:00').getTime()
+              const session = {
+                id: `nlp-${Date.now()}`,
+                categoryId: entry.categoryId,
+                date: entry.date,
+                startedAt,
+                endedAt: startedAt + entry.durationMs,
+                tag: entry.tag,
+              }
+              await storage.saveSession(session)
+              const allSessions = await storage.loadSessionsSince(toDateString(Date.now() - 90 * 86_400_000))
+              useTimerStore.setState({ historySessions: allSessions })
+            }}
+            storage={storage}
+          />
         ) : view === 'stats' ? (
           <StatsView
             stats={computeStats(categories)}
@@ -368,6 +423,8 @@ export function App({ storage }: Props) {
             categories={categories}
             storage={storage}
             onBack={() => setView('tracker')}
+            onWrapped={() => setWrappedOpen(true)}
+            githubUsername={githubUsername}
           />
         ) : view === 'history' ? (
           <HistoryView
@@ -385,6 +442,22 @@ export function App({ storage }: Props) {
             review={eveningReview}
             onAddIntention={handleAddIntention}
             onSaveReview={handleSaveReview}
+            onExportMarkdown={(doneSet) => {
+              const daySessions = historySessions.filter(s => s.date === today)
+              const md = exportDayAsMarkdown(
+                today,
+                daySessions,
+                categories,
+                intentions.map((i, idx) => ({ text: i.text, done: doneSet.has(idx) })),
+                eveningReview
+              )
+              navigator.clipboard.writeText(md).catch(() => {
+                const a = document.createElement('a')
+                a.href = URL.createObjectURL(new Blob([md], { type: 'text/markdown' }))
+                a.download = `${today}.md`
+                a.click()
+              })
+            }}
           />
         ) : (
           <SettingsView

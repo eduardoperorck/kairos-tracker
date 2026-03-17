@@ -39,6 +39,9 @@ export function useInitStore(storage: Storage) {
         historySessions: allSessions,
         ...(categories ? { categories } : {}),
       })
+    }).catch(err => {
+      console.error('[useInitStore] Storage init failed:', err)
+      useTimerStore.setState({ initError: true })
     })
   }, [])
 }

@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { StatsView } from './StatsView'
+import { I18nProvider } from '../i18n'
 
 const stats = [
   { id: '1', name: 'Work', totalMs: 3_600_000, percentage: 75 },
@@ -14,7 +15,7 @@ const weeklyData = [
 ]
 
 function renderStats() {
-  return render(<StatsView stats={stats} weeklyData={weeklyData} streaks={{}} onBack={() => {}} />)
+  return render(<I18nProvider><StatsView stats={stats} weeklyData={weeklyData} streaks={{}} onBack={() => {}} /></I18nProvider>)
 }
 
 describe('StatsView', () => {
@@ -43,13 +44,13 @@ describe('StatsView', () => {
 
   it('calls onBack when back button is clicked', async () => {
     let called = false
-    render(<StatsView stats={stats} weeklyData={weeklyData} streaks={{}} onBack={() => { called = true }} />)
+    render(<I18nProvider><StatsView stats={stats} weeklyData={weeklyData} streaks={{}} onBack={() => { called = true }} /></I18nProvider>)
     await userEvent.click(screen.getByRole('button', { name: /back/i }))
     expect(called).toBe(true)
   })
 
   it('shows empty state when no stats', () => {
-    render(<StatsView stats={[]} weeklyData={[]} streaks={{}} onBack={() => {}} />)
+    render(<I18nProvider><StatsView stats={[]} weeklyData={[]} streaks={{}} onBack={() => {}} /></I18nProvider>)
     expect(screen.getByText(/no data/i)).toBeInTheDocument()
   })
 

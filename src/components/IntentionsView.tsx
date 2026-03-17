@@ -7,9 +7,10 @@ type Props = {
   review: EveningReview | null
   onAddIntention: (text: string) => void
   onSaveReview: (mood: 1 | 2 | 3 | 4 | 5, notes: string) => void
+  onExportMarkdown?: (doneSet: Set<number>) => void
 }
 
-export function IntentionsView({ intentions, review, onAddIntention, onSaveReview }: Props) {
+export function IntentionsView({ intentions, review, onAddIntention, onSaveReview, onExportMarkdown }: Props) {
   const { t } = useI18n()
   const [newText, setNewText] = useState('')
   const [done, setDone] = useState<Set<number>>(new Set())
@@ -121,6 +122,15 @@ export function IntentionsView({ intentions, review, onAddIntention, onSaveRevie
 
         {review && (
           <p className="mt-2 text-xs text-zinc-600">{t('intentions.lastSaved')} {review.mood}/5</p>
+        )}
+
+        {onExportMarkdown && (
+          <button
+            onClick={() => onExportMarkdown(done)}
+            className="mt-3 text-xs text-zinc-600 hover:text-zinc-400 transition-colors"
+          >
+            {t('export.markdown')}
+          </button>
         )}
       </section>
     </div>

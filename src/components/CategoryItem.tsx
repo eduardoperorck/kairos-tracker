@@ -10,10 +10,17 @@ export const CATEGORY_COLORS = ['#6366f1', '#8b5cf6', '#ec4899', '#f59e0b', '#10
 
 const PRESET_TAGS = ['deep work', 'meeting', 'admin', 'learning', 'blocked', 'review']
 
+export type CategoryInsights = {
+  streak: number
+  flowCount: number
+  peakHour: number | null
+}
+
 type Props = {
   category: Category & { accumulatedMs: number; pendingTag?: string }
   weeklyMs: number
   lastTracked?: number | null
+  insights?: CategoryInsights
   onStart: () => void
   onStop: (tag?: string) => void
   onDelete: () => void
@@ -25,7 +32,7 @@ type Props = {
   suggestedMs?: number
 }
 
-export function CategoryItem({ category, weeklyMs, lastTracked, onStart, onStop, onDelete, onRename, onSetGoal, onSetColor, suggestedMs }: Props) {
+export function CategoryItem({ category, weeklyMs, lastTracked, insights, onStart, onStop, onDelete, onRename, onSetGoal, onSetColor, suggestedMs }: Props) {
   const { t } = useI18n()
   const [confirming, setConfirming] = useState(false)
   const [showColorPicker, setShowColorPicker] = useState(false)
@@ -77,6 +84,13 @@ export function CategoryItem({ category, weeklyMs, lastTracked, onStart, onStop,
           <CategoryName name={category.name} onRename={onRename} />
           {lastTrackedText && (
             <p className="mt-0.5 text-xs text-zinc-700">{lastTrackedText}</p>
+          )}
+          {insights && (insights.streak > 0 || insights.flowCount > 0 || insights.peakHour !== null) && (
+            <p className="mt-0.5 text-xs text-zinc-600 flex gap-2">
+              {insights.streak > 0 && <span>{insights.streak}{t('stats.streak')}</span>}
+              {insights.peakHour !== null && <span>{t('category.peak')} {insights.peakHour}h</span>}
+              {insights.flowCount > 0 && <span>⚡ {insights.flowCount} {t('stats.flow')}</span>}
+            </p>
           )}
         </div>
 
