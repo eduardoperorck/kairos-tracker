@@ -10,7 +10,7 @@ function renderWithI18n(ui: React.ReactElement) {
 
 function makeSession(hour: number, durationMs = 3_600_000): Session {
   const date = new Date(2026, 2, 10) // March 10
-  date.setUTCHours(hour, 0, 0, 0)
+  date.setHours(hour, 0, 0, 0)
   const startedAt = date.getTime()
   return {
     id: `s-${hour}-${Math.random()}`,

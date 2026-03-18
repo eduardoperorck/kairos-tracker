@@ -35,7 +35,7 @@ export function computeHourDistribution(sessions: Session[]): HourSlot[] {
   const hourMap = new Map<number, number>()
 
   for (const s of sessions) {
-    const hour = new Date(s.startedAt).getUTCHours()
+    const hour = new Date(s.startedAt).getHours()
     const duration = s.endedAt - s.startedAt
     hourMap.set(hour, (hourMap.get(hour) ?? 0) + duration)
   }
@@ -155,7 +155,7 @@ export function computeEnergyPattern(sessions: Session[], _days: number): {
   const hourDays = new Map<number, Set<string>>()
 
   for (const s of sessions) {
-    const hour = new Date(s.startedAt).getUTCHours()
+    const hour = new Date(s.startedAt).getHours()
     const dur = s.endedAt - s.startedAt
     hourMs.set(hour, (hourMs.get(hour) ?? 0) + dur)
     if (!hourDays.has(hour)) hourDays.set(hour, new Set())

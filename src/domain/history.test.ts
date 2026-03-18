@@ -95,8 +95,8 @@ describe('computeHourDistribution', () => {
 
   it('assigns session duration to its start hour', () => {
     const s = makeSession({
-      startedAt: new Date('2026-03-10T10:00:00Z').getTime(),
-      endedAt: new Date('2026-03-10T11:00:00Z').getTime(),
+      startedAt: new Date('2026-03-10T10:00:00').getTime(),
+      endedAt: new Date('2026-03-10T11:00:00').getTime(),
     })
     const result = computeHourDistribution([s])
     const slot = result.find(h => h.hour === 10)
@@ -105,8 +105,8 @@ describe('computeHourDistribution', () => {
   })
 
   it('aggregates multiple sessions in the same hour', () => {
-    const s1 = makeSession({ id: 's-1', startedAt: new Date('2026-03-10T10:00:00Z').getTime(), endedAt: new Date('2026-03-10T10:30:00Z').getTime() })
-    const s2 = makeSession({ id: 's-2', startedAt: new Date('2026-03-10T10:30:00Z').getTime(), endedAt: new Date('2026-03-10T11:00:00Z').getTime() })
+    const s1 = makeSession({ id: 's-1', startedAt: new Date('2026-03-10T10:00:00').getTime(), endedAt: new Date('2026-03-10T10:30:00').getTime() })
+    const s2 = makeSession({ id: 's-2', startedAt: new Date('2026-03-10T10:30:00').getTime(), endedAt: new Date('2026-03-10T11:00:00').getTime() })
     const result = computeHourDistribution([s1, s2])
     const slot = result.find(h => h.hour === 10)
     expect(slot!.totalMs).toBe(3_600_000)
@@ -114,8 +114,8 @@ describe('computeHourDistribution', () => {
 
   it('only returns hours with data', () => {
     const s = makeSession({
-      startedAt: new Date('2026-03-10T14:00:00Z').getTime(),
-      endedAt: new Date('2026-03-10T15:00:00Z').getTime(),
+      startedAt: new Date('2026-03-10T14:00:00').getTime(),
+      endedAt: new Date('2026-03-10T15:00:00').getTime(),
     })
     const result = computeHourDistribution([s])
     expect(result.every(h => h.totalMs > 0)).toBe(true)
@@ -211,8 +211,8 @@ describe('computeEnergyPattern', () => {
 
   it('computes average ms per hour', () => {
     const s = makeSession({
-      startedAt: new Date('2026-03-10T09:00:00Z').getTime(),
-      endedAt: new Date('2026-03-10T10:00:00Z').getTime(),
+      startedAt: new Date('2026-03-10T09:00:00').getTime(),
+      endedAt: new Date('2026-03-10T10:00:00').getTime(),
     })
     const result = computeEnergyPattern([s], 30)
     const slot = result.slots.find(s => s.hour === 9)
@@ -222,8 +222,8 @@ describe('computeEnergyPattern', () => {
 
   it('identifies peak hours', () => {
     const sessions = [
-      makeSession({ id: 's-1', startedAt: new Date('2026-03-10T09:00:00Z').getTime(), endedAt: new Date('2026-03-10T11:00:00Z').getTime() }),
-      makeSession({ id: 's-2', startedAt: new Date('2026-03-10T14:00:00Z').getTime(), endedAt: new Date('2026-03-10T14:30:00Z').getTime() }),
+      makeSession({ id: 's-1', startedAt: new Date('2026-03-10T09:00:00').getTime(), endedAt: new Date('2026-03-10T11:00:00').getTime() }),
+      makeSession({ id: 's-2', startedAt: new Date('2026-03-10T14:00:00').getTime(), endedAt: new Date('2026-03-10T14:30:00').getTime() }),
     ]
     const result = computeEnergyPattern(sessions, 30)
     expect(result.peakHours.length).toBeGreaterThan(0)
