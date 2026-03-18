@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
-import { aggregateBlocks, DEFAULT_DEV_RULES } from '../domain/passiveCapture'
+import { aggregateBlocks, needsClassification, DEFAULT_DEV_RULES } from '../domain/passiveCapture'
 import type { CaptureBlock, RawPollEvent, WindowRule } from '../domain/passiveCapture'
 
 const POLL_INTERVAL_MS = 5_000
@@ -36,37 +36,36 @@ export type PassiveCaptureResult = {
 export function usePassiveCapture(): PassiveCaptureResult {
   const [blocks, setBlocks] = useState<CaptureBlock[]>([])
   const [userRules, setUserRules] = useState<WindowRule[]>(() => loadUserRules())
-  const [dismissed, setDismissed] = useState<Set<string>>(() => new Set())
+  // Queue of processes seen but not yet classified, in order of first appearance
+  const [pendingQueue, setPendingQueue] = useState<string[]>([])
   const eventsRef = useRef<RawPollEvent[]>([])
 
   const allRules = [...DEFAULT_DEV_RULES, ...userRules]
 
   useEffect(() => {
     const interval = setInterval(async () => {
-      const window = await fetchActiveWindow()
-      if (!window) return
+      const win = await fetchActiveWindow()
+      if (!win) return
 
       const event: RawPollEvent = {
-        window: { ...window, timestamp: Date.now() },
+        window: { ...win, timestamp: Date.now() },
         timestamp: Date.now(),
       }
 
       eventsRef.current = [...eventsRef.current.slice(-MAX_EVENTS), event]
       setBlocks(aggregateBlocks(eventsRef.current, allRules))
+
+      const proc = win.process
+      if (needsClassification(proc, allRules)) {
+        setPendingQueue(prev => prev.includes(proc) ? prev : [...prev, proc])
+      }
     }, POLL_INTERVAL_MS)
 
     return () => clearInterval(interval)
   }, [userRules])
 
-  // Most recent unclassified process (not dismissed, not in any rule)
-  const unclassifiedProcess = (() => {
-    if (eventsRef.current.length === 0) return null
-    const last = eventsRef.current[eventsRef.current.length - 1]
-    const proc = last.window.process
-    if (dismissed.has(proc)) return null
-    const hasRule = allRules.some(r => r.matchType === 'process' && r.pattern.toLowerCase() === proc.toLowerCase())
-    return hasRule ? null : proc
-  })()
+  // First in queue is the one shown to the user
+  const unclassifiedProcess = pendingQueue[0] ?? null
 
   const assignProcess = useCallback((process: string, categoryId: string) => {
     const rule: WindowRule = {
@@ -82,10 +81,10 @@ export function usePassiveCapture(): PassiveCaptureResult {
       saveUserRules(next)
       return next
     })
+    setPendingQueue(prev => prev.filter(p => p !== process))
   }, [])
 
   const dismissProcess = useCallback((process: string) => {
-    // Add as 'ignore' rule so it never prompts again
     const rule: WindowRule = {
       id: `ignore-${Date.now()}`,
       matchType: 'process',
@@ -99,7 +98,7 @@ export function usePassiveCapture(): PassiveCaptureResult {
       saveUserRules(next)
       return next
     })
-    setDismissed(prev => new Set([...prev, process]))
+    setPendingQueue(prev => prev.filter(p => p !== process))
   }, [])
 
   return { blocks, unclassifiedProcess, assignProcess, dismissProcess }

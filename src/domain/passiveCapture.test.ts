@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { matchRule, aggregateBlocks, pendingSuggestions, type WindowRule, type RawPollEvent } from './passiveCapture'
+import { matchRule, aggregateBlocks, pendingSuggestions, needsClassification, type WindowRule, type RawPollEvent } from './passiveCapture'
 
 const RULES: WindowRule[] = [
   { id: '1', matchType: 'process', pattern: 'Code.exe', categoryId: 'work', mode: 'suggest', enabled: true },
@@ -58,6 +58,44 @@ describe('aggregateBlocks', () => {
     ]
     const blocks = aggregateBlocks(events, RULES)
     expect(blocks.length).toBe(2)
+  })
+})
+
+describe('needsClassification', () => {
+  const baseRules: WindowRule[] = [
+    { id: 'vscode', matchType: 'process', pattern: 'Code.exe', categoryId: null, mode: 'suggest', enabled: true },
+    { id: 'spotify', matchType: 'process', pattern: 'Spotify.exe', categoryId: null, mode: 'ignore', enabled: true },
+    { id: 'work', matchType: 'process', pattern: 'slack.exe', categoryId: 'cat-1', mode: 'auto', enabled: true },
+  ]
+
+  it('returns true for unknown process with no rules', () => {
+    expect(needsClassification('unknown.exe', baseRules)).toBe(true)
+  })
+
+  it('returns true for process with suggest rule and no categoryId (DEFAULT_DEV_RULES pattern)', () => {
+    // Code.exe has a suggest rule but categoryId is null → user never assigned it
+    expect(needsClassification('Code.exe', baseRules)).toBe(true)
+  })
+
+  it('returns false for process with ignore rule', () => {
+    expect(needsClassification('Spotify.exe', baseRules)).toBe(false)
+  })
+
+  it('returns false for process already assigned to a category', () => {
+    expect(needsClassification('slack.exe', baseRules)).toBe(false)
+  })
+
+  it('is case-insensitive', () => {
+    expect(needsClassification('code.exe', baseRules)).toBe(true)
+    expect(needsClassification('SPOTIFY.EXE', baseRules)).toBe(false)
+  })
+
+  it('returns false for disabled rule (process is unrecognized → should prompt)', () => {
+    const rules: WindowRule[] = [
+      { id: 'x', matchType: 'process', pattern: 'app.exe', categoryId: null, mode: 'ignore', enabled: false },
+    ]
+    // Disabled rule doesn't count → still needs classification
+    expect(needsClassification('app.exe', rules)).toBe(true)
   })
 })
 
