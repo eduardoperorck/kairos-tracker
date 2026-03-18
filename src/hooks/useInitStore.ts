@@ -13,7 +13,7 @@ export function useInitStore(storage: Storage) {
   useEffect(() => {
     const today = toDateString(Date.now())
     const weekDates = getWeekDates(today)
-    const historyStart = daysAgo(60, today)
+    const historyStart = daysAgo(7, today)
 
     Promise.all([
       storage.loadCategories(),

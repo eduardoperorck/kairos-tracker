@@ -116,8 +116,8 @@ describe('useInitStore', () => {
   it('sessions outside the current week go to historySessions but not sessions', async () => {
     const storage = createInMemoryStorage()
     await storage.saveCategory('id-1', 'Work')
-    // Use a date 14 days ago — within 60-day history window but outside current week
-    const twoWeeksAgo = toDateString(Date.now() - 14 * 86_400_000)
+    // Use a date 5 days ago — within 7-day history window but outside current week
+    const twoWeeksAgo = toDateString(Date.now() - 5 * 86_400_000)
     await storage.saveSession({ id: 's-old', categoryId: 'id-1', startedAt: 0, endedAt: 1000, date: twoWeeksAgo })
 
     renderHook(() => useInitStore(storage))

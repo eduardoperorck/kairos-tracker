@@ -22,7 +22,17 @@
         "command": "timeTracker.status",
         "title": "Time Tracker: Show Status"
       }
-    ]
+    ],
+    "configuration": {
+      "title": "Time Tracker",
+      "properties": {
+        "timeTracker.cliTimeoutMs": {
+          "type": "number",
+          "default": 2000,
+          "description": "Timeout in milliseconds for CLI commands (increase on slow machines)."
+        }
+      }
+    }
   },
   "scripts": {
     "build": "esbuild src/extension.ts --bundle --outfile=dist/extension.js --external:vscode --format=cjs --platform=node",

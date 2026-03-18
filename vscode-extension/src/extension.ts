@@ -6,9 +6,11 @@ let pollInterval: NodeJS.Timeout | undefined
 
 // Run CLI with a fixed argument array — never via a shell string to prevent injection.
 function runCli(args: string[]): string {
+  const config = vscode.workspace.getConfiguration('timeTracker')
+  const timeoutMs: number = config.get('cliTimeoutMs') ?? 2000
   const result = spawnSync('npx', ['@productivity-challenge/cli', ...args], {
     encoding: 'utf8',
-    timeout: 2000,
+    timeout: timeoutMs,
     shell: false,
   })
   return (result.stdout ?? '').trim()

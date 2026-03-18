@@ -25,5 +25,11 @@ export default defineConfig({
     setupFiles: ['./src/tests/setup.ts'],
     globals: true,
     alias: tauriPluginAliases,
+    coverage: {
+      thresholds: {
+        lines: 80,
+        branches: 75,
+      },
+    },
   },
 } as any)

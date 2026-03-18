@@ -181,19 +181,21 @@ docs: update README with CLI instructions
 
 Never use `--no-verify`.
 
-## Current Status (as of 2026-03-17)
+## Current Status (as of 2026-03-18)
 
-**Version: 0.1.0 (unreleased) — 62 milestones complete. 422 tests. 80.37% line coverage.**
+**Version: 1.0.0-alpha — 62 milestones complete. 80%+ line coverage.**
 
-This session covered:
-- **Part 9 (C1)**: Removed web demo artifacts (demoStorage.ts, vite.web.config.ts, build:web)
-- **Part 9 (QA1)**: Security fixes — SVG XSS escape, path traversal hardening, promise .catch() handlers, NLPTimeEntry double-submit race condition, memory leak in idle detection interval
-- **Part 9 (QA2)**: Tests for WeeklyStatCard, NLPTimeEntry, DigestView, ProductivityWrapped
-- **Part 9 (QA3)**: App.tsx refactored to ~150-line orchestrator; TrackerView.tsx extracted
-- **Part 8 domain**: passiveCapture, contextSwitching, deepWorkScore, focusRecommendations + full test suites
-- **Part 8 Rust**: get_active_window() and get_git_log() commands added to lib.rs
-- **Part 10**: llm.ts (Ollama + Claude abstraction), adaptiveCycles, focusDebt, distractionRecovery + full test suites
-- **UI**: FocusDebtBanner, RecommendationsView, TrackerView, AI backend status in Settings
-- **Coverage session**: SettingsView.test, FocusLock.test, HistoryView.test + extended storage/llm/domain tests → 67% → 80%+
-
-The project is feature-complete and stable, pending first public release (v1.0.0). TypeScript strict — zero errors. 422 tests, 0 skipped hooks.
+Recent changes (deep-QA pass):
+- PowerShell injection fixed (env var for screenshot path)
+- API key encrypted via Windows Credential Manager (`save_secret`/`load_secret`)
+- `accumulated_ms` removed from read path — always computed from sessions
+- Schema migrations via `PRAGMA user_version` runner in `tauriStorage.ts`
+- `llm.ts` moved from `domain/` to `services/`
+- `SettingKey` typed enum replaces raw setting key strings
+- `Storage` interface split into `CategoryStorage | SessionStorage | SettingsStorage | IntentionStorage`
+- Icon extraction cached in `AppState` (Rust Mutex<HashMap>)
+- `since_date` validated by `get_git_log` (YYYY-MM-DD regex)
+- Boot load reduced from 60 to 7 days
+- InputIntelligenceWidget hidden when `windowMs === 0` (stub guard)
+- VS Code extension CLI timeout configurable via `timeTracker.cliTimeoutMs`
+- CLI adds `active_entries` table guard on write operations

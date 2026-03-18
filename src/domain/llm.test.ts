@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { detectLLMBackend, getLLMStatus, callLLM } from './llm'
+import { detectLLMBackend, getLLMStatus, callLLM } from '../services/llm'
 
 describe('detectLLMBackend', () => {
   beforeEach(() => {

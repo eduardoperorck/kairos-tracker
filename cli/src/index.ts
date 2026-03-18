@@ -164,6 +164,14 @@ if (os.platform() !== 'win32') {
 
 const db = new Database(dbPath, { readonly: command === 'status' || command === 'today' })
 
+// Ensure active_entries table exists (created by Tauri app migration v2, but guard here too)
+if (command !== 'status' && command !== 'today') {
+  db.prepare(`CREATE TABLE IF NOT EXISTS active_entries (
+    category_id TEXT NOT NULL,
+    started_at  INTEGER NOT NULL
+  )`).run()
+}
+
 switch (command) {
   case 'status':
     cmd_status(db)
