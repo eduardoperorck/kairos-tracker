@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(for f:*)",
+      "Bash(do echo:*)",
+      "Read(//c/Users/Pichau/OneDrive/Documentos/Productivity Challenge/src/components/**)",
+      "Bash(done)",
+      "Bash(npx tsc:*)"
+    ]
+  }
+}
