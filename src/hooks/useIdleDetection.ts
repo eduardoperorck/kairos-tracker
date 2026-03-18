@@ -1,5 +1,9 @@
 import { useEffect, useRef, useCallback } from 'react'
 
+function isTauriAvailable(): boolean {
+  return typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window
+}
+
 async function getIdleSeconds(): Promise<number> {
   try {
     const { invoke } = await import('@tauri-apps/api/core')
@@ -12,7 +16,8 @@ async function getIdleSeconds(): Promise<number> {
 function useBrowserIdleDetection(
   thresholdMinutes: number,
   onIdle: () => void,
-  onReturn: (idleMs: number) => void
+  onReturn: (idleMs: number) => void,
+  disabled: boolean
 ) {
   const lastActivityRef = useRef(Date.now())
   const isIdleRef = useRef(false)
@@ -27,6 +32,8 @@ function useBrowserIdleDetection(
   }, [onReturn])
 
   useEffect(() => {
+    if (disabled) return
+
     const events = ['mousemove', 'keypress', 'click', 'touchstart']
     events.forEach(e => window.addEventListener(e, resetActivity, { passive: true }))
 
@@ -42,7 +49,7 @@ function useBrowserIdleDetection(
       events.forEach(e => window.removeEventListener(e, resetActivity))
       clearInterval(interval)
     }
-  }, [thresholdMinutes, onIdle, resetActivity])
+  }, [thresholdMinutes, onIdle, resetActivity, disabled])
 }
 
 export function useIdleDetection(
@@ -52,8 +59,9 @@ export function useIdleDetection(
 ) {
   const isIdleRef = useRef(false)
   const idleStartRef = useRef<number | null>(null)
+  const tauriAvailable = isTauriAvailable()
 
-  useBrowserIdleDetection(thresholdMinutes, onIdle, onReturn)
+  useBrowserIdleDetection(thresholdMinutes, onIdle, onReturn, tauriAvailable)
 
   useEffect(() => {
     const interval = setInterval(async () => {
