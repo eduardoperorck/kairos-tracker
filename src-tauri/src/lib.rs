@@ -1,4 +1,11 @@
 use tauri::Manager;
+use std::collections::HashMap;
+use std::sync::Mutex;
+
+/// Tauri application state — icon cache to avoid repeated GDI/SHGetFileInfo calls.
+pub struct AppState {
+    icon_cache: Mutex<HashMap<String, Option<String>>>,
+}
 
 #[derive(serde::Serialize, Clone)]
 pub struct ActiveWindow {
@@ -165,7 +172,7 @@ unsafe fn extract_icon_base64(path_wide: &[u16]) -> Option<String> {
 }
 
 #[tauri::command]
-fn get_active_window() -> Option<ActiveWindow> {
+fn get_active_window(state: tauri::State<AppState>) -> Option<ActiveWindow> {
     #[cfg(target_os = "windows")]
     {
         use winapi::um::winuser::{GetForegroundWindow, GetWindowTextW, GetWindowThreadProcessId};
@@ -200,13 +207,25 @@ fn get_active_window() -> Option<ActiveWindow> {
             let process = String::from_utf16_lossy(path_wide)
                 .split('\\').last().unwrap_or("unknown").to_string();
             let display_name = get_display_name(path_wide);
-            let icon_base64  = extract_icon_base64(path_wide);
+
+            // Cache icon by process name to avoid repeated GDI extraction
+            let icon_base64 = {
+                let mut cache = state.icon_cache.lock().unwrap();
+                if let Some(cached) = cache.get(&process) {
+                    cached.clone()
+                } else {
+                    let icon = extract_icon_base64(path_wide);
+                    cache.insert(process.clone(), icon.clone());
+                    icon
+                }
+            };
 
             Some(ActiveWindow { title, process, display_name, icon_base64 })
         }
     }
     #[cfg(not(target_os = "windows"))]
     {
+        let _ = state;
         None
     }
 }
@@ -222,6 +241,16 @@ pub struct GitCommit {
 fn get_git_log(repo_path: String, since_date: String) -> Vec<GitCommit> {
     // Validate path — reject traversal attempts
     if repo_path.contains("..") || repo_path.is_empty() {
+        return vec![];
+    }
+
+    // Validate date format: must be YYYY-MM-DD (prevents shell/git arg injection)
+    let date_valid = since_date.len() == 10
+        && since_date.chars().enumerate().all(|(i, c)| match i {
+            4 | 7 => c == '-',
+            _ => c.is_ascii_digit(),
+        });
+    if !date_valid {
         return vec![];
     }
 
@@ -304,20 +333,20 @@ fn capture_screenshot(output_path: String) -> Result<(), String> {
   }
   #[cfg(target_os = "windows")]
   {
-    let script = format!(
-      r#"Add-Type -AssemblyName System.Windows.Forms,System.Drawing;
+    // Path is passed via environment variable to avoid any PowerShell injection risk.
+    let script = r#"Add-Type -AssemblyName System.Windows.Forms,System.Drawing;
+$path=$env:SCREENSHOT_OUT_PATH;
 $s=[System.Windows.Forms.Screen]::PrimaryScreen.Bounds;
 $bmp=New-Object System.Drawing.Bitmap($s.Width,$s.Height);
 $g=[System.Drawing.Graphics]::FromImage($bmp);
 $g.CopyFromScreen($s.Location,[System.Drawing.Point]::Empty,$s.Size);
-$enc=[System.Drawing.Imaging.ImageCodecInfo]::GetImageEncoders()|Where-Object{{$_.MimeType -eq 'image/jpeg'}};
+$enc=[System.Drawing.Imaging.ImageCodecInfo]::GetImageEncoders()|Where-Object{$_.MimeType -eq 'image/jpeg'};
 $p=New-Object System.Drawing.Imaging.EncoderParameters(1);
 $p.Param[0]=New-Object System.Drawing.Imaging.EncoderParameter([System.Drawing.Imaging.Encoder]::Quality,[long]60);
-$bmp.Save('{}', $enc, $p);"#,
-      output_path.replace('\'', "''")
-    );
+$bmp.Save($path, $enc, $p);"#;
     let out = std::process::Command::new("powershell")
-      .args(["-NonInteractive", "-Command", &script])
+      .args(["-NonInteractive", "-Command", script])
+      .env("SCREENSHOT_OUT_PATH", &output_path)
       .output()
       .map_err(|e| e.to_string())?;
     if !out.status.success() {
@@ -396,9 +425,74 @@ fn delete_screenshots_before(app: tauri::AppHandle, before_date: String) -> Resu
   Ok(())
 }
 
+/// Store a secret in the Windows Credential Manager (user-scoped, encrypted by OS).
+/// Falls back to returning an error on non-Windows platforms.
+#[tauri::command]
+fn save_secret(service: String, value: String) -> Result<(), String> {
+    #[cfg(target_os = "windows")]
+    {
+        use winapi::um::wincred::{CredWriteW, CREDENTIALW, CRED_TYPE_GENERIC, CRED_PERSIST_LOCAL_MACHINE};
+        let target: Vec<u16> = service.encode_utf16().chain(std::iter::once(0)).collect();
+        let blob = value.as_bytes();
+        unsafe {
+            let mut cred: CREDENTIALW = std::mem::zeroed();
+            cred.Type             = CRED_TYPE_GENERIC;
+            cred.TargetName       = target.as_ptr() as *mut _;
+            cred.CredentialBlobSize = blob.len() as u32;
+            cred.CredentialBlob   = blob.as_ptr() as *mut u8;
+            cred.Persist          = CRED_PERSIST_LOCAL_MACHINE;
+            if CredWriteW(&mut cred, 0) == 0 {
+                return Err("CredWriteW failed".into());
+            }
+        }
+        Ok(())
+    }
+    #[cfg(not(target_os = "windows"))]
+    { let _ = (service, value); Err("Credential storage only supported on Windows".into()) }
+}
+
+/// Read a secret from the Windows Credential Manager.
+#[tauri::command]
+fn load_secret(service: String) -> Result<Option<String>, String> {
+    #[cfg(target_os = "windows")]
+    {
+        use winapi::um::wincred::{CredReadW, CredFree, PCREDENTIALW, CRED_TYPE_GENERIC};
+        let target: Vec<u16> = service.encode_utf16().chain(std::iter::once(0)).collect();
+        unsafe {
+            let mut pcred: PCREDENTIALW = std::ptr::null_mut();
+            let ok = CredReadW(target.as_ptr(), CRED_TYPE_GENERIC, 0, &mut pcred);
+            if ok == 0 || pcred.is_null() {
+                return Ok(None);
+            }
+            let cred = &*pcred;
+            let blob = std::slice::from_raw_parts(cred.CredentialBlob, cred.CredentialBlobSize as usize);
+            let value = String::from_utf8_lossy(blob).into_owned();
+            CredFree(pcred as *mut _);
+            Ok(Some(value))
+        }
+    }
+    #[cfg(not(target_os = "windows"))]
+    { let _ = service; Ok(None) }
+}
+
+/// Delete a secret from the Windows Credential Manager.
+#[tauri::command]
+fn delete_secret(service: String) -> Result<(), String> {
+    #[cfg(target_os = "windows")]
+    {
+        use winapi::um::wincred::{CredDeleteW, CRED_TYPE_GENERIC};
+        let target: Vec<u16> = service.encode_utf16().chain(std::iter::once(0)).collect();
+        unsafe { CredDeleteW(target.as_ptr(), CRED_TYPE_GENERIC, 0); }
+        Ok(())
+    }
+    #[cfg(not(target_os = "windows"))]
+    { let _ = service; Ok(()) }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
   tauri::Builder::default()
+    .manage(AppState { icon_cache: Mutex::new(HashMap::new()) })
     .plugin(tauri_plugin_sql::Builder::default().build())
     .plugin(tauri_plugin_notification::init())
     .setup(|app| {
@@ -421,6 +515,9 @@ pub fn run() {
       list_screenshots,
       delete_screenshots_before,
       get_input_activity,
+      save_secret,
+      load_secret,
+      delete_secret,
     ])
     .run(tauri::generate_context!())
     .expect("error while running tauri application");
