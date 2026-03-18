@@ -400,7 +400,7 @@ export function App({ storage }: Props) {
                   view === v ? 'text-zinc-100' : 'text-zinc-500 hover:text-zinc-300'
                 }`}
               >
-                {v === 'tracker' ? t('nav.timer') : v === 'stats' ? t('nav.stats') : v === 'history' ? t('nav.history') : v === 'today' ? t('nav.today') : '⚙'}
+                {v === 'tracker' ? t('nav.timer') : v === 'stats' ? t('nav.stats') : v === 'history' ? t('nav.history') : v === 'today' ? t('nav.today') : t('nav.settings')}
                 {view === v && (
                   <span className="absolute bottom-0 left-0 right-0 h-px bg-zinc-100" />
                 )}

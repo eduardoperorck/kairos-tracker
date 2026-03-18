@@ -102,13 +102,21 @@ export function TrackerView({
 
   const windowTitles = captureBlocks.map(b => b.title)
 
+  // Banner priority: deadtime > unclassified process > attention residue
+  // Only one contextual banner is shown at a time to reduce cognitive load
+  const showDeadTime = !!activeCategory && !deadTimeDismissed && idleMs >= 3 * 60_000
+  const showUnclassified = !showDeadTime && !!unclassifiedProcess && !!onAssignProcess && !!onDismissProcess
+  const showAttentionResidue = !showDeadTime && !showUnclassified
+
   return (
     <>
-      {/* N1 Attention Residue Banner */}
-      <AttentionResidueBanner switchedAt={switchedAt} fromCategory={switchedFromCategory} />
+      {/* Contextual banner — one at a time */}
+      {showAttentionResidue && (
+        <AttentionResidueBanner switchedAt={switchedAt} fromCategory={switchedFromCategory} />
+      )}
 
       {/* P1 Unclassified process prompt */}
-      {unclassifiedProcess && onAssignProcess && onDismissProcess && (
+      {showUnclassified && (
         <div className="mb-4 rounded-lg border border-sky-500/20 bg-sky-500/[0.06] px-4 py-3 text-sm">
           <p className="mb-2 text-sky-300">
             <span className="font-medium">📦 {unclassifiedProcess}</span>
@@ -118,14 +126,14 @@ export function TrackerView({
             {categories.map(c => (
               <button
                 key={c.id}
-                onClick={() => onAssignProcess(unclassifiedProcess, c.id)}
+                onClick={() => onAssignProcess!(unclassifiedProcess!, c.id)}
                 className="rounded border border-white/[0.08] bg-white/[0.04] px-3 py-1 text-xs text-zinc-300 hover:text-zinc-100 hover:border-white/20 transition-all"
               >
                 {c.name}
               </button>
             ))}
             <button
-              onClick={() => onDismissProcess(unclassifiedProcess)}
+              onClick={() => onDismissProcess!(unclassifiedProcess!)}
               className="rounded border border-white/[0.05] px-3 py-1 text-xs text-zinc-600 hover:text-zinc-400 transition-all"
             >
               ignore
@@ -145,12 +153,12 @@ export function TrackerView({
         </div>
       )}
 
-      {/* N5 Dead Time Recovery */}
-      {activeCategory && !deadTimeDismissed && (
+      {/* N5 Dead Time Recovery — highest priority banner */}
+      {showDeadTime && (
         <div className="mb-4">
           <DeadTimeRecoveryWidget
             idleMs={idleMs}
-            onSelectTask={task => { onSetTag(activeCategory.id, task.text); setDeadTimeDismissed(true) }}
+            onSelectTask={task => { onSetTag(activeCategory!.id, task.text); setDeadTimeDismissed(true) }}
             onDismiss={() => setDeadTimeDismissed(true)}
           />
         </div>
@@ -173,9 +181,10 @@ export function TrackerView({
         </button>
       </div>
 
-      <FocusDebtBanner sessions={historySessions} breakSkipCount={breakSkipCount} />
+      {/* Secondary banners — only when a timer is running */}
+      {activeCategory && <FocusDebtBanner sessions={historySessions} breakSkipCount={breakSkipCount} />}
 
-      <EnergyScoreBanner sessions={historySessions} />
+      {activeCategory && <EnergyScoreBanner sessions={historySessions} />}
 
       {claudeApiKey && categories.length > 0 && (
         <div className="mb-4">
@@ -218,7 +227,7 @@ export function TrackerView({
           )}
           <button
             onClick={onFocusLock}
-            className="text-xs text-zinc-700 hover:text-zinc-400 transition-colors"
+            className="text-xs text-zinc-500 hover:text-zinc-200 transition-colors border border-white/[0.06] rounded px-2 py-1"
           >
             {t('tracker.focusLock')}
           </button>

@@ -13,14 +13,16 @@ beforeEach(() => {
 afterEach(() => {
   vi.useRealTimers()
   vi.clearAllMocks()
-  delete (window as Record<string, unknown>)['__TAURI_INTERNALS__']
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  delete (window as any)['__TAURI_INTERNALS__']
 })
 
 function setTauriAvailable(value: boolean) {
   if (value) {
     Object.defineProperty(window, '__TAURI_INTERNALS__', { value: {}, configurable: true, writable: true })
   } else {
-    delete (window as Record<string, unknown>)['__TAURI_INTERNALS__']
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    delete (window as any)['__TAURI_INTERNALS__']
   }
 }
 
