@@ -8,7 +8,7 @@
     "typecheck": "tsc --noEmit",
     "build": "tsc --noEmit && vite build",
     "dev": "vite",
-    "tauri": "npx tauri"
+    "tauri": "npx @tauri-apps/cli"
   },
   "keywords": [],
   "author": "",
