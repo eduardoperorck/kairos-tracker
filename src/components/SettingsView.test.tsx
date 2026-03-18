@@ -198,6 +198,50 @@ describe('SettingsView — webhooks', () => {
   })
 })
 
+describe('SettingsView — process rules manager', () => {
+  const RULES_KEY = 'user_window_rules'
+  const cat = { id: 'cat-1', name: 'Work', activeEntry: null }
+
+  beforeEach(() => localStorage.clear())
+  afterEach(() => localStorage.clear())
+
+  it('shows empty state when no user rules exist', () => {
+    const storage = makeStorage()
+    renderWithI18n(<SettingsView {...makeDefaultProps(storage, { categories: [cat] })} />)
+    expect(screen.getByText(/no custom rules/i)).toBeTruthy()
+  })
+
+  it('lists saved process rules with their category', () => {
+    localStorage.setItem(RULES_KEY, JSON.stringify([
+      { id: 'u1', matchType: 'process', pattern: 'chrome.exe', categoryId: 'cat-1', mode: 'auto', enabled: true },
+    ]))
+    const storage = makeStorage()
+    renderWithI18n(<SettingsView {...makeDefaultProps(storage, { categories: [cat] })} />)
+    expect(screen.getByText('chrome.exe')).toBeTruthy()
+    expect(screen.getByText('Work')).toBeTruthy()
+  })
+
+  it('lists ignored process rules', () => {
+    localStorage.setItem(RULES_KEY, JSON.stringify([
+      { id: 'u2', matchType: 'process', pattern: 'game.exe', categoryId: null, mode: 'ignore', enabled: true },
+    ]))
+    const storage = makeStorage()
+    renderWithI18n(<SettingsView {...makeDefaultProps(storage, { categories: [cat] })} />)
+    expect(screen.getByText('game.exe')).toBeTruthy()
+    expect(screen.getByText(/ignore/i)).toBeTruthy()
+  })
+
+  it('removes rule from list when delete is clicked', () => {
+    localStorage.setItem(RULES_KEY, JSON.stringify([
+      { id: 'u3', matchType: 'process', pattern: 'notepad.exe', categoryId: 'cat-1', mode: 'auto', enabled: true },
+    ]))
+    const storage = makeStorage()
+    renderWithI18n(<SettingsView {...makeDefaultProps(storage, { categories: [cat] })} />)
+    fireEvent.click(screen.getByTitle('Delete rule for notepad.exe'))
+    expect(screen.queryByText('notepad.exe')).toBeNull()
+  })
+})
+
 describe('SettingsView — sync path validation', () => {
   it('shows invalid sync path error for path traversal attempt', async () => {
     const storage = makeStorage()

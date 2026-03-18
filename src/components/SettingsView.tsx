@@ -199,6 +199,65 @@ function ScreenshotSettingsSection({ storage, onEnabledChange }: { storage: Stor
   )
 }
 
+// ─── ProcessRulesSection ──────────────────────────────────────────────────────
+
+const USER_RULES_KEY = 'user_window_rules'
+
+type WindowRule = {
+  id: string
+  matchType: 'process' | 'title'
+  pattern: string
+  categoryId: string | null
+  mode: 'auto' | 'suggest' | 'ignore'
+  enabled: boolean
+}
+
+function loadUserRules(): WindowRule[] {
+  try { return JSON.parse(localStorage.getItem(USER_RULES_KEY) ?? '[]') } catch { return [] }
+}
+
+function ProcessRulesSection({ categories }: { categories: Category[] }) {
+  const [rules, setRules] = useState<WindowRule[]>(() => loadUserRules())
+
+  function handleDelete(id: string) {
+    const next = rules.filter(r => r.id !== id)
+    localStorage.setItem(USER_RULES_KEY, JSON.stringify(next))
+    setRules(next)
+  }
+
+  return (
+    <section>
+      <h3 className="mb-3 text-xs font-medium text-zinc-500 uppercase tracking-wider">Process Rules</h3>
+      {rules.length === 0 ? (
+        <p className="text-xs text-zinc-600">No custom rules — classify a process from the Tracker tab to add rules here.</p>
+      ) : (
+        <ul className="space-y-1">
+          {rules.map(rule => {
+            const catName = rule.categoryId
+              ? (categories.find(c => c.id === rule.categoryId)?.name ?? rule.categoryId)
+              : null
+            return (
+              <li key={rule.id} className="flex items-center justify-between rounded-lg border border-white/[0.06] bg-white/[0.02] px-3 py-2 text-xs">
+                <span className="font-mono text-zinc-300">{rule.pattern}</span>
+                <span className="text-zinc-500">
+                  {rule.mode === 'ignore' ? 'ignore' : catName ?? '—'}
+                </span>
+                <button
+                  title={`Delete rule for ${rule.pattern}`}
+                  onClick={() => handleDelete(rule.id)}
+                  className="ml-4 text-zinc-700 hover:text-red-400 transition-colors"
+                >
+                  ✕
+                </button>
+              </li>
+            )
+          })}
+        </ul>
+      )}
+    </section>
+  )
+}
+
 // ─── SettingsView ─────────────────────────────────────────────────────────────
 
 export function SettingsView({ categories, sessions, storage, webhookUrl, onWebhookUrlChange, focusPreset, onFocusPresetChange, focusStrictMode, onFocusStrictModeChange, onScreenshotsEnabledChange }: Props) {
@@ -409,6 +468,9 @@ export function SettingsView({ categories, sessions, storage, webhookUrl, onWebh
           </button>
         </div>
       </section>
+
+      {/* Process Rules */}
+      <ProcessRulesSection categories={categories} />
 
       {/* Screenshots */}
       <ScreenshotSettingsSection storage={storage} onEnabledChange={onScreenshotsEnabledChange} />
