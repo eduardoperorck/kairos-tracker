@@ -27,6 +27,7 @@ import { shouldTriggerBreak, FOCUS_PRESETS, type FocusPreset } from '../domain/f
 import { createIntention, createEveningReview } from '../domain/intentions'
 import { formatElapsed } from '../domain/format'
 import { useInputActivity } from '../hooks/useInputActivity'
+import { usePassiveCapture } from '../hooks/usePassiveCapture'
 import type { Intention, EveningReview } from '../domain/intentions'
 import type { Storage } from '../persistence/storage'
 import type { MVDItem } from '../domain/minimumViableDay'
@@ -52,10 +53,14 @@ export function App({ storage }: Props) {
   const [webhookUrl, setWebhookUrl] = useState<string | null>(null)
   const [claudeApiKey, setClaudeApiKey] = useState<string | null>(null)
   const [githubUsername, setGithubUsername] = useState<string | null>(null)
+  const [screenshotsEnabled, setScreenshotsEnabled] = useState(false)
   const [wrappedOpen, setWrappedOpen] = useState(false)
   const [mvdItems, setMvdItems] = useState<MVDItem[]>(() => {
     try { return JSON.parse(localStorage.getItem('mvd_items') ?? '[]') } catch { return [] }
   })
+  // P1: passive window capture
+  const { blocks: captureBlocks, unclassifiedProcess, assignProcess, dismissProcess } = usePassiveCapture()
+
   // N1: track last category switch
   const [lastSwitch, setLastSwitch] = useState<{ at: number; fromName: string } | null>(null)
   // N5: idle tracking
@@ -84,10 +89,12 @@ export function App({ storage }: Props) {
       storage.getSetting('focus_strict_mode'),
       storage.getSetting('anthropic_api_key'),
       storage.getSetting('github_username'),
-    ]).then(([url, preset, strict, apiKey, ghUser]) => {
+      storage.getSetting('screenshots_enabled'),
+    ]).then(([url, preset, strict, apiKey, ghUser, screenshots]) => {
       setWebhookUrl(url)
       setClaudeApiKey(apiKey)
       setGithubUsername(ghUser)
+      setScreenshotsEnabled(screenshots === 'true')
       if (preset) {
         const found = FOCUS_PRESETS.find(p => p.name === preset)
         if (found) setFocusPreset(found)
@@ -210,7 +217,7 @@ export function App({ storage }: Props) {
     if (active) handleStop(active.id)
   }, [])
 
-  useIdleDetection(3, handleIdle, useCallback(() => {}, []))
+  useIdleDetection(10, handleIdle, useCallback(() => {}, []))
 
   // ── FocusGuard trigger ──────────────────────────────────────────────────────
   const now = Date.now()
@@ -445,6 +452,9 @@ export function App({ storage }: Props) {
               useTimerStore.setState({ historySessions: allSessions })
             }}
             storage={storage}
+            unclassifiedProcess={unclassifiedProcess}
+            onAssignProcess={assignProcess}
+            onDismissProcess={dismissProcess}
           />
         ) : view === 'stats' ? (
           <StatsView
@@ -462,11 +472,14 @@ export function App({ storage }: Props) {
             onWrapped={() => setWrappedOpen(true)}
             githubUsername={githubUsername}
             nickname={githubUsername ?? 'Anonymous'}
+            captureBlocks={captureBlocks}
+            screenshotsEnabled={screenshotsEnabled}
           />
         ) : view === 'history' ? (
           <HistoryView
             sessions={historySessions}
             categories={categories}
+            captureBlocks={captureBlocks}
             onImportSessions={async (imported) => {
               await storage.importSessions(imported)
               const allSessions = await storage.loadSessionsSince(toDateString(Date.now() - 60 * 86_400_000))
@@ -477,6 +490,7 @@ export function App({ storage }: Props) {
           <IntentionsView
             intentions={intentions}
             review={eveningReview}
+            today={today}
             onAddIntention={handleAddIntention}
             onSaveReview={handleSaveReview}
             mvdItems={mvdItems}
@@ -509,6 +523,7 @@ export function App({ storage }: Props) {
             onFocusPresetChange={setFocusPreset}
             focusStrictMode={focusStrictMode}
             onFocusStrictModeChange={setFocusStrictMode}
+            onScreenshotsEnabledChange={setScreenshotsEnabled}
           />
         )}
 

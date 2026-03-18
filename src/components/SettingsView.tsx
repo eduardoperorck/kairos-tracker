@@ -16,6 +16,7 @@ type Props = {
   onFocusPresetChange: (preset: FocusPreset) => void
   focusStrictMode: boolean
   onFocusStrictModeChange: (strict: boolean) => void
+  onScreenshotsEnabledChange?: (enabled: boolean) => void
 }
 
 function downloadBlob(content: string, filename: string, mimeType: string) {
@@ -121,7 +122,7 @@ const RETENTION_OPTIONS = [
   { value: 'never', label: 'Never auto-delete' },
 ]
 
-function ScreenshotSettingsSection({ storage }: { storage: Storage }) {
+function ScreenshotSettingsSection({ storage, onEnabledChange }: { storage: Storage; onEnabledChange?: (enabled: boolean) => void }) {
   const { t } = useI18n()
   const [enabled, setEnabled] = useState(false)
   const [retention, setRetention] = useState('7')
@@ -140,6 +141,7 @@ function ScreenshotSettingsSection({ storage }: { storage: Storage }) {
     const next = !enabled
     setEnabled(next)
     await storage.setSetting('screenshots_enabled', next ? 'true' : 'false')
+    onEnabledChange?.(next)
   }
 
   async function handleRetentionChange(value: string) {
@@ -199,7 +201,7 @@ function ScreenshotSettingsSection({ storage }: { storage: Storage }) {
 
 // ─── SettingsView ─────────────────────────────────────────────────────────────
 
-export function SettingsView({ categories, sessions, storage, webhookUrl, onWebhookUrlChange, focusPreset, onFocusPresetChange, focusStrictMode, onFocusStrictModeChange }: Props) {
+export function SettingsView({ categories, sessions, storage, webhookUrl, onWebhookUrlChange, focusPreset, onFocusPresetChange, focusStrictMode, onFocusStrictModeChange, onScreenshotsEnabledChange }: Props) {
   const { t, lang, setLang } = useI18n()
   const [restoreStatus, setRestoreStatus] = useState<string | null>(null)
   const [webhookDraft, setWebhookDraft] = useState(webhookUrl)
@@ -409,7 +411,7 @@ export function SettingsView({ categories, sessions, storage, webhookUrl, onWebh
       </section>
 
       {/* Screenshots */}
-      <ScreenshotSettingsSection storage={storage} />
+      <ScreenshotSettingsSection storage={storage} onEnabledChange={onScreenshotsEnabledChange} />
 
       {/* OneDrive / Sync */}
       <SyncSection storage={storage} sessions={sessions} categories={categories} />
