@@ -120,6 +120,19 @@ export type UnclassifiedApp = {
   iconBase64?: string
 }
 
+/**
+ * Returns the categoryId to auto-start when the given window is active,
+ * or null if no auto rule matches. Only rules with mode:'auto' and a
+ * non-null categoryId trigger auto-start.
+ */
+export function getAutoStartCategory(
+  win: Pick<ActiveWindow, 'process' | 'title'>,
+  rules: WindowRule[]
+): string | null {
+  const rule = matchRule({ ...win, timestamp: 0 }, rules)
+  return (rule?.mode === 'auto' && rule.categoryId) ? rule.categoryId : null
+}
+
 export function pendingSuggestions(blocks: CaptureBlock[]): CaptureBlock[] {
   return blocks.filter(b => !b.confirmed && b.categoryId !== null)
 }

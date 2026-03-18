@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
-import { aggregateBlocks, needsClassification, DEFAULT_DEV_RULES } from '../domain/passiveCapture'
+import { aggregateBlocks, needsClassification, getAutoStartCategory, DEFAULT_DEV_RULES } from '../domain/passiveCapture'
 import type { CaptureBlock, RawPollEvent, WindowRule, UnclassifiedApp } from '../domain/passiveCapture'
 
 const POLL_INTERVAL_MS = 5_000
@@ -31,6 +31,7 @@ async function fetchActiveWindow(): Promise<TauriWindow | null> {
 export type PassiveCaptureResult = {
   blocks: CaptureBlock[]
   unclassifiedProcess: UnclassifiedApp | null
+  suggestedCategoryId: string | null   // non-null when active window matches an auto rule
   assignProcess: (process: string, categoryId: string) => void
   dismissProcess: (process: string) => void
 }
@@ -38,9 +39,10 @@ export type PassiveCaptureResult = {
 export function usePassiveCapture(): PassiveCaptureResult {
   const [blocks, setBlocks] = useState<CaptureBlock[]>([])
   const [userRules, setUserRules] = useState<WindowRule[]>(() => loadUserRules())
-  // Queue of apps seen but not yet classified, in order of first appearance
   const [pendingQueue, setPendingQueue] = useState<UnclassifiedApp[]>([])
+  const [suggestedCategoryId, setSuggestedCategoryId] = useState<string | null>(null)
   const eventsRef = useRef<RawPollEvent[]>([])
+  const lastProcessRef = useRef<string | null>(null)
 
   const allRules = [...DEFAULT_DEV_RULES, ...userRules]
 
@@ -58,6 +60,14 @@ export function usePassiveCapture(): PassiveCaptureResult {
       setBlocks(aggregateBlocks(eventsRef.current, allRules))
 
       const proc = win.process
+
+      // Auto-start: only recalculate when the active process changes
+      if (proc !== lastProcessRef.current) {
+        lastProcessRef.current = proc
+        const catId = getAutoStartCategory({ process: proc, title: win.title }, allRules)
+        setSuggestedCategoryId(catId)
+      }
+
       if (needsClassification(proc, allRules)) {
         const displayName = win.display_name || proc.replace(/\.exe$/i, '')
         const iconBase64  = win.icon_base64
@@ -107,5 +117,5 @@ export function usePassiveCapture(): PassiveCaptureResult {
     setPendingQueue(prev => prev.filter(a => a.process !== process))
   }, [])
 
-  return { blocks, unclassifiedProcess, assignProcess, dismissProcess }
+  return { blocks, unclassifiedProcess, suggestedCategoryId, assignProcess, dismissProcess }
 }

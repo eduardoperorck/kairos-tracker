@@ -59,7 +59,7 @@ export function App({ storage }: Props) {
     try { return JSON.parse(localStorage.getItem('mvd_items') ?? '[]') } catch { return [] }
   })
   // P1: passive window capture
-  const { blocks: captureBlocks, unclassifiedProcess, assignProcess, dismissProcess } = usePassiveCapture()
+  const { blocks: captureBlocks, unclassifiedProcess, suggestedCategoryId, assignProcess, dismissProcess } = usePassiveCapture()
 
   // N1: track last category switch
   const [lastSwitch, setLastSwitch] = useState<{ at: number; fromName: string } | null>(null)
@@ -218,6 +218,14 @@ export function App({ storage }: Props) {
   }, [])
 
   useIdleDetection(10, handleIdle, useCallback(() => {}, []))
+
+  // P1: auto-start timer when a classified app gains focus
+  useEffect(() => {
+    if (!suggestedCategoryId) return
+    const state = useTimerStore.getState()
+    const active = state.categories.find(c => c.activeEntry !== null)
+    if (active?.id !== suggestedCategoryId) handleStart(suggestedCategoryId)
+  }, [suggestedCategoryId])
 
   // ── FocusGuard trigger ──────────────────────────────────────────────────────
   const now = Date.now()

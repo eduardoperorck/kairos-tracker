@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { matchRule, aggregateBlocks, pendingSuggestions, needsClassification, type WindowRule, type RawPollEvent } from './passiveCapture'
+import { matchRule, aggregateBlocks, pendingSuggestions, needsClassification, getAutoStartCategory, type WindowRule, type RawPollEvent } from './passiveCapture'
 
 const RULES: WindowRule[] = [
   { id: '1', matchType: 'process', pattern: 'Code.exe', categoryId: 'work', mode: 'suggest', enabled: true },
@@ -96,6 +96,34 @@ describe('needsClassification', () => {
     ]
     // Disabled rule doesn't count → still needs classification
     expect(needsClassification('app.exe', rules)).toBe(true)
+  })
+})
+
+describe('getAutoStartCategory', () => {
+  const rules: WindowRule[] = [
+    { id: 'a', matchType: 'process', pattern: 'chrome.exe', categoryId: 'work', mode: 'auto', enabled: true },
+    { id: 'b', matchType: 'process', pattern: 'Code.exe',   categoryId: null,   mode: 'suggest', enabled: true },
+    { id: 'c', matchType: 'process', pattern: 'game.exe',   categoryId: null,   mode: 'ignore', enabled: true },
+  ]
+
+  it('returns categoryId for auto rule', () => {
+    expect(getAutoStartCategory({ process: 'chrome.exe', title: '' }, rules)).toBe('work')
+  })
+
+  it('returns null for suggest rule without categoryId', () => {
+    expect(getAutoStartCategory({ process: 'Code.exe', title: '' }, rules)).toBeNull()
+  })
+
+  it('returns null for ignore rule', () => {
+    expect(getAutoStartCategory({ process: 'game.exe', title: '' }, rules)).toBeNull()
+  })
+
+  it('returns null for unknown process', () => {
+    expect(getAutoStartCategory({ process: 'notepad.exe', title: '' }, rules)).toBeNull()
+  })
+
+  it('is case-insensitive', () => {
+    expect(getAutoStartCategory({ process: 'CHROME.EXE', title: '' }, rules)).toBe('work')
   })
 })
 
