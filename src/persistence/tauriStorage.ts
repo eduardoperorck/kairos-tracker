@@ -5,58 +5,71 @@ import type { Intention, EveningReview } from '../domain/intentions'
 
 const DB_PATH = 'sqlite:timetracker.db'
 
+// Each entry is applied once, in order, when user_version < its index+1.
+const MIGRATIONS: string[] = [
+  // v1 — initial schema (idempotent: CREATE IF NOT EXISTS)
+  `CREATE TABLE IF NOT EXISTS categories (
+    id             TEXT PRIMARY KEY,
+    name           TEXT NOT NULL,
+    accumulated_ms INTEGER NOT NULL DEFAULT 0,
+    weekly_goal_ms INTEGER,
+    color          TEXT
+  )`,
+  `CREATE TABLE IF NOT EXISTS sessions (
+    id          TEXT PRIMARY KEY,
+    category_id TEXT NOT NULL,
+    started_at  INTEGER NOT NULL,
+    ended_at    INTEGER NOT NULL,
+    date        TEXT NOT NULL,
+    tag         TEXT
+  )`,
+  `CREATE TABLE IF NOT EXISTS settings (
+    key   TEXT PRIMARY KEY,
+    value TEXT NOT NULL
+  )`,
+  `CREATE TABLE IF NOT EXISTS intentions (
+    date        TEXT NOT NULL,
+    text        TEXT NOT NULL,
+    created_at  INTEGER NOT NULL
+  )`,
+  `CREATE TABLE IF NOT EXISTS evening_reviews (
+    date        TEXT PRIMARY KEY,
+    mood        INTEGER NOT NULL,
+    notes       TEXT NOT NULL,
+    created_at  INTEGER NOT NULL
+  )`,
+  // v2 — active_entries: shared between CLI and app for in-progress timer state
+  `CREATE TABLE IF NOT EXISTS active_entries (
+    category_id TEXT NOT NULL,
+    started_at  INTEGER NOT NULL
+  )`,
+]
+
+async function runMigrations(db: InstanceType<typeof Database>): Promise<void> {
+  const versionRows = await db.select<{ user_version: number }[]>('PRAGMA user_version')
+  let version = versionRows[0]?.user_version ?? 0
+  for (let i = version; i < MIGRATIONS.length; i++) {
+    await db.execute(MIGRATIONS[i])
+    version = i + 1
+    await db.execute(`PRAGMA user_version = ${version}`)
+  }
+}
+
 export async function createTauriStorage(): Promise<Storage> {
   const db = await Database.load(DB_PATH)
-  await db.execute(`
-    CREATE TABLE IF NOT EXISTS categories (
-      id             TEXT PRIMARY KEY,
-      name           TEXT NOT NULL,
-      accumulated_ms INTEGER NOT NULL DEFAULT 0,
-      weekly_goal_ms INTEGER,
-      color          TEXT
-    )
-  `)
-  await db.execute(`
-    CREATE TABLE IF NOT EXISTS sessions (
-      id          TEXT PRIMARY KEY,
-      category_id TEXT NOT NULL,
-      started_at  INTEGER NOT NULL,
-      ended_at    INTEGER NOT NULL,
-      date        TEXT NOT NULL,
-      tag         TEXT
-    )
-  `)
-  await db.execute(`
-    CREATE TABLE IF NOT EXISTS settings (
-      key   TEXT PRIMARY KEY,
-      value TEXT NOT NULL
-    )
-  `)
-  await db.execute(`
-    CREATE TABLE IF NOT EXISTS intentions (
-      date        TEXT NOT NULL,
-      text        TEXT NOT NULL,
-      created_at  INTEGER NOT NULL
-    )
-  `)
-  await db.execute(`
-    CREATE TABLE IF NOT EXISTS evening_reviews (
-      date        TEXT PRIMARY KEY,
-      mood        INTEGER NOT NULL,
-      notes       TEXT NOT NULL,
-      created_at  INTEGER NOT NULL
-    )
-  `)
+  await runMigrations(db)
 
   return {
     async loadCategories(): Promise<PersistedCategory[]> {
-      const rows = await db.select<{ id: string; name: string; accumulated_ms: number; weekly_goal_ms: number | null; color: string | null }[]>(
-        'SELECT id, name, accumulated_ms, weekly_goal_ms, color FROM categories ORDER BY rowid'
+      // accumulated_ms is kept in the schema for backwards-compat but is always
+      // recomputed from sessions in useInitStore — never read or written here.
+      const rows = await db.select<{ id: string; name: string; weekly_goal_ms: number | null; color: string | null }[]>(
+        'SELECT id, name, weekly_goal_ms, color FROM categories ORDER BY rowid'
       )
       return rows.map(r => ({
         id: r.id,
         name: r.name,
-        accumulatedMs: r.accumulated_ms,
+        accumulatedMs: 0, // always overridden by computeTodayMs in useInitStore
         weeklyGoalMs: r.weekly_goal_ms ?? undefined,
         color: r.color ?? undefined,
       }))
