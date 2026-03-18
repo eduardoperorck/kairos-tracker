@@ -85,7 +85,8 @@ unsafe fn get_display_name(path_wide: &[u16]) -> String {
 #[cfg(target_os = "windows")]
 unsafe fn extract_icon_base64(path_wide: &[u16]) -> Option<String> {
     use winapi::um::shellapi::{SHGetFileInfoW, SHFILEINFOW, SHGFI_ICON, SHGFI_SMALLICON};
-    use winapi::um::winuser::{DrawIconEx, DestroyIcon, GetDC, ReleaseDC, FillRect, DI_NORMAL};
+    use winapi::um::winuser::{DrawIconEx, DestroyIcon, GetDC, ReleaseDC, FillRect};
+    const DI_NORMAL: u32 = 0x0003;
     use winapi::um::wingdi::{
         CreateCompatibleDC, CreateCompatibleBitmap, SelectObject,
         DeleteDC, DeleteObject, GetDIBits, BITMAPINFO, BITMAPINFOHEADER, BI_RGB,
