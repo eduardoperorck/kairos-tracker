@@ -30,6 +30,8 @@ import { useInputActivity } from '../hooks/useInputActivity'
 import { usePassiveCapture } from '../hooks/usePassiveCapture'
 import type { Intention, EveningReview } from '../domain/intentions'
 import type { Storage } from '../persistence/storage'
+import { SettingKey } from '../persistence/storage'
+import { loadCredential } from '../services/credentials'
 import type { MVDItem } from '../domain/minimumViableDay'
 
 const POSTPONE_MS = 5 * 60_000 // 5 minutes
@@ -84,12 +86,12 @@ export function App({ storage }: Props) {
   // ── Load settings on mount ──────────────────────────────────────────────────
   useEffect(() => {
     Promise.all([
-      storage.getSetting('webhook_url'),
-      storage.getSetting('focus_preset'),
-      storage.getSetting('focus_strict_mode'),
-      storage.getSetting('anthropic_api_key'),
-      storage.getSetting('github_username'),
-      storage.getSetting('screenshots_enabled'),
+      storage.getSetting(SettingKey.WebhookUrl),
+      storage.getSetting(SettingKey.FocusPreset),
+      storage.getSetting(SettingKey.FocusStrictMode),
+      loadCredential(SettingKey.AnthropicApiKey),
+      storage.getSetting(SettingKey.GithubUsername),
+      storage.getSetting(SettingKey.ScreenshotsEnabled),
     ]).then(([url, preset, strict, apiKey, ghUser, screenshots]) => {
       setWebhookUrl(url)
       setClaudeApiKey(apiKey)
@@ -244,7 +246,7 @@ export function App({ storage }: Props) {
       await storage.saveCategory(created.id, created.name)
     }
     const found = FOCUS_PRESETS.find(p => p.name === presetName)
-    if (found) { setFocusPreset(found); await storage.setSetting('focus_preset', presetName) }
+    if (found) { setFocusPreset(found); await storage.setSetting(SettingKey.FocusPreset, presetName) }
     localStorage.setItem('onboarding_complete', 'true')
     setOnboardingDone(true)
   }

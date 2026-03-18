@@ -4,32 +4,20 @@ import { I18nProvider } from '../i18n'
 import { DigestView } from './DigestView'
 import type { ReactNode } from 'react'
 
-function renderWithI18n(ui: ReactNode) {
-  return render(<I18nProvider>{ui}</I18nProvider>)
+vi.mock('../services/credentials', () => ({
+  loadCredential: vi.fn().mockResolvedValue(null),
+  saveCredential: vi.fn().mockResolvedValue(undefined),
+  deleteCredential: vi.fn().mockResolvedValue(undefined),
+}))
+
+import { loadCredential } from '../services/credentials'
+
+function mockApiKey(key: string | null) {
+  vi.mocked(loadCredential).mockResolvedValue(key)
 }
 
-function makeStorage(apiKey: string | null = null) {
-  return {
-    getSetting: vi.fn((key: string) => {
-      if (key === 'anthropic_api_key') return Promise.resolve(apiKey)
-      return Promise.resolve(null)
-    }),
-    setSetting: vi.fn().mockResolvedValue(undefined),
-    saveCategory: vi.fn(),
-    loadCategories: vi.fn().mockResolvedValue([]),
-    deleteCategory: vi.fn(),
-    renameCategory: vi.fn(),
-    setWeeklyGoal: vi.fn(),
-    setColor: vi.fn(),
-    saveSession: vi.fn(),
-    loadSessionsByDate: vi.fn().mockResolvedValue([]),
-    loadSessionsSince: vi.fn().mockResolvedValue([]),
-    importSessions: vi.fn(),
-    saveIntention: vi.fn(),
-    loadIntentionsByDate: vi.fn().mockResolvedValue([]),
-    saveEveningReview: vi.fn(),
-    loadEveningReviewByDate: vi.fn().mockResolvedValue(null),
-  }
+function renderWithI18n(ui: ReactNode) {
+  return render(<I18nProvider>{ui}</I18nProvider>)
 }
 
 const defaultProps = {
@@ -42,6 +30,7 @@ const defaultProps = {
 describe('DigestView', () => {
   beforeEach(() => {
     vi.stubGlobal('fetch', vi.fn())
+    mockApiKey(null)
   })
 
   afterEach(() => {
@@ -49,12 +38,12 @@ describe('DigestView', () => {
   })
 
   it('shows Generate button initially', () => {
-    renderWithI18n(<DigestView {...defaultProps} storage={makeStorage()} />)
+    renderWithI18n(<DigestView {...defaultProps} />)
     expect(screen.getByText('Generate')).toBeTruthy()
   })
 
   it('shows API key input when no key configured', async () => {
-    renderWithI18n(<DigestView {...defaultProps} storage={makeStorage(null)} />)
+    renderWithI18n(<DigestView {...defaultProps} />)
 
     fireEvent.click(screen.getByText('Generate'))
 
@@ -64,10 +53,11 @@ describe('DigestView', () => {
   })
 
   it('shows loading state when generating', async () => {
+    mockApiKey('sk-ant-test')
     // fetch never resolves
     vi.mocked(fetch).mockReturnValue(new Promise(() => {}))
 
-    renderWithI18n(<DigestView {...defaultProps} storage={makeStorage('sk-ant-test')} />)
+    renderWithI18n(<DigestView {...defaultProps} />)
 
     fireEvent.click(screen.getByText('Generate'))
 
@@ -77,6 +67,7 @@ describe('DigestView', () => {
   })
 
   it('respects 10s cooldown', async () => {
+    mockApiKey('sk-ant-test')
     const mockResponse = {
       content: [{ text: 'Your weekly summary here.' }]
     }
@@ -84,7 +75,7 @@ describe('DigestView', () => {
       new Response(JSON.stringify(mockResponse), { status: 200 })
     )
 
-    renderWithI18n(<DigestView {...defaultProps} storage={makeStorage('sk-ant-test')} />)
+    renderWithI18n(<DigestView {...defaultProps} />)
 
     fireEvent.click(screen.getByText('Generate'))
 
@@ -101,11 +92,12 @@ describe('DigestView', () => {
   })
 
   it('shows generic error message on failure', async () => {
+    mockApiKey('sk-ant-test')
     vi.mocked(fetch).mockResolvedValueOnce(
       new Response('Internal Server Error', { status: 500 })
     )
 
-    renderWithI18n(<DigestView {...defaultProps} storage={makeStorage('sk-ant-test')} />)
+    renderWithI18n(<DigestView {...defaultProps} />)
 
     fireEvent.click(screen.getByText('Generate'))
 

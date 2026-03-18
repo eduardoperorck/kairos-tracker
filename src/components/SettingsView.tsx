@@ -1,10 +1,12 @@
 import { useState, useRef, useEffect } from 'react'
 import { exportSessionsToJSON } from '../domain/history'
 import { FOCUS_PRESETS, type FocusPreset } from '../domain/focusGuard'
-import { getLLMStatus } from '../domain/llm'
+import { getLLMStatus } from '../services/llm'
 import { useI18n } from '../i18n'
 import type { Category, Session } from '../domain/timer'
 import type { Storage } from '../persistence/storage'
+import { SettingKey } from '../persistence/storage'
+import { saveCredential, loadCredential } from '../services/credentials'
 
 type Props = {
   categories: Category[]
@@ -63,16 +65,16 @@ function SyncSection({ storage, sessions, categories }: { storage: Storage; sess
   const [syncStatus, setSyncStatus] = useState<string | null>(null)
 
   useEffect(() => {
-    storage.getSetting('sync_path').then(p => setSyncPath(p ?? ''))
+    storage.getSetting(SettingKey.SyncPath).then(p => setSyncPath(p ?? ''))
   }, [])
 
   async function handleSaveSyncPath() {
-    await storage.setSetting('sync_path', syncPath)
+    await storage.setSetting(SettingKey.SyncPath, syncPath)
     setSyncStatus('Sync path saved.')
   }
 
   async function handleManualSync() {
-    const path = await storage.getSetting('sync_path')
+    const path = await storage.getSetting(SettingKey.SyncPath)
     if (!path) { setSyncStatus('No sync path configured.'); return }
     // Block path traversal: reject paths containing '..' segments
     if (path.includes('..') || path.includes('\\\\') || (!path.startsWith('/') && !/^[A-Za-z]:[/\\]/.test(path))) {
@@ -129,8 +131,8 @@ function ScreenshotSettingsSection({ storage, onEnabledChange }: { storage: Stor
 
   useEffect(() => {
     Promise.all([
-      storage.getSetting('screenshots_enabled'),
-      storage.getSetting('screenshots_retention'),
+      storage.getSetting(SettingKey.ScreenshotsEnabled),
+      storage.getSetting(SettingKey.ScreenshotsRetention),
     ]).then(([e, r]) => {
       if (e) setEnabled(e === 'true')
       if (r) setRetention(r)
@@ -140,13 +142,13 @@ function ScreenshotSettingsSection({ storage, onEnabledChange }: { storage: Stor
   async function toggle() {
     const next = !enabled
     setEnabled(next)
-    await storage.setSetting('screenshots_enabled', next ? 'true' : 'false')
+    await storage.setSetting(SettingKey.ScreenshotsEnabled, next ? 'true' : 'false')
     onEnabledChange?.(next)
   }
 
   async function handleRetentionChange(value: string) {
     setRetention(value)
-    await storage.setSetting('screenshots_retention', value)
+    await storage.setSetting(SettingKey.ScreenshotsRetention, value)
   }
 
   return (
@@ -272,8 +274,8 @@ export function SettingsView({ categories, sessions, storage, webhookUrl, onWebh
 
   useEffect(() => {
     Promise.all([
-      storage.getSetting('anthropic_api_key'),
-      storage.getSetting('github_username'),
+      loadCredential(SettingKey.AnthropicApiKey),
+      storage.getSetting(SettingKey.GithubUsername),
     ]).then(([k, gh]) => {
       if (k) setApiKeyDraft('••••••••' + k.slice(-4))
       if (gh) setGithubUsername(gh)
@@ -317,7 +319,7 @@ export function SettingsView({ categories, sessions, storage, webhookUrl, onWebh
   }
 
   async function handleSaveWebhook() {
-    await storage.setSetting('webhook_url', webhookDraft)
+    await storage.setSetting(SettingKey.WebhookUrl, webhookDraft)
     onWebhookUrlChange(webhookDraft)
   }
 
@@ -375,7 +377,7 @@ export function SettingsView({ categories, sessions, storage, webhookUrl, onWebh
           {FOCUS_PRESETS.map(p => (
             <button
               key={p.name}
-              onClick={() => { onFocusPresetChange(p); storage.setSetting('focus_preset', p.name) }}
+              onClick={() => { onFocusPresetChange(p); storage.setSetting(SettingKey.FocusPreset, p.name) }}
               className={`rounded-lg border px-3 py-2 text-xs transition-all ${
                 focusPreset.name === p.name
                   ? 'border-emerald-500/40 bg-emerald-500/[0.08] text-emerald-400'
@@ -396,7 +398,7 @@ export function SettingsView({ categories, sessions, storage, webhookUrl, onWebh
             onClick={() => {
               const next = !focusStrictMode
               onFocusStrictModeChange(next)
-              storage.setSetting('focus_strict_mode', next ? 'true' : 'false')
+              storage.setSetting(SettingKey.FocusStrictMode, next ? 'true' : 'false')
             }}
             className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${
               focusStrictMode ? 'bg-red-500/60' : 'bg-white/[0.08]'
@@ -423,12 +425,12 @@ export function SettingsView({ categories, sessions, storage, webhookUrl, onWebh
             className="flex-1 rounded-lg border border-white/[0.07] bg-white/[0.03] px-3 py-2 text-xs text-zinc-100 placeholder-zinc-600 outline-none focus:border-white/[0.15] transition-all"
             value={apiKeyDraft.startsWith('••') ? '' : apiKeyDraft}
             onChange={e => { setApiKeyDraft(e.target.value); setApiKeySaved(false) }}
-            onKeyDown={e => e.key === 'Enter' && !apiKeyDraft.startsWith('••') && storage.setSetting('anthropic_api_key', apiKeyDraft).then(() => setApiKeySaved(true))}
+            onKeyDown={e => e.key === 'Enter' && !apiKeyDraft.startsWith('••') && saveCredential(SettingKey.AnthropicApiKey, apiKeyDraft).then(() => setApiKeySaved(true))}
           />
           <button
             onClick={() => {
               if (!apiKeyDraft || apiKeyDraft.startsWith('••')) return
-              storage.setSetting('anthropic_api_key', apiKeyDraft).then(() => {
+              saveCredential(SettingKey.AnthropicApiKey, apiKeyDraft).then(() => {
                 setApiKeySaved(true)
                 setApiKeyDraft('••••••••' + apiKeyDraft.slice(-4))
               })
@@ -458,10 +460,10 @@ export function SettingsView({ categories, sessions, storage, webhookUrl, onWebh
             className="flex-1 rounded-lg border border-white/[0.07] bg-white/[0.03] px-3 py-2 text-xs text-zinc-100 placeholder-zinc-600 outline-none focus:border-white/[0.15] transition-all"
             value={githubUsername}
             onChange={e => setGithubUsername(e.target.value)}
-            onKeyDown={e => e.key === 'Enter' && storage.setSetting('github_username', githubUsername).then(() => setGithubSaved(true))}
+            onKeyDown={e => e.key === 'Enter' && storage.setSetting(SettingKey.GithubUsername, githubUsername).then(() => setGithubSaved(true))}
           />
           <button
-            onClick={() => storage.setSetting('github_username', githubUsername).then(() => setGithubSaved(true))}
+            onClick={() => storage.setSetting(SettingKey.GithubUsername, githubUsername).then(() => setGithubSaved(true))}
             className="rounded-md border border-white/[0.07] bg-white/3 px-3 py-2 text-xs text-zinc-400 hover:text-zinc-100 transition-all"
           >
             {githubSaved ? t('settings.saved') : t('settings.save')}

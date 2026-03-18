@@ -4,6 +4,7 @@ import { buildPartnerCard, validatePartnerCard } from '../domain/accountability'
 import type { PartnerCard } from '../domain/accountability'
 import type { Session, Category } from '../domain/timer'
 import type { Storage } from '../persistence/storage'
+import { SettingKey } from '../persistence/storage'
 
 type Props = {
   sessions: Session[]
@@ -47,7 +48,7 @@ export function AccountabilityView({ sessions, categories, storage, nickname, we
       if (!card) { setError('Invalid partner card file.'); return }
       setPartner(card)
       setError(null)
-      await storage.setSetting('accountability_partner', JSON.stringify(card))
+      await storage.setSetting(SettingKey.AccountabilityPartner, JSON.stringify(card))
     } catch {
       setError('Could not read partner card file.')
     }

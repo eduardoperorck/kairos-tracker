@@ -1,17 +1,17 @@
 import { useState, useRef } from 'react'
 import { buildDigestPayload, formatDigestPrompt, callDigestAPI } from '../domain/digest'
 import type { Category, Session } from '../domain/timer'
-import type { Storage } from '../persistence/storage'
+import { SettingKey } from '../persistence/storage'
+import { loadCredential, saveCredential } from '../services/credentials'
 
 type Props = {
   categories: Category[]
   sessions: Session[]
   historySessions: Session[]
   today: string
-  storage: Storage
 }
 
-export function DigestView({ categories, sessions, historySessions, today, storage }: Props) {
+export function DigestView({ categories, sessions, historySessions, today }: Props) {
   const [digest, setDigest] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -23,7 +23,7 @@ export function DigestView({ categories, sessions, historySessions, today, stora
     const now = Date.now()
     if (now - lastGeneratedRef.current < 10_000) return  // 10-second cooldown
     setError(null)
-    let apiKey = await storage.getSetting('anthropic_api_key')
+    let apiKey = await loadCredential(SettingKey.AnthropicApiKey)
 
     if (!apiKey) {
       setShowKeyInput(true)
@@ -47,7 +47,7 @@ export function DigestView({ categories, sessions, historySessions, today, stora
   async function handleSaveKey() {
     const key = apiKeyInput.trim()
     if (!key) return
-    await storage.setSetting('anthropic_api_key', key)
+    await saveCredential(SettingKey.AnthropicApiKey, key)
     setApiKeyInput('')
     setShowKeyInput(false)
     handleGenerate()

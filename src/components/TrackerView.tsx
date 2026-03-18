@@ -229,7 +229,7 @@ export function TrackerView({
 
       {activeCategory && (
         <div className="mt-4 flex items-center justify-between">
-          {inputActivity ? (
+          {inputActivity && inputActivity.windowMs > 0 ? (
             <InputIntelligenceWidget activity={inputActivity} />
           ) : (
             <span />

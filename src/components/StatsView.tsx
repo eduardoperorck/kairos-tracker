@@ -315,15 +315,12 @@ export function StatsView({ stats, weeklyData, streaks, onBack, historySessions 
           />
         </div>
 
-        {storage && (
-          <DigestView
-            categories={categories}
-            sessions={historySessions.filter(s => selectedWeekDates.includes(s.date))}
-            historySessions={historySessions}
-            today={offsetDate(today, weekOffset)}
-            storage={storage}
-          />
-        )}
+        <DigestView
+          categories={categories}
+          sessions={historySessions.filter(s => selectedWeekDates.includes(s.date))}
+          historySessions={historySessions}
+          today={offsetDate(today, weekOffset)}
+        />
         </>
 
       ) : (
