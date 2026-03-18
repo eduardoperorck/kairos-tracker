@@ -1,3 +1,5 @@
+use tauri::Manager;
+
 #[derive(serde::Serialize, Clone)]
 pub struct ActiveWindow {
     pub title: String,
@@ -6,9 +8,48 @@ pub struct ActiveWindow {
 
 #[tauri::command]
 fn get_active_window() -> Option<ActiveWindow> {
-    // Returns active window info — platform-specific implementation
-    // Falls back to None when WinAPI unavailable or on non-Windows platforms
-    None
+    #[cfg(target_os = "windows")]
+    {
+        use winapi::um::winuser::{GetForegroundWindow, GetWindowTextW, GetWindowThreadProcessId};
+        use winapi::um::processthreadsapi::OpenProcess;
+        use winapi::um::psapi::GetModuleFileNameExW;
+        use winapi::um::handleapi::CloseHandle;
+        use winapi::um::winnt::PROCESS_QUERY_INFORMATION;
+
+        unsafe {
+            let hwnd = GetForegroundWindow();
+            if hwnd.is_null() { return None; }
+
+            // Get window title
+            let mut title_buf = [0u16; 512];
+            let title_len = GetWindowTextW(hwnd, title_buf.as_mut_ptr(), title_buf.len() as i32);
+            if title_len == 0 { return None; }
+            let title = String::from_utf16_lossy(&title_buf[..title_len as usize]);
+
+            // Get process name
+            let mut pid: u32 = 0;
+            GetWindowThreadProcessId(hwnd, &mut pid);
+            let handle = OpenProcess(PROCESS_QUERY_INFORMATION | 0x0010 /* PROCESS_VM_READ */, 0, pid);
+            if handle.is_null() { return None; }
+
+            let mut path_buf = [0u16; 512];
+            let path_len = GetModuleFileNameExW(handle, std::ptr::null_mut(), path_buf.as_mut_ptr(), path_buf.len() as u32);
+            CloseHandle(handle);
+
+            let process = if path_len > 0 {
+                let full_path = String::from_utf16_lossy(&path_buf[..path_len as usize]);
+                full_path.split('\\').last().unwrap_or("unknown").to_string()
+            } else {
+                "unknown".to_string()
+            };
+
+            Some(ActiveWindow { title, process })
+        }
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        None
+    }
 }
 
 #[derive(serde::Serialize)]
@@ -66,10 +107,26 @@ fn update_tray_status(_category: String, _elapsed: String) {
 
 #[tauri::command]
 fn get_idle_seconds() -> u64 {
-  // Returns seconds since last user input
-  // Windows: use GetLastInputInfo via winapi
-  // Returns 0 if not available (browser mode fallback)
-  0
+  #[cfg(target_os = "windows")]
+  {
+    use winapi::um::winuser::{GetLastInputInfo, LASTINPUTINFO};
+    use winapi::shared::minwindef::DWORD;
+    use winapi::um::sysinfoapi::GetTickCount;
+    unsafe {
+      let mut lii = LASTINPUTINFO {
+        cbSize: std::mem::size_of::<LASTINPUTINFO>() as u32,
+        dwTime: 0,
+      };
+      if GetLastInputInfo(&mut lii) != 0 {
+        let now: DWORD = GetTickCount();
+        let idle_ms = now.wrapping_sub(lii.dwTime) as u64;
+        return idle_ms / 1000;
+      }
+    }
+    0
+  }
+  #[cfg(not(target_os = "windows"))]
+  { 0 }
 }
 
 #[tauri::command]
