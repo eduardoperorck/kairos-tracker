@@ -118,11 +118,19 @@ export function TrackerView({
       {/* P1 Unclassified process prompt */}
       {showUnclassified && (
         <div className="mb-4 rounded-lg border border-sky-500/20 bg-sky-500/[0.06] px-4 py-3 text-sm">
-          <p className="mb-2 text-sky-300">
-            <span className="font-medium">{unclassifiedProcess!.displayName}</span>
-            <span className="ml-2 text-sky-500 text-xs">({unclassifiedProcess!.process})</span>
-            <span className="ml-2 text-sky-500">— which category is this?</span>
-          </p>
+          <div className="mb-2 flex items-center gap-2">
+            {unclassifiedProcess!.iconBase64 && (
+              <img
+                src={unclassifiedProcess!.iconBase64}
+                alt=""
+                className="h-6 w-6 rounded"
+                aria-hidden="true"
+              />
+            )}
+            <span className="font-medium text-sky-300">{unclassifiedProcess!.displayName}</span>
+            <span className="text-sky-600 text-xs">({unclassifiedProcess!.process})</span>
+            <span className="text-sky-500">— which category is this?</span>
+          </div>
           <div className="flex flex-wrap gap-2">
             {categories.map(c => (
               <button

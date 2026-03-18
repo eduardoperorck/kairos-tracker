@@ -117,6 +117,7 @@ export function needsClassification(proc: string, rules: WindowRule[]): boolean 
 export type UnclassifiedApp = {
   process: string
   displayName: string
+  iconBase64?: string
 }
 
 export function pendingSuggestions(blocks: CaptureBlock[]): CaptureBlock[] {

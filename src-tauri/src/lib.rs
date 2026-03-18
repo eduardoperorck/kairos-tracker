@@ -5,6 +5,7 @@ pub struct ActiveWindow {
     pub title: String,
     pub process: String,
     pub display_name: String,
+    pub icon_base64: Option<String>,
 }
 
 /// Returns the exe name without the .exe extension.
@@ -17,6 +18,23 @@ fn exe_stem(path_wide: &[u16]) -> String {
     } else {
         filename.to_string()
     }
+}
+
+/// Minimal base64 encoder — avoids adding a crate dependency.
+fn base64_encode(data: &[u8]) -> String {
+    const TABLE: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    let mut out = Vec::with_capacity((data.len() + 2) / 3 * 4);
+    for chunk in data.chunks(3) {
+        let b0 = chunk[0] as u32;
+        let b1 = if chunk.len() > 1 { chunk[1] as u32 } else { 0 };
+        let b2 = if chunk.len() > 2 { chunk[2] as u32 } else { 0 };
+        let n = (b0 << 16) | (b1 << 8) | b2;
+        out.push(TABLE[((n >> 18) & 63) as usize]);
+        out.push(TABLE[((n >> 12) & 63) as usize]);
+        out.push(if chunk.len() > 1 { TABLE[((n >> 6) & 63) as usize] } else { b'=' });
+        out.push(if chunk.len() > 2 { TABLE[(n & 63) as usize] } else { b'=' });
+    }
+    String::from_utf8(out).unwrap_or_default()
 }
 
 /// Reads FileDescription from the exe's version info block.
@@ -62,6 +80,89 @@ unsafe fn get_display_name(path_wide: &[u16]) -> String {
     exe_stem(path_wide)
 }
 
+/// Extracts the exe's icon and encodes it as a BMP data URI.
+/// Returns None if the icon cannot be extracted.
+#[cfg(target_os = "windows")]
+unsafe fn extract_icon_base64(path_wide: &[u16]) -> Option<String> {
+    use winapi::um::shellapi::{SHGetFileInfoW, SHFILEINFOW, SHGFI_ICON, SHGFI_SMALLICON};
+    use winapi::um::winuser::{DrawIconEx, DestroyIcon, GetDC, ReleaseDC, FillRect, DI_NORMAL};
+    use winapi::um::wingdi::{
+        CreateCompatibleDC, CreateCompatibleBitmap, SelectObject,
+        DeleteDC, DeleteObject, GetDIBits, BITMAPINFO, BITMAPINFOHEADER, BI_RGB,
+        CreateSolidBrush,
+    };
+    use winapi::shared::windef::RECT;
+
+    let path: Vec<u16> = path_wide.iter().copied()
+        .take_while(|&c| c != 0)
+        .chain(std::iter::once(0))
+        .collect();
+
+    let mut shfi: SHFILEINFOW = std::mem::zeroed();
+    let ok = SHGetFileInfoW(
+        path.as_ptr(), 0, &mut shfi,
+        std::mem::size_of::<SHFILEINFOW>() as u32,
+        SHGFI_ICON | SHGFI_SMALLICON,
+    );
+    if ok == 0 || shfi.hIcon.is_null() { return None; }
+
+    let sz = 32i32;
+    let hdc_screen = GetDC(std::ptr::null_mut());
+    if hdc_screen.is_null() { DestroyIcon(shfi.hIcon); return None; }
+
+    let hdc  = CreateCompatibleDC(hdc_screen);
+    let hbm  = CreateCompatibleBitmap(hdc_screen, sz, sz);
+    let old  = SelectObject(hdc, hbm as *mut _);
+
+    // White background so transparent icons look clean
+    let brush = CreateSolidBrush(0x00FF_FFFF);
+    let rect  = RECT { left: 0, top: 0, right: sz, bottom: sz };
+    FillRect(hdc, &rect, brush);
+    DeleteObject(brush as *mut _);
+
+    DrawIconEx(hdc, 0, 0, shfi.hIcon, sz, sz, 0, std::ptr::null_mut(), DI_NORMAL);
+
+    // Read pixels
+    let mut bmi: BITMAPINFO = std::mem::zeroed();
+    bmi.bmiHeader.biSize        = std::mem::size_of::<BITMAPINFOHEADER>() as u32;
+    bmi.bmiHeader.biWidth       = sz;
+    bmi.bmiHeader.biHeight      = -sz; // top-down
+    bmi.bmiHeader.biPlanes      = 1;
+    bmi.bmiHeader.biBitCount    = 32;
+    bmi.bmiHeader.biCompression = BI_RGB;
+    let pixel_bytes = (sz * sz * 4) as usize;
+    let mut pixels = vec![0u8; pixel_bytes];
+    GetDIBits(hdc, hbm, 0, sz as u32, pixels.as_mut_ptr() as *mut _, &mut bmi, 0);
+
+    SelectObject(hdc, old);
+    DeleteObject(hbm as *mut _);
+    DeleteDC(hdc);
+    ReleaseDC(std::ptr::null_mut(), hdc_screen);
+    DestroyIcon(shfi.hIcon);
+
+    // Build BMP in memory
+    let file_size = (14u32 + 40 + pixel_bytes as u32) as u32;
+    let mut bmp: Vec<u8> = Vec::with_capacity(file_size as usize);
+    // BITMAPFILEHEADER
+    bmp.extend_from_slice(b"BM");
+    bmp.extend_from_slice(&file_size.to_le_bytes());
+    bmp.extend_from_slice(&0u16.to_le_bytes()); // reserved1
+    bmp.extend_from_slice(&0u16.to_le_bytes()); // reserved2
+    bmp.extend_from_slice(&54u32.to_le_bytes()); // pixel data offset
+    // BITMAPINFOHEADER
+    bmp.extend_from_slice(&40u32.to_le_bytes());
+    bmp.extend_from_slice(&sz.to_le_bytes());
+    bmp.extend_from_slice(&(-sz).to_le_bytes());
+    bmp.extend_from_slice(&1u16.to_le_bytes());   // planes
+    bmp.extend_from_slice(&32u16.to_le_bytes());  // bit count
+    bmp.extend_from_slice(&0u32.to_le_bytes());   // compression
+    bmp.extend_from_slice(&(pixel_bytes as u32).to_le_bytes());
+    for _ in 0..4 { bmp.extend_from_slice(&0i32.to_le_bytes()); } // pels + clr
+    bmp.extend_from_slice(&pixels);
+
+    Some(format!("data:image/bmp;base64,{}", base64_encode(&bmp)))
+}
+
 #[tauri::command]
 fn get_active_window() -> Option<ActiveWindow> {
     #[cfg(target_os = "windows")]
@@ -98,8 +199,9 @@ fn get_active_window() -> Option<ActiveWindow> {
             let process = String::from_utf16_lossy(path_wide)
                 .split('\\').last().unwrap_or("unknown").to_string();
             let display_name = get_display_name(path_wide);
+            let icon_base64  = extract_icon_base64(path_wide);
 
-            Some(ActiveWindow { title, process, display_name })
+            Some(ActiveWindow { title, process, display_name, icon_base64 })
         }
     }
     #[cfg(not(target_os = "windows"))]

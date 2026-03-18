@@ -17,7 +17,7 @@ function saveUserRules(rules: WindowRule[]) {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(rules))
 }
 
-type TauriWindow = { title: string; process: string; display_name: string }
+type TauriWindow = { title: string; process: string; display_name: string; icon_base64?: string }
 
 async function fetchActiveWindow(): Promise<TauriWindow | null> {
   try {
@@ -60,8 +60,9 @@ export function usePassiveCapture(): PassiveCaptureResult {
       const proc = win.process
       if (needsClassification(proc, allRules)) {
         const displayName = win.display_name || proc.replace(/\.exe$/i, '')
+        const iconBase64  = win.icon_base64
         setPendingQueue(prev =>
-          prev.some(a => a.process === proc) ? prev : [...prev, { process: proc, displayName }]
+          prev.some(a => a.process === proc) ? prev : [...prev, { process: proc, displayName, iconBase64 }]
         )
       }
     }, POLL_INTERVAL_MS)
