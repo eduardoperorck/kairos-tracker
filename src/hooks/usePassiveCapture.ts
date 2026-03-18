@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { aggregateBlocks, needsClassification, DEFAULT_DEV_RULES } from '../domain/passiveCapture'
-import type { CaptureBlock, RawPollEvent, WindowRule } from '../domain/passiveCapture'
+import type { CaptureBlock, RawPollEvent, WindowRule, UnclassifiedApp } from '../domain/passiveCapture'
 
 const POLL_INTERVAL_MS = 5_000
 const MAX_EVENTS = 1440
@@ -17,10 +17,12 @@ function saveUserRules(rules: WindowRule[]) {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(rules))
 }
 
-async function fetchActiveWindow(): Promise<{ title: string; process: string } | null> {
+type TauriWindow = { title: string; process: string; display_name: string }
+
+async function fetchActiveWindow(): Promise<TauriWindow | null> {
   try {
     const { invoke } = await import('@tauri-apps/api/core')
-    return await invoke<{ title: string; process: string } | null>('get_active_window')
+    return await invoke<TauriWindow | null>('get_active_window')
   } catch {
     return null
   }
@@ -28,7 +30,7 @@ async function fetchActiveWindow(): Promise<{ title: string; process: string } |
 
 export type PassiveCaptureResult = {
   blocks: CaptureBlock[]
-  unclassifiedProcess: string | null  // most recent unclassified process
+  unclassifiedProcess: UnclassifiedApp | null
   assignProcess: (process: string, categoryId: string) => void
   dismissProcess: (process: string) => void
 }
@@ -36,8 +38,8 @@ export type PassiveCaptureResult = {
 export function usePassiveCapture(): PassiveCaptureResult {
   const [blocks, setBlocks] = useState<CaptureBlock[]>([])
   const [userRules, setUserRules] = useState<WindowRule[]>(() => loadUserRules())
-  // Queue of processes seen but not yet classified, in order of first appearance
-  const [pendingQueue, setPendingQueue] = useState<string[]>([])
+  // Queue of apps seen but not yet classified, in order of first appearance
+  const [pendingQueue, setPendingQueue] = useState<UnclassifiedApp[]>([])
   const eventsRef = useRef<RawPollEvent[]>([])
 
   const allRules = [...DEFAULT_DEV_RULES, ...userRules]
@@ -48,7 +50,7 @@ export function usePassiveCapture(): PassiveCaptureResult {
       if (!win) return
 
       const event: RawPollEvent = {
-        window: { ...win, timestamp: Date.now() },
+        window: { title: win.title, process: win.process, timestamp: Date.now() },
         timestamp: Date.now(),
       }
 
@@ -57,7 +59,10 @@ export function usePassiveCapture(): PassiveCaptureResult {
 
       const proc = win.process
       if (needsClassification(proc, allRules)) {
-        setPendingQueue(prev => prev.includes(proc) ? prev : [...prev, proc])
+        const displayName = win.display_name || proc.replace(/\.exe$/i, '')
+        setPendingQueue(prev =>
+          prev.some(a => a.process === proc) ? prev : [...prev, { process: proc, displayName }]
+        )
       }
     }, POLL_INTERVAL_MS)
 
@@ -81,7 +86,7 @@ export function usePassiveCapture(): PassiveCaptureResult {
       saveUserRules(next)
       return next
     })
-    setPendingQueue(prev => prev.filter(p => p !== process))
+    setPendingQueue(prev => prev.filter(a => a.process !== process))
   }, [])
 
   const dismissProcess = useCallback((process: string) => {
@@ -98,7 +103,7 @@ export function usePassiveCapture(): PassiveCaptureResult {
       saveUserRules(next)
       return next
     })
-    setPendingQueue(prev => prev.filter(p => p !== process))
+    setPendingQueue(prev => prev.filter(a => a.process !== process))
   }, [])
 
   return { blocks, unclassifiedProcess, assignProcess, dismissProcess }

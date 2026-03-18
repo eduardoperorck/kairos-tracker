@@ -109,6 +109,16 @@ export function needsClassification(proc: string, rules: WindowRule[]): boolean 
   return true
 }
 
+/**
+ * Rich info about an unclassified process shown in the classification prompt.
+ * `process` is the exe name used for rule matching; `displayName` is the
+ * human-readable product name returned by the OS (e.g. "Google Chrome").
+ */
+export type UnclassifiedApp = {
+  process: string
+  displayName: string
+}
+
 export function pendingSuggestions(blocks: CaptureBlock[]): CaptureBlock[] {
   return blocks.filter(b => !b.confirmed && b.categoryId !== null)
 }

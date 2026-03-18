@@ -4,6 +4,62 @@ use tauri::Manager;
 pub struct ActiveWindow {
     pub title: String,
     pub process: String,
+    pub display_name: String,
+}
+
+/// Returns the exe name without the .exe extension.
+#[cfg(target_os = "windows")]
+fn exe_stem(path_wide: &[u16]) -> String {
+    let s = String::from_utf16_lossy(path_wide);
+    let filename = s.split('\\').last().unwrap_or("unknown");
+    if filename.to_ascii_lowercase().ends_with(".exe") {
+        filename[..filename.len() - 4].to_string()
+    } else {
+        filename.to_string()
+    }
+}
+
+/// Reads FileDescription from the exe's version info block.
+/// Falls back to exe stem (name without .exe) on any error.
+#[cfg(target_os = "windows")]
+unsafe fn get_display_name(path_wide: &[u16]) -> String {
+    use winapi::um::winver::{GetFileVersionInfoSizeW, GetFileVersionInfoW, VerQueryValueW};
+    use winapi::shared::minwindef::LPVOID;
+
+    // Null-terminate for API calls
+    let path: Vec<u16> = path_wide.iter().copied()
+        .take_while(|&c| c != 0)
+        .chain(std::iter::once(0))
+        .collect();
+
+    let mut dummy = 0u32;
+    let size = GetFileVersionInfoSizeW(path.as_ptr(), &mut dummy);
+    if size == 0 { return exe_stem(path_wide); }
+
+    let mut buf = vec![0u8; size as usize];
+    if GetFileVersionInfoW(path.as_ptr(), 0, size, buf.as_mut_ptr() as *mut _) == 0 {
+        return exe_stem(path_wide);
+    }
+
+    // English (US) + Unicode code page — covers the vast majority of apps
+    let key: Vec<u16> = "\\StringFileInfo\\040904B0\\FileDescription\0"
+        .encode_utf16().collect();
+    let mut out: LPVOID = std::ptr::null_mut();
+    let mut len: u32 = 0;
+
+    if VerQueryValueW(
+        buf.as_ptr() as LPVOID,
+        key.as_ptr(),
+        &mut out,
+        &mut len,
+    ) != 0 && len > 0 && !out.is_null() {
+        let slice = std::slice::from_raw_parts(out as *const u16, (len - 1) as usize);
+        let name = String::from_utf16_lossy(slice);
+        let name = name.trim();
+        if !name.is_empty() { return name.to_string(); }
+    }
+
+    exe_stem(path_wide)
 }
 
 #[tauri::command]
@@ -36,14 +92,14 @@ fn get_active_window() -> Option<ActiveWindow> {
             let path_len = GetModuleFileNameExW(handle, std::ptr::null_mut(), path_buf.as_mut_ptr(), path_buf.len() as u32);
             CloseHandle(handle);
 
-            let process = if path_len > 0 {
-                let full_path = String::from_utf16_lossy(&path_buf[..path_len as usize]);
-                full_path.split('\\').last().unwrap_or("unknown").to_string()
-            } else {
-                "unknown".to_string()
-            };
+            if path_len == 0 { return None; }
 
-            Some(ActiveWindow { title, process })
+            let path_wide = &path_buf[..path_len as usize];
+            let process = String::from_utf16_lossy(path_wide)
+                .split('\\').last().unwrap_or("unknown").to_string();
+            let display_name = get_display_name(path_wide);
+
+            Some(ActiveWindow { title, process, display_name })
         }
     }
     #[cfg(not(target_os = "windows"))]
