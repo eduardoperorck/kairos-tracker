@@ -50,6 +50,10 @@ export type TrackerViewProps = {
   inputActivity?: InputActivity
   // N4 Session Naming (window titles from passive capture)
   captureBlocks?: CaptureBlock[]
+  // P1 Unclassified process prompt
+  unclassifiedProcess?: string | null
+  onAssignProcess?: (process: string, categoryId: string) => void
+  onDismissProcess?: (process: string) => void
 }
 
 export function TrackerView({
@@ -78,6 +82,9 @@ export function TrackerView({
   idleMs = 0,
   inputActivity,
   captureBlocks = [],
+  unclassifiedProcess = null,
+  onAssignProcess,
+  onDismissProcess,
 }: TrackerViewProps) {
   const { t } = useI18n()
   const [pendingStop, setPendingStop] = useState<string | null>(null)
@@ -99,6 +106,33 @@ export function TrackerView({
     <>
       {/* N1 Attention Residue Banner */}
       <AttentionResidueBanner switchedAt={switchedAt} fromCategory={switchedFromCategory} />
+
+      {/* P1 Unclassified process prompt */}
+      {unclassifiedProcess && onAssignProcess && onDismissProcess && (
+        <div className="mb-4 rounded-lg border border-sky-500/20 bg-sky-500/[0.06] px-4 py-3 text-sm">
+          <p className="mb-2 text-sky-300">
+            <span className="font-medium">📦 {unclassifiedProcess}</span>
+            <span className="ml-2 text-sky-500">— which category is this?</span>
+          </p>
+          <div className="flex flex-wrap gap-2">
+            {categories.map(c => (
+              <button
+                key={c.id}
+                onClick={() => onAssignProcess(unclassifiedProcess, c.id)}
+                className="rounded border border-white/[0.08] bg-white/[0.04] px-3 py-1 text-xs text-zinc-300 hover:text-zinc-100 hover:border-white/20 transition-all"
+              >
+                {c.name}
+              </button>
+            ))}
+            <button
+              onClick={() => onDismissProcess(unclassifiedProcess)}
+              className="rounded border border-white/[0.05] px-3 py-1 text-xs text-zinc-600 hover:text-zinc-400 transition-all"
+            >
+              ignore
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* N4 Session Name Suggestion overlay */}
       {pendingStop && (
