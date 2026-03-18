@@ -15,6 +15,7 @@ function makeIntention(text: string): Intention {
 const defaultProps = {
   intentions: [],
   review: null,
+  today: '2026-03-15',
   onAddIntention: vi.fn(),
   onSaveReview: vi.fn(),
 }

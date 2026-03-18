@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useI18n } from '../i18n'
 import { MVDWidget } from './MVDWidget'
 import type { Intention, EveningReview } from '../domain/intentions'
@@ -7,6 +7,7 @@ import type { MVDItem } from '../domain/minimumViableDay'
 type Props = {
   intentions: Intention[]
   review: EveningReview | null
+  today: string
   onAddIntention: (text: string) => void
   onSaveReview: (mood: 1 | 2 | 3 | 4 | 5, notes: string) => void
   onExportMarkdown?: (doneSet: Set<number>) => void
@@ -14,12 +15,23 @@ type Props = {
   onMVDChange?: (items: MVDItem[]) => void
 }
 
-export function IntentionsView({ intentions, review, onAddIntention, onSaveReview, onExportMarkdown, mvdItems = [], onMVDChange }: Props) {
+function loadDone(today: string): Set<number> {
+  try {
+    const raw = localStorage.getItem(`intentions_done_${today}`)
+    return raw ? new Set(JSON.parse(raw) as number[]) : new Set()
+  } catch { return new Set() }
+}
+
+export function IntentionsView({ intentions, review, today, onAddIntention, onSaveReview, onExportMarkdown, mvdItems = [], onMVDChange }: Props) {
   const { t } = useI18n()
   const [newText, setNewText] = useState('')
-  const [done, setDone] = useState<Set<number>>(new Set())
+  const [done, setDone] = useState<Set<number>>(() => loadDone(today))
   const [mood, setMood] = useState<1 | 2 | 3 | 4 | 5>(review?.mood ?? 3)
   const [notes, setNotes] = useState(review?.notes ?? '')
+
+  useEffect(() => {
+    localStorage.setItem(`intentions_done_${today}`, JSON.stringify([...done]))
+  }, [done, today])
 
   function handleAdd() {
     const text = newText.trim()
