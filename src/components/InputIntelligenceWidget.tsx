@@ -27,8 +27,7 @@ export function InputIntelligenceWidget({ activity }: Props) {
   const textColor = INTENSITY_STYLES[signal.intensity]
 
   return (
-    <div className="flex items-center gap-2 text-xs">
-      <span className="text-zinc-600">⌨️</span>
+    <div className="flex items-center gap-3 text-xs">
       <div className="flex gap-0.5">
         {[1, 2, 3, 4].map(level => (
           <div
@@ -40,7 +39,8 @@ export function InputIntelligenceWidget({ activity }: Props) {
         ))}
       </div>
       <span className={`capitalize ${textColor}`}>{signal.intensity}</span>
-      <span className="text-zinc-700 font-mono">{Math.round(signal.keystrokesPerMin)}kpm</span>
+      <span className="text-zinc-600">⌨️ <span className="font-mono text-zinc-500">{Math.round(signal.keystrokesPerMin)}kpm</span></span>
+      <span className="text-zinc-600">🖱️ <span className="font-mono text-zinc-500">{Math.round(signal.clicksPerMin)}cpm</span></span>
     </div>
   )
 }
