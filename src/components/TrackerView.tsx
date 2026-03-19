@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useI18n } from '../i18n'
 import { CategoryItem } from './CategoryItem'
 import { EnergyScoreBanner } from './EnergyScoreBanner'
@@ -89,6 +89,23 @@ export function TrackerView({
   const { t } = useI18n()
   const [pendingStop, setPendingStop] = useState<string | null>(null)
   const [deadTimeDismissed, setDeadTimeDismissed] = useState(false)
+
+  // Keys 1–9 toggle the corresponding category when no input is focused
+  useEffect(() => {
+    function handleKey(e: KeyboardEvent) {
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return
+      if (e.metaKey || e.ctrlKey || e.altKey) return
+      const digit = parseInt(e.key)
+      if (digit >= 1 && digit <= 9) {
+        const cat = categories[digit - 1]
+        if (!cat) return
+        if (cat.activeEntry) onStop(cat.id)
+        else onStart(cat.id)
+      }
+    }
+    window.addEventListener('keydown', handleKey)
+    return () => window.removeEventListener('keydown', handleKey)
+  }, [categories, onStart, onStop])
 
   function handleStopRequest(id: string) {
     setPendingStop(id)
