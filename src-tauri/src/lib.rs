@@ -3,7 +3,6 @@ use std::collections::HashMap;
 use std::sync::Mutex;
 
 /// Accumulated input activity since last drain — filled by background polling thread.
-#[derive(Default)]
 pub struct InputAccumulator {
     pub keystrokes: u64,
     pub mouse_clicks: u64,
@@ -16,6 +15,23 @@ pub struct InputAccumulator {
     /// Per-key "was down last poll" bitmask to detect edges (key-down transitions).
     #[cfg(target_os = "windows")]
     pub key_state: [bool; 256],
+}
+
+impl Default for InputAccumulator {
+    fn default() -> Self {
+        Self {
+            keystrokes: 0,
+            mouse_clicks: 0,
+            mouse_distance_px: 0,
+            window_start_ms: 0,
+            #[cfg(target_os = "windows")]
+            last_cursor_x: 0,
+            #[cfg(target_os = "windows")]
+            last_cursor_y: 0,
+            #[cfg(target_os = "windows")]
+            key_state: [false; 256],
+        }
+    }
 }
 
 /// Tauri application state — icon cache + input accumulator.
