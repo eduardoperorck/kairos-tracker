@@ -1,6 +1,7 @@
 import type { Category, Session } from './timer'
 import { computeWeekMs, computeStreak, getWeekDates } from './timer'
 import { computeEnergyPattern, isFlowSession } from './history'
+import { toLocalDateString } from './format'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -112,9 +113,7 @@ export function parseTimeEntryLocally(
   // Extract date: "yesterday" → yesterday's ISO string, otherwise today
   let date = todayDate
   if (/yesterday/.test(lower)) {
-    const d = new Date(todayDate)
-    d.setDate(d.getDate() - 1)
-    date = d.toISOString().slice(0, 10)
+    date = toLocalDateString(Date.now() - 86_400_000)
   }
 
   // Remove duration and date words to find remaining tokens

@@ -1,7 +1,7 @@
 import { useState, useRef } from 'react'
 import { useI18n } from '../i18n'
 import { groupSessionsByDate, exportSessionsToCSV, exportSessionsToJSON, exportSessionsToHTML, isFlowSession, parseTogglCSV } from '../domain/history'
-import { formatElapsed } from '../domain/format'
+import { formatElapsed, formatLocalTime } from '../domain/format'
 import { ActivityTimeline } from './ActivityTimeline'
 import type { Session, Category } from '../domain/timer'
 import type { CaptureBlock } from '../domain/passiveCapture'
@@ -14,7 +14,7 @@ type Props = {
 }
 
 function formatTime(ms: number): string {
-  return new Date(ms).toISOString().slice(11, 16)
+  return formatLocalTime(ms)
 }
 
 function downloadBlob(content: string, filename: string, mimeType: string) {

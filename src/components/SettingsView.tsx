@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from 'react'
 import { exportSessionsToJSON } from '../domain/history'
+import { toLocalDateString } from '../domain/format'
 import { FOCUS_PRESETS, type FocusPreset } from '../domain/focusGuard'
 import { getLLMStatus } from '../services/llm'
 import { useI18n } from '../i18n'
@@ -355,7 +356,7 @@ export function SettingsView({ categories, sessions, storage, webhookUrl, onWebh
 
   function handleBackup() {
     const json = exportSessionsToJSON(sessions, categories)
-    const date = new Date().toISOString().slice(0, 10)
+    const date = toLocalDateString(Date.now())
     downloadBlob(json, `timetracker-backup-${date}.json`, 'application/json')
   }
 

@@ -3,9 +3,10 @@ import { exportSessionsToJSON } from '../domain/history'
 import type { Storage } from '../persistence/storage'
 import { SettingKey } from '../persistence/storage'
 import type { Session, Category } from '../domain/timer'
+import { toLocalDateString } from '../domain/format'
 
 function todayDateString(): string {
-  return new Date().toISOString().slice(0, 10)
+  return toLocalDateString(Date.now())
 }
 
 function isValidAbsolutePath(p: string): boolean {

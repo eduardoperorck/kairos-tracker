@@ -1,6 +1,6 @@
 import { useMemo } from 'react'
 import { useI18n } from '../i18n'
-import { formatElapsed } from '../domain/format'
+import { formatElapsed, formatLocalTime } from '../domain/format'
 import type { CaptureBlock } from '../domain/passiveCapture'
 import type { Category } from '../domain/timer'
 
@@ -17,7 +17,7 @@ type Props = {
 }
 
 function formatTimeLabel(ms: number): string {
-  return new Date(ms).toISOString().slice(11, 16)
+  return formatLocalTime(ms)
 }
 
 function categoryColor(categoryId: string | null, categories: Category[]): string {

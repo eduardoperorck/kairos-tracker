@@ -1,4 +1,5 @@
 import type { Session, Category } from './timer'
+import { formatLocalTime } from './format'
 
 // ─── groupSessionsByDate ──────────────────────────────────────────────────────
 
@@ -86,8 +87,8 @@ export function exportSessionsToHTML(sessions: Session[], categories: Category[]
   const rows = grouped.map(day => {
     const sessionRows = day.sessions.map(s => {
       const dur = Math.round((s.endedAt - s.startedAt) / 60000)
-      const start = new Date(s.startedAt).toISOString().slice(11, 16)
-      const end = new Date(s.endedAt).toISOString().slice(11, 16)
+      const start = formatLocalTime(s.startedAt)
+      const end = formatLocalTime(s.endedAt)
       return `<tr><td>${s.categoryName}</td><td>${start}</td><td>${end}</td><td>${dur} min</td><td>${s.tag ?? ''}</td></tr>`
     }).join('\n')
     return `<h3>${day.date}</h3><table><thead><tr><th>Category</th><th>Start</th><th>End</th><th>Duration</th><th>Tag</th></tr></thead><tbody>${sessionRows}</tbody></table>`

@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import type { GitCommit } from '../domain/codeQuality'
+import { toLocalDateString } from '../domain/format'
 
 // Extracts the workspace/repo folder name from a VSCode/Cursor window title.
 // Title formats:
@@ -21,8 +22,7 @@ async function invokeGetGitLog(repoPath: string, sinceDate: string): Promise<Git
 }
 
 function sevenDaysAgoDate(): string {
-  const d = new Date(Date.now() - 7 * 86_400_000)
-  return d.toISOString().slice(0, 10)
+  return toLocalDateString(Date.now() - 7 * 86_400_000)
 }
 
 export function useLocalGitCommits(
