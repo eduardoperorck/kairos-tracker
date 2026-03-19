@@ -29,6 +29,7 @@ import { formatElapsed } from '../domain/format'
 import { useInputActivity } from '../hooks/useInputActivity'
 import { usePassiveCapture } from '../hooks/usePassiveCapture'
 import { useAutoBackup } from '../hooks/useAutoBackup'
+import { useLocalGitCommits } from '../hooks/useLocalGitCommits'
 import { suggestSessionTag } from '../domain/sessionNaming'
 import type { Intention, EveningReview } from '../domain/intentions'
 import type { Storage } from '../persistence/storage'
@@ -57,6 +58,7 @@ export function App({ storage }: Props) {
   const [webhookUrl, setWebhookUrl] = useState<string | null>(null)
   const [claudeApiKey, setClaudeApiKey] = useState<string | null>(null)
   const [githubUsername, setGithubUsername] = useState<string | null>(null)
+  const [workspaceRoot, setWorkspaceRoot] = useState<string | null>(null)
   const [screenshotsEnabled, setScreenshotsEnabled] = useState(false)
   const [wrappedOpen, setWrappedOpen] = useState(false)
   const [mvdItems, setMvdItems] = useState<MVDItem[]>(() => {
@@ -85,6 +87,7 @@ export function App({ storage }: Props) {
   const notifications = useNotifications()
   const inputActivity = useInputActivity()
   useAutoBackup(storage, historySessions, categories)
+  const localGitCommits = useLocalGitCommits(recentTitles, workspaceRoot)
 
   // ── Load settings on mount ──────────────────────────────────────────────────
   useEffect(() => {
@@ -95,11 +98,13 @@ export function App({ storage }: Props) {
       loadCredential(SettingKey.AnthropicApiKey),
       storage.getSetting(SettingKey.GithubUsername),
       storage.getSetting(SettingKey.ScreenshotsEnabled),
-    ]).then(([url, preset, strict, apiKey, ghUser, screenshots]) => {
+      storage.getSetting(SettingKey.WorkspaceRoot),
+    ]).then(([url, preset, strict, apiKey, ghUser, screenshots, wsRoot]) => {
       setWebhookUrl(url)
       setClaudeApiKey(apiKey)
       setGithubUsername(ghUser)
       setScreenshotsEnabled(screenshots === 'true')
+      setWorkspaceRoot(wsRoot)
       if (preset) {
         const found = FOCUS_PRESETS.find(p => p.name === preset)
         if (found) setFocusPreset(found)
@@ -509,6 +514,7 @@ export function App({ storage }: Props) {
             githubUsername={githubUsername}
             captureBlocks={captureBlocks}
             screenshotsEnabled={screenshotsEnabled}
+            gitCommits={localGitCommits}
           />
         ) : view === 'history' ? (
           <HistoryView

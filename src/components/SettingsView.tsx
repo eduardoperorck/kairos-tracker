@@ -63,9 +63,16 @@ function SyncSection({ storage, sessions, categories }: { storage: Storage; sess
   const { t } = useI18n()
   const [syncPath, setSyncPath] = useState('')
   const [syncStatus, setSyncStatus] = useState<string | null>(null)
+  const [workspaceRoot, setWorkspaceRoot] = useState('')
 
   useEffect(() => {
-    storage.getSetting(SettingKey.SyncPath).then(p => setSyncPath(p ?? ''))
+    Promise.all([
+      storage.getSetting(SettingKey.SyncPath),
+      storage.getSetting(SettingKey.WorkspaceRoot),
+    ]).then(([sp, wr]) => {
+      setSyncPath(sp ?? '')
+      setWorkspaceRoot(wr ?? '')
+    })
   }, [])
 
   async function handleSaveSyncPath() {
@@ -112,6 +119,27 @@ function SyncSection({ storage, sessions, categories }: { storage: Storage; sess
         {t('settings.syncNow')}
       </button>
       {syncStatus && <p className="mt-2 text-xs text-emerald-400">{syncStatus}</p>}
+
+      <h3 className="mt-5 mb-2 text-xs font-medium text-zinc-500 uppercase tracking-wider">Workspace Root</h3>
+      <p className="mb-2 text-xs text-zinc-600">Base folder for your projects. Used to auto-detect the active repo from your VSCode window title.</p>
+      <div className="flex gap-2">
+        <input
+          type="text"
+          placeholder="C:\Users\…\Projects"
+          className="flex-1 rounded-lg border border-white/[0.07] bg-white/[0.03] px-3 py-2 text-xs text-zinc-100 placeholder-zinc-600 outline-none focus:border-white/[0.15] transition-all"
+          value={workspaceRoot}
+          onChange={e => setWorkspaceRoot(e.target.value)}
+          onKeyDown={e => {
+            if (e.key === 'Enter') void storage.setSetting(SettingKey.WorkspaceRoot, workspaceRoot)
+          }}
+        />
+        <button
+          onClick={() => void storage.setSetting(SettingKey.WorkspaceRoot, workspaceRoot)}
+          className="rounded-md border border-white/[0.07] bg-white/3 px-3 py-2 text-xs text-zinc-400 hover:text-zinc-100 transition-all"
+        >
+          Save
+        </button>
+      </div>
     </section>
   )
 }
