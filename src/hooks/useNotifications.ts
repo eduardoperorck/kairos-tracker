@@ -18,6 +18,14 @@ export function useNotifications() {
     )
   }
 
+  async function notifyGoalMilestone(categoryName: string, pct: 25 | 50 | 75) {
+    const emoji = pct === 25 ? '🌱' : pct === 50 ? '🌿' : '🔥'
+    await sendNotification(
+      `${emoji} ${pct}% of weekly goal`,
+      `${categoryName}: you've hit ${pct}% of your weekly target!`
+    )
+  }
+
   async function notifyDailyReminder(hour: number) {
     await sendNotification(
       'Daily reminder',
@@ -32,5 +40,5 @@ export function useNotifications() {
     )
   }
 
-  return { notifyGoalReached, notifyDailyReminder, notifyLongSession }
+  return { notifyGoalReached, notifyGoalMilestone, notifyDailyReminder, notifyLongSession }
 }

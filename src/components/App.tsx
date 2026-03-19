@@ -307,11 +307,18 @@ export function App({ storage }: Props) {
     if (cat && entry) {
       webhooks.onTimerStopped(cat.name, entry.startedAt, saved.endedAt, resolvedTag)
 
-      // Notify if goal just reached
+      // Notify on goal milestones (25 / 50 / 75 / 100 %)
       const goalMs = cat.weeklyGoalMs ?? 0
       if (goalMs > 0) {
         const weeklyAfter = weeklyBefore + (saved.endedAt - entry.startedAt)
-        if (weeklyBefore < goalMs && weeklyAfter >= goalMs) {
+        const pctBefore = (weeklyBefore / goalMs) * 100
+        const pctAfter  = (weeklyAfter  / goalMs) * 100
+        for (const milestone of [25, 50, 75] as const) {
+          if (pctBefore < milestone && pctAfter >= milestone) {
+            void notifications.notifyGoalMilestone(cat.name, milestone)
+          }
+        }
+        if (pctBefore < 100 && pctAfter >= 100) {
           notifications.notifyGoalReached(cat.name, Math.round(goalMs / 3_600_000))
           webhooks.onGoalReached(cat.name, goalMs, weeklyAfter)
         }
