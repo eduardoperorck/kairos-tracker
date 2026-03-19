@@ -568,6 +568,30 @@ export function App({ storage }: Props) {
             onSaveReview={handleSaveReview}
             mvdItems={mvdItems}
             onMVDChange={setMvdItems}
+            draftNotes={(() => {
+              if (eveningReview?.notes) return undefined
+              const todaySessions = sessions.filter(s => s.date === today)
+              if (todaySessions.length === 0) return undefined
+              const totalMs = todaySessions.reduce((sum, s) => sum + (s.endedAt - s.startedAt), 0)
+              const totalH = Math.floor(totalMs / 3_600_000)
+              const totalM = Math.floor((totalMs % 3_600_000) / 60_000)
+              const timeStr = totalH > 0 ? `${totalH}h ${totalM}m` : `${totalM}m`
+              // Top category
+              const byCategory = new Map<string, number>()
+              for (const s of todaySessions) byCategory.set(s.categoryId, (byCategory.get(s.categoryId) ?? 0) + (s.endedAt - s.startedAt))
+              const topCatId = [...byCategory.entries()].sort((a, b) => b[1] - a[1])[0]?.[0]
+              const topCatName = categories.find(c => c.id === topCatId)?.name ?? ''
+              const goalNote = topCatId ? (() => {
+                const goalMs = categories.find(c => c.id === topCatId)?.weeklyGoalMs ?? 0
+                const weeklyMs = computeWeekMs(sessions, topCatId, weekDates)
+                if (goalMs > 0) {
+                  const pct = Math.round((weeklyMs / goalMs) * 100)
+                  return pct >= 100 ? ' (weekly goal reached!)' : ` (${pct}% of weekly goal)`
+                }
+                return ''
+              })() : ''
+              return `Spent ${timeStr} tracked. Top: ${topCatName}${goalNote}.`
+            })()}
             onExportMarkdown={(doneSet) => {
               const daySessions = historySessions.filter(s => s.date === today)
               const md = exportDayAsMarkdown(

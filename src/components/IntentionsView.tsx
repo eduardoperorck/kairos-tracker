@@ -13,6 +13,7 @@ type Props = {
   onExportMarkdown?: (doneSet: Set<number>) => void
   mvdItems?: MVDItem[]
   onMVDChange?: (items: MVDItem[]) => void
+  draftNotes?: string // auto-generated summary pre-fill
 }
 
 function loadDone(today: string): Set<number> {
@@ -22,12 +23,12 @@ function loadDone(today: string): Set<number> {
   } catch { return new Set() }
 }
 
-export function IntentionsView({ intentions, review, today, onAddIntention, onSaveReview, onExportMarkdown, mvdItems = [], onMVDChange }: Props) {
+export function IntentionsView({ intentions, review, today, onAddIntention, onSaveReview, onExportMarkdown, mvdItems = [], onMVDChange, draftNotes }: Props) {
   const { t } = useI18n()
   const [newText, setNewText] = useState('')
   const [done, setDone] = useState<Set<number>>(() => loadDone(today))
   const [mood, setMood] = useState<1 | 2 | 3 | 4 | 5>(review?.mood ?? 3)
-  const [notes, setNotes] = useState(review?.notes ?? '')
+  const [notes, setNotes] = useState(review?.notes ?? draftNotes ?? '')
 
   useEffect(() => {
     localStorage.setItem(`intentions_done_${today}`, JSON.stringify([...done]))
