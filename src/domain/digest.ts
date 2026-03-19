@@ -86,6 +86,69 @@ ${peakStr}
 Be specific, mention the strongest category and one actionable suggestion.`
 }
 
+// ─── parseTimeEntryLocally ───────────────────────────────────────────────────
+
+export function parseTimeEntryLocally(
+  text: string,
+  categories: { id: string; name: string }[],
+  todayDate: string,
+): ParsedTimeEntry | null {
+  const lower = text.toLowerCase().trim()
+
+  // Extract duration: "1h30m", "2h", "45m", "30min"
+  const durationMatch = lower.match(/(\d+)h(?:\s*(\d+)\s*m(?:in)?)?|(\d+)\s*m(?:in)?\b/)
+  if (!durationMatch) return null
+  let hours: number, minutes: number
+  if (durationMatch[1] !== undefined) {
+    hours   = parseInt(durationMatch[1])
+    minutes = durationMatch[2] !== undefined ? parseInt(durationMatch[2]) : 0
+  } else {
+    hours   = 0
+    minutes = parseInt(durationMatch[3])
+  }
+  if (hours === 0 && minutes === 0) return null
+  const durationMs = (hours * 60 + minutes) * 60_000
+
+  // Extract date: "yesterday" → yesterday's ISO string, otherwise today
+  let date = todayDate
+  if (/yesterday/.test(lower)) {
+    const d = new Date(todayDate)
+    d.setDate(d.getDate() - 1)
+    date = d.toISOString().slice(0, 10)
+  }
+
+  // Remove duration and date words to find remaining tokens
+  const clean = lower
+    .replace(/\d+h\s*\d*m?(?:in)?/g, '')
+    .replace(/\d+\s*m(?:in)?/g, '')
+    .replace(/yesterday|today/g, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+
+  // Match category by longest common substring
+  let bestCat: { id: string; name: string } | null = null
+  let bestScore = 0
+  for (const cat of categories) {
+    const catLower = cat.name.toLowerCase()
+    const catWords = catLower.split(/\s+/)
+    const cleanWords = clean.split(/\s+/)
+    let score = 0
+    for (const cw of catWords) {
+      if (cleanWords.some(w => w.startsWith(cw) || cw.startsWith(w))) score += cw.length
+    }
+    if (score > bestScore) { bestScore = score; bestCat = cat }
+  }
+
+  if (!bestCat || bestScore === 0) return null
+
+  // Remaining words after removing category tokens = optional tag
+  const catTokens = bestCat.name.toLowerCase().split(/\s+/)
+  const tagWords = clean.split(/\s+/).filter(w => w && !catTokens.some(ct => w.startsWith(ct) || ct.startsWith(w)))
+  const tag = tagWords.join(' ') || undefined
+
+  return { categoryId: bestCat.id, date, startHour: 9, durationMs, tag }
+}
+
 // ─── callClaudeForParsing ─────────────────────────────────────────────────────
 
 export type ParsedTimeEntry = {
@@ -99,9 +162,10 @@ export type ParsedTimeEntry = {
 export async function callClaudeForParsing(
   text: string,
   categories: { id: string; name: string }[],
-  apiKey: string,
+  apiKey: string | null,
   todayDate: string
 ): Promise<ParsedTimeEntry | null> {
+  if (!apiKey) return parseTimeEntryLocally(text, categories, todayDate)
   // Serialize category data as JSON to prevent prompt injection via category names.
   const catJson = JSON.stringify(categories.map(c => ({ id: c.id, name: c.name })))
   const prompt = `You parse natural language time entries into JSON. Today is ${todayDate}.

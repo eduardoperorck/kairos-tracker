@@ -6,7 +6,7 @@ import { useI18n } from '../i18n'
 
 type Props = {
   categories: { id: string; name: string }[]
-  apiKey: string
+  apiKey: string | null
   onConfirm: (entry: ParsedTimeEntry) => void | Promise<void>
 }
 

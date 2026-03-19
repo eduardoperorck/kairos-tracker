@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { buildDigestPayload, formatDigestPrompt } from './digest'
+import { buildDigestPayload, formatDigestPrompt, parseTimeEntryLocally } from './digest'
 import type { Category, Session } from './timer'
 
 const today = '2026-03-15' // Sunday — part of week Mon 2026-03-09
@@ -84,5 +84,46 @@ describe('formatDigestPrompt', () => {
     const prompt = formatDigestPrompt(payload)
     expect(prompt).toContain('Study')
     expect(prompt).toContain('1.0h tracked')
+  })
+})
+
+describe('parseTimeEntryLocally', () => {
+  const cats = [
+    { id: 'w', name: 'Work' },
+    { id: 's', name: 'Study' },
+    { id: 'd', name: 'Deep Work' },
+  ]
+  const today = '2026-03-19'
+
+  it('parses "2h work"', () => {
+    const result = parseTimeEntryLocally('2h work', cats, today)
+    expect(result?.categoryId).toBe('w')
+    expect(result?.durationMs).toBe(7_200_000)
+  })
+
+  it('parses "45m study coding"', () => {
+    const result = parseTimeEntryLocally('45m study coding', cats, today)
+    expect(result?.categoryId).toBe('s')
+    expect(result?.durationMs).toBe(2_700_000)
+    expect(result?.tag).toBe('coding')
+  })
+
+  it('parses "1h30m work"', () => {
+    const result = parseTimeEntryLocally('1h30m work', cats, today)
+    expect(result?.durationMs).toBe(5_400_000)
+  })
+
+  it('parses "work 2h yesterday" and resolves date', () => {
+    const result = parseTimeEntryLocally('work 2h yesterday', cats, today)
+    expect(result?.categoryId).toBe('w')
+    expect(result?.date).toBe('2026-03-18')
+  })
+
+  it('returns null when no duration found', () => {
+    expect(parseTimeEntryLocally('just work', cats, today)).toBeNull()
+  })
+
+  it('returns null when no category matches', () => {
+    expect(parseTimeEntryLocally('2h gaming', cats, today)).toBeNull()
   })
 })
