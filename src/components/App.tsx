@@ -344,12 +344,14 @@ export function App({ storage }: Props) {
     await storage.clearActiveEntry()
 
     if (cat && entry) {
-      webhooks.onTimerStopped(cat.name, entry.startedAt, saved.endedAt, resolvedTag)
+      const todaySessions = useTimerStore.getState().sessions.filter(s => s.date === today)
+      const weeklyAfterStop = weeklyBefore + (saved.endedAt - entry.startedAt)
+      webhooks.onTimerStopped(cat.name, entry.startedAt, saved.endedAt, resolvedTag, todaySessions.length, weeklyAfterStop)
 
       // Notify on goal milestones (25 / 50 / 75 / 100 %)
       const goalMs = cat.weeklyGoalMs ?? 0
       if (goalMs > 0) {
-        const weeklyAfter = weeklyBefore + (saved.endedAt - entry.startedAt)
+        const weeklyAfter = weeklyAfterStop
         const pctBefore = (weeklyBefore / goalMs) * 100
         const pctAfter  = (weeklyAfter  / goalMs) * 100
         for (const milestone of [25, 50, 75] as const) {
@@ -359,7 +361,8 @@ export function App({ storage }: Props) {
         }
         if (pctBefore < 100 && pctAfter >= 100) {
           notifications.notifyGoalReached(cat.name, Math.round(goalMs / 3_600_000))
-          webhooks.onGoalReached(cat.name, goalMs, weeklyAfter)
+          const catWeeklyCount = useTimerStore.getState().sessions.filter(s => weekDates.includes(s.date) && s.categoryId === id).length
+          webhooks.onGoalReached(cat.name, goalMs, weeklyAfter, catWeeklyCount, streaks[id] ?? 0)
         }
       }
 
@@ -393,10 +396,12 @@ export function App({ storage }: Props) {
     const review = createEveningReview(today, mood, notes)
     await storage.saveEveningReview(review)
     setEveningReview(review)
-    // Daily review webhook
+    // Daily review webhook with category breakdown
     const totalMs = categories.reduce((sum, c) => sum + c.accumulatedMs, 0)
-    const topCat = categories.slice().sort((a, b) => b.accumulatedMs - a.accumulatedMs)[0]
-    webhooks.onDailyReview(mood, totalMs, topCat?.name ?? '')
+    const sorted = categories.slice().sort((a, b) => b.accumulatedMs - a.accumulatedMs)
+    const topCat = sorted[0]
+    const breakdown = sorted.filter(c => c.accumulatedMs > 0).map(c => ({ category: c.name, durationMs: c.accumulatedMs }))
+    webhooks.onDailyReview(mood, totalMs, topCat?.name ?? '', breakdown)
   }
 
   function handlePostpone() {

@@ -2,11 +2,34 @@
 
 export type WebhookEvent =
   | { type: 'timer.started'; category: string; startedAt: number }
-  | { type: 'timer.stopped'; category: string; startedAt: number; endedAt: number; durationMs: number; tag?: string }
-  | { type: 'goal.reached'; category: string; goalMs: number; weeklyMs: number }
+  | {
+      type: 'timer.stopped'
+      category: string
+      startedAt: number
+      endedAt: number
+      durationMs: number
+      tag?: string
+      // enrichment
+      dailySessionCount?: number  // total sessions today after this stop
+      weeklyMs?: number           // total ms this category has tracked this week
+    }
+  | {
+      type: 'goal.reached'
+      category: string
+      goalMs: number
+      weeklyMs: number
+      weeklySessionCount?: number
+      streakDays?: number
+    }
   | { type: 'streak.milestone'; category: string; streak: number; milestone: 7 | 14 | 30 | 100 }
   | { type: 'focus.break_skipped'; category: string; sessionMs: number }
-  | { type: 'daily.review'; mood: number; totalMs: number; topCategory: string }
+  | {
+      type: 'daily.review'
+      mood: number
+      totalMs: number
+      topCategory: string
+      categoryBreakdown?: { category: string; durationMs: number }[]
+    }
 
 function isSafeWebhookUrl(url: string): boolean {
   try {
@@ -48,12 +71,19 @@ export function useWebhooks(webhookUrl: string | null) {
     send({ type: 'timer.started', category, startedAt })
   }
 
-  function onTimerStopped(category: string, startedAt: number, endedAt: number, tag?: string) {
-    send({ type: 'timer.stopped', category, startedAt, endedAt, durationMs: endedAt - startedAt, tag })
+  function onTimerStopped(
+    category: string,
+    startedAt: number,
+    endedAt: number,
+    tag?: string,
+    dailySessionCount?: number,
+    weeklyMs?: number,
+  ) {
+    send({ type: 'timer.stopped', category, startedAt, endedAt, durationMs: endedAt - startedAt, tag, dailySessionCount, weeklyMs })
   }
 
-  function onGoalReached(category: string, goalMs: number, weeklyMs: number) {
-    send({ type: 'goal.reached', category, goalMs, weeklyMs })
+  function onGoalReached(category: string, goalMs: number, weeklyMs: number, weeklySessionCount?: number, streakDays?: number) {
+    send({ type: 'goal.reached', category, goalMs, weeklyMs, weeklySessionCount, streakDays })
   }
 
   function onStreakMilestone(category: string, streak: number) {
@@ -67,8 +97,8 @@ export function useWebhooks(webhookUrl: string | null) {
     send({ type: 'focus.break_skipped', category, sessionMs })
   }
 
-  function onDailyReview(mood: number, totalMs: number, topCategory: string) {
-    send({ type: 'daily.review', mood, totalMs, topCategory })
+  function onDailyReview(mood: number, totalMs: number, topCategory: string, categoryBreakdown?: { category: string; durationMs: number }[]) {
+    send({ type: 'daily.review', mood, totalMs, topCategory, categoryBreakdown })
   }
 
   return { onTimerStarted, onTimerStopped, onGoalReached, onStreakMilestone, onBreakSkipped, onDailyReview }
