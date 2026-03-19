@@ -64,6 +64,9 @@ export function App({ storage }: Props) {
   const [mvdItems, setMvdItems] = useState<MVDItem[]>(() => {
     try { return JSON.parse(localStorage.getItem('mvd_items') ?? '[]') } catch { return [] }
   })
+  // Daily recap banner — shown once per day on first open
+  const [dailyRecap, setDailyRecap] = useState<string | null>(null)
+
   // P1: passive window capture
   const { blocks: captureBlocks, unclassifiedProcess, suggestedCategoryId, recentTitles, assignProcess, dismissProcess } = usePassiveCapture()
 
@@ -245,6 +248,26 @@ export function App({ storage }: Props) {
     const active = state.categories.find(c => c.activeEntry !== null)
     if (active?.id !== suggestedCategoryId) handleStart(suggestedCategoryId)
   }, [suggestedCategoryId])
+
+  // ── Daily recap: show yesterday's summary on first open of the day ──────────
+  useEffect(() => {
+    if (historySessions.length === 0) return
+    const todayStr = toDateString(Date.now())
+    const lastOpen = localStorage.getItem('last_open_date')
+    localStorage.setItem('last_open_date', todayStr)
+    if (!lastOpen || lastOpen === todayStr) return
+
+    const yesterday = toDateString(Date.now() - 86_400_000)
+    const yesterdaySessions = historySessions.filter(s => s.date === yesterday)
+    if (yesterdaySessions.length === 0) return
+
+    const totalMs = yesterdaySessions.reduce((sum, s) => sum + (s.endedAt - s.startedAt), 0)
+    const catCount = new Set(yesterdaySessions.map(s => s.categoryId)).size
+    const totalH = Math.floor(totalMs / 3_600_000)
+    const totalM = Math.floor((totalMs % 3_600_000) / 60_000)
+    const timeStr = totalH > 0 ? `${totalH}h ${totalM}m` : `${totalM}m`
+    setDailyRecap(`Yesterday: ${timeStr} tracked across ${catCount} categor${catCount === 1 ? 'y' : 'ies'}.`)
+  }, [historySessions])
 
   // ── FocusGuard trigger ──────────────────────────────────────────────────────
   const now = Date.now()
@@ -452,6 +475,13 @@ export function App({ storage }: Props) {
       </header>
 
       <main className="mx-auto max-w-xl lg:max-w-3xl xl:max-w-5xl px-6 py-8">
+
+        {dailyRecap && view === 'tracker' && (
+          <div className="mb-4 flex items-center justify-between rounded-lg border border-blue-500/20 bg-blue-500/8 px-4 py-2 text-xs text-blue-300">
+            <span>📅 {dailyRecap}</span>
+            <button onClick={() => setDailyRecap(null)} className="ml-4 text-blue-400 hover:text-blue-100 transition-colors">✕</button>
+          </div>
+        )}
 
         {view === 'tracker' ? (
           <TrackerView
