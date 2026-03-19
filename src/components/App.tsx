@@ -30,6 +30,7 @@ import { useInputActivity } from '../hooks/useInputActivity'
 import { usePassiveCapture } from '../hooks/usePassiveCapture'
 import { useAutoBackup } from '../hooks/useAutoBackup'
 import { useLocalGitCommits } from '../hooks/useLocalGitCommits'
+import { useWindowBounds } from '../hooks/useWindowBounds'
 import { suggestSessionTag } from '../domain/sessionNaming'
 import type { Intention, EveningReview } from '../domain/intentions'
 import type { Storage } from '../persistence/storage'
@@ -91,6 +92,7 @@ export function App({ storage }: Props) {
   const inputActivity = useInputActivity()
   useAutoBackup(storage, historySessions, categories)
   const localGitCommits = useLocalGitCommits(recentTitles, workspaceRoot)
+  useWindowBounds()
 
   // ── Load settings on mount ──────────────────────────────────────────────────
   useEffect(() => {
