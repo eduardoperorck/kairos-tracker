@@ -117,6 +117,70 @@ function cmd_stop(db: Database.Database): void {
   console.log(`${GREEN}■ Stopped: ${BOLD}${active.name}${RESET}${GREEN} · ${formatDuration(elapsed)}${RESET}`)
 }
 
+function cmd_week(db: Database.Database): void {
+  const now = new Date()
+  // ISO week starts on Monday
+  const dayOfWeek = now.getDay() === 0 ? 6 : now.getDay() - 1
+  const monday = new Date(now)
+  monday.setDate(now.getDate() - dayOfWeek)
+  monday.setHours(0, 0, 0, 0)
+  const weekStart = monday.toISOString().slice(0, 10)
+
+  const rows = db.prepare(`
+    SELECT c.name, c.weekly_goal_ms, SUM(s.ended_at - s.started_at) as totalMs
+    FROM sessions s
+    JOIN categories c ON c.id = s.category_id
+    WHERE s.date >= ?
+    GROUP BY s.category_id
+    ORDER BY totalMs DESC
+  `).all(weekStart) as { name: string; weekly_goal_ms: number | null; totalMs: number }[]
+
+  if (rows.length === 0) {
+    console.log(`${DIM}No sessions this week.${RESET}`)
+    return
+  }
+
+  console.log(`\n${BOLD}This week — from ${weekStart}${RESET}`)
+  for (const r of rows) {
+    let goal = ''
+    if (r.weekly_goal_ms && r.weekly_goal_ms > 0) {
+      const pct = Math.round((r.totalMs / r.weekly_goal_ms) * 100)
+      const bar = pct >= 100 ? '████' : '▓'.repeat(Math.floor(pct / 25)) + '░'.repeat(4 - Math.floor(pct / 25))
+      goal = ` ${DIM}[${bar} ${pct}%]${RESET}`
+    }
+    console.log(`  ${r.name.padEnd(16)} ${GREEN}${formatDuration(r.totalMs)}${RESET}${goal}`)
+  }
+  const total = rows.reduce((sum, r) => sum + r.totalMs, 0)
+  console.log(`${'─'.repeat(26)}`)
+  console.log(`  ${'Total'.padEnd(16)} ${BOLD}${formatDuration(total)}${RESET}\n`)
+}
+
+function cmd_categories(db: Database.Database): void {
+  const rows = db.prepare(`
+    SELECT c.name, c.color, c.weekly_goal_ms,
+           COALESCE((
+             SELECT SUM(s.ended_at - s.started_at)
+             FROM sessions s
+             WHERE s.category_id = c.id AND s.date = ?
+           ), 0) as todayMs
+    FROM categories c
+    ORDER BY c.rowid
+  `).all(toDateString(Date.now())) as { name: string; color: string | null; weekly_goal_ms: number | null; todayMs: number }[]
+
+  if (rows.length === 0) {
+    console.log(`${DIM}No categories found.${RESET}`)
+    return
+  }
+
+  console.log(`\n${BOLD}Categories${RESET}`)
+  for (const r of rows) {
+    const goal = r.weekly_goal_ms ? ` ${DIM}(goal: ${formatDuration(r.weekly_goal_ms)}/wk)${RESET}` : ''
+    const today = r.todayMs > 0 ? ` ${GREEN}${formatDuration(r.todayMs)} today${RESET}` : ''
+    console.log(`  ${r.name}${goal}${today}`)
+  }
+  console.log()
+}
+
 function cmd_today(db: Database.Database): void {
   const date = toDateString(Date.now())
   const rows = db.prepare(`
@@ -162,10 +226,11 @@ if (os.platform() !== 'win32') {
   }
 }
 
-const db = new Database(dbPath, { readonly: command === 'status' || command === 'today' })
+const readonlyCommands = new Set(['status', 'today', 'week', 'categories'])
+const db = new Database(dbPath, { readonly: readonlyCommands.has(command) })
 
 // Ensure active_entries table exists (created by Tauri app migration v2, but guard here too)
-if (command !== 'status' && command !== 'today') {
+if (!readonlyCommands.has(command)) {
   db.prepare(`CREATE TABLE IF NOT EXISTS active_entries (
     category_id TEXT NOT NULL,
     started_at  INTEGER NOT NULL
@@ -186,6 +251,12 @@ switch (command) {
   case 'today':
     cmd_today(db)
     break
+  case 'week':
+    cmd_week(db)
+    break
+  case 'categories':
+    cmd_categories(db)
+    break
   default:
     console.log(`Time Tracker CLI
 
@@ -194,11 +265,14 @@ switch (command) {
     stop               Stop the active timer
     status             Show current timer status
     today              Show today's tracked time
+    week               Show this week's totals with goal progress
+    categories         List all categories with goals
 
   Examples:
     time-tracker start work
     time-tracker stop
     time-tracker today
+    time-tracker week
 `)
 }
 
