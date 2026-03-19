@@ -28,6 +28,7 @@ import { createIntention, createEveningReview } from '../domain/intentions'
 import { formatElapsed } from '../domain/format'
 import { useInputActivity } from '../hooks/useInputActivity'
 import { usePassiveCapture } from '../hooks/usePassiveCapture'
+import { useAutoBackup } from '../hooks/useAutoBackup'
 import { suggestSessionTag } from '../domain/sessionNaming'
 import type { Intention, EveningReview } from '../domain/intentions'
 import type { Storage } from '../persistence/storage'
@@ -83,6 +84,7 @@ export function App({ storage }: Props) {
   const webhooks = useWebhooks(webhookUrl)
   const notifications = useNotifications()
   const inputActivity = useInputActivity()
+  useAutoBackup(storage, historySessions, categories)
 
   // ── Load settings on mount ──────────────────────────────────────────────────
   useEffect(() => {
