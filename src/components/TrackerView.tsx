@@ -8,6 +8,7 @@ import { AttentionResidueBanner } from './AttentionResidueBanner'
 import { InputIntelligenceWidget } from './InputIntelligenceWidget'
 import { DeadTimeRecoveryWidget } from './DeadTimeRecoveryWidget'
 import { SessionNameSuggestion } from './SessionNameSuggestion'
+import { DailyFocusRing } from './DailyFocusRing'
 import { computeWeekMs } from '../domain/timer'
 import { getLastSessionDate, suggestWeeklyGoal } from '../domain/history'
 import type { Category, Session } from '../domain/timer'
@@ -212,13 +213,16 @@ export function TrackerView({
 
       {activeCategory && <EnergyScoreBanner sessions={historySessions} />}
 
-      {claudeApiKey && categories.length > 0 && (
-        <div className="mb-4">
-          <NLPTimeEntry
-            categories={categories}
-            apiKey={claudeApiKey}
-            onConfirm={onNLPConfirm}
-          />
+      {categories.length > 0 && (
+        <div className="mb-4 flex items-center gap-4">
+          <div className="flex-1">
+            <NLPTimeEntry
+              categories={categories}
+              apiKey={claudeApiKey}
+              onConfirm={onNLPConfirm}
+            />
+          </div>
+          <DailyFocusRing sessions={historySessions} />
         </div>
       )}
 
