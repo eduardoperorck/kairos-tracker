@@ -246,6 +246,49 @@ function loadUserRules(): WindowRule[] {
   try { return JSON.parse(localStorage.getItem(USER_RULES_KEY) ?? '[]') } catch { return [] }
 }
 
+function StartupSection() {
+  const [enabled, setEnabled] = useState(false)
+  const [status, setStatus] = useState<string | null>(null)
+
+  useEffect(() => {
+    void (async () => {
+      try {
+        const { invoke } = await import('@tauri-apps/api/core')
+        const on = await invoke<boolean>('get_startup_enabled')
+        setEnabled(on)
+      } catch { /* browser env */ }
+    })()
+  }, [])
+
+  async function handleToggle() {
+    try {
+      const { invoke } = await import('@tauri-apps/api/core')
+      const next = !enabled
+      await invoke('set_startup_enabled', { enabled: next })
+      setEnabled(next)
+      setStatus(next ? 'App will start on login.' : 'Removed from startup.')
+    } catch {
+      setStatus('Not available (Windows only).')
+    }
+  }
+
+  return (
+    <section>
+      <h3 className="mb-3 text-xs font-medium text-zinc-500 uppercase tracking-wider">Startup</h3>
+      <div className="flex items-center justify-between">
+        <span className="text-xs text-zinc-400">Launch Time Tracker when Windows starts</span>
+        <button
+          onClick={handleToggle}
+          className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${enabled ? 'bg-emerald-500' : 'bg-zinc-700'}`}
+        >
+          <span className={`inline-block h-3.5 w-3.5 rounded-full bg-white shadow transition-transform ${enabled ? 'translate-x-4.5' : 'translate-x-0.5'}`} />
+        </button>
+      </div>
+      {status && <p className="mt-2 text-xs text-zinc-500">{status}</p>}
+    </section>
+  )
+}
+
 function ProcessRulesSection({ categories }: { categories: Category[] }) {
   const [rules, setRules] = useState<WindowRule[]>(() => loadUserRules())
 
@@ -498,6 +541,9 @@ export function SettingsView({ categories, sessions, storage, webhookUrl, onWebh
           </button>
         </div>
       </section>
+
+      {/* Startup on login */}
+      <StartupSection />
 
       {/* Process Rules */}
       <ProcessRulesSection categories={categories} />

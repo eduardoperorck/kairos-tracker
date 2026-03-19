@@ -28,4 +28,4 @@ tauri-plugin-notification = "2"
 tauri-plugin-global-shortcut = "2"
 
 [target.'cfg(target_os = "windows")'.dependencies]
-winapi = { version = "0.3", features = ["winuser", "psapi", "processthreadsapi", "handleapi", "winnt", "sysinfoapi", "winver", "shellapi", "wingdi", "wincred"] }
+winapi = { version = "0.3", features = ["winuser", "psapi", "processthreadsapi", "handleapi", "winnt", "sysinfoapi", "winver", "shellapi", "wingdi", "wincred", "winreg", "libloaderapi"] }

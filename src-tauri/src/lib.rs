@@ -465,6 +465,74 @@ fn delete_screenshots_before(app: tauri::AppHandle, before_date: String) -> Resu
   Ok(())
 }
 
+/// Set or remove the app's Windows startup registry entry.
+/// Key: HKCU\Software\Microsoft\Windows\CurrentVersion\Run
+#[tauri::command]
+fn set_startup_enabled(enabled: bool) -> Result<(), String> {
+    #[cfg(target_os = "windows")]
+    {
+        use winapi::um::winreg::{RegOpenKeyExW, RegSetValueExW, RegDeleteValueW, HKEY_CURRENT_USER};
+        use winapi::um::winnt::{KEY_SET_VALUE, REG_SZ};
+        use winapi::shared::minwindef::HKEY;
+        let sub_key: Vec<u16> = "Software\\Microsoft\\Windows\\CurrentVersion\\Run\0"
+            .encode_utf16().collect();
+        let value_name: Vec<u16> = "TimeTracker\0".encode_utf16().collect();
+        unsafe {
+            let mut hkey: HKEY = std::ptr::null_mut();
+            let res = RegOpenKeyExW(HKEY_CURRENT_USER, sub_key.as_ptr(), 0, KEY_SET_VALUE, &mut hkey);
+            if res != 0 { return Err(format!("RegOpenKeyExW failed: {}", res)); }
+            if enabled {
+                // Get current exe path
+                let mut buf = vec![0u16; 1024];
+                let len = winapi::um::libloaderapi::GetModuleFileNameW(
+                    std::ptr::null_mut(), buf.as_mut_ptr(), buf.len() as u32
+                );
+                buf.truncate(len as usize);
+                let path_bytes = std::slice::from_raw_parts(
+                    buf.as_ptr() as *const u8, buf.len() * 2
+                );
+                let r = RegSetValueExW(hkey, value_name.as_ptr(), 0, REG_SZ,
+                    path_bytes.as_ptr(), path_bytes.len() as u32);
+                winapi::um::winreg::RegCloseKey(hkey);
+                if r != 0 { return Err(format!("RegSetValueExW failed: {}", r)); }
+            } else {
+                RegDeleteValueW(hkey, value_name.as_ptr());
+                winapi::um::winreg::RegCloseKey(hkey);
+            }
+        }
+        Ok(())
+    }
+    #[cfg(not(target_os = "windows"))]
+    { let _ = enabled; Err("Startup on login only supported on Windows".into()) }
+}
+
+/// Returns whether the startup registry entry exists.
+#[tauri::command]
+fn get_startup_enabled() -> bool {
+    #[cfg(target_os = "windows")]
+    {
+        use winapi::um::winreg::{RegOpenKeyExW, RegQueryValueExW, RegCloseKey, HKEY_CURRENT_USER};
+        use winapi::um::winnt::KEY_READ;
+        use winapi::shared::minwindef::HKEY;
+        let sub_key: Vec<u16> = "Software\\Microsoft\\Windows\\CurrentVersion\\Run\0"
+            .encode_utf16().collect();
+        let value_name: Vec<u16> = "TimeTracker\0".encode_utf16().collect();
+        unsafe {
+            let mut hkey: HKEY = std::ptr::null_mut();
+            if RegOpenKeyExW(HKEY_CURRENT_USER, sub_key.as_ptr(), 0, KEY_READ, &mut hkey) != 0 {
+                return false;
+            }
+            let exists = RegQueryValueExW(hkey, value_name.as_ptr(),
+                std::ptr::null_mut(), std::ptr::null_mut(),
+                std::ptr::null_mut(), std::ptr::null_mut()) == 0;
+            RegCloseKey(hkey);
+            exists
+        }
+    }
+    #[cfg(not(target_os = "windows"))]
+    { false }
+}
+
 /// Store a secret in the Windows Credential Manager (user-scoped, encrypted by OS).
 /// Falls back to returning an error on non-Windows platforms.
 #[tauri::command]
@@ -636,6 +704,8 @@ pub fn run() {
       save_secret,
       load_secret,
       delete_secret,
+      set_startup_enabled,
+      get_startup_enabled,
     ])
     .run(tauri::generate_context!())
     .expect("error while running tauri application");
