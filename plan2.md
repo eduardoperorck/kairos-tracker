@@ -74,7 +74,7 @@ Transform this from a "manual time tracker" into an **autonomous productivity la
 
 ## Batch 2 — UX Polish & Friction Reduction (MEDIUM IMPACT)
 
-### B1. Single-key category start from tracker view [ ]
+### B1. Single-key category start from tracker view [x]
 **Why:** Starting a timer requires click → CategoryItem → Start button. Two clicks minimum.
 **Action:** Keyboard shortcuts 1–9 for top 9 categories when no input is focused.
 **Impact:** <500ms to start a timer from keyboard.
@@ -99,17 +99,17 @@ Transform this from a "manual time tracker" into an **autonomous productivity la
 **Action:** Toggle between comfortable (current) and compact (2-line per category) view.
 **Impact:** Users with many categories see more at once.
 
-### B6. Daily recap banner on app open [ ]
+### B6. Daily recap banner on app open [x]
 **Why:** Users open the app in the morning not knowing yesterday's performance.
 **Action:** On first open of the day, show a one-line summary: "Yesterday: 4h 20m tracked across 3 categories."
 **Impact:** Reinforces habit loop and provides instant context.
 
-### B7. Window size persistence [ ]
+### B7. Window size persistence [x]
 **Why:** App always opens at default 800×600. Users resize and lose it on restart.
 **Action:** Save/restore window bounds to settings on resize/move.
 **Impact:** Zero friction — app is always where the user expects.
 
-### B8. Offline LLM fallback for NLP entry [ ]
+### B8. Offline LLM fallback for NLP entry [x]
 **Why:** NLPTimeEntry requires LLM setup. Without it, the input bar is non-functional.
 **Action:** If no LLM available, parse "2h work coding" with regex fallback (no AI needed).
 **Impact:** NLP time entry works for everyone out of the box.
@@ -128,12 +128,12 @@ Transform this from a "manual time tracker" into an **autonomous productivity la
 
 ## Batch 3 — Intelligence & Insights (AI-POWERED)
 
-### C1. Auto-generate weekly review draft [ ]
+### C1. Auto-generate weekly review draft [x]
 **Why:** Evening review is blank. Users don't know what to write.
 **Action:** Pre-fill evening review with session summary: "Spent 3h on Work (above goal), 1h on Study. Top app: VSCode."
 **Impact:** 10x more users complete evening reviews.
 
-### C2. Pattern-based focus recommendations without LLM [ ]
+### C2. Pattern-based focus recommendations without LLM [x]
 **Why:** RecommendationsView requires complex session history. Simple heuristics work for most.
 **Action:** "You focus best on Tuesday mornings (avg 2.4h). Consider protecting 9-11am."
 **Impact:** Actionable insights without AI setup.
@@ -148,7 +148,7 @@ Transform this from a "manual time tracker" into an **autonomous productivity la
 **Action:** After 7 days of passive capture, auto-identify "distraction apps" (apps with <5 min continuous blocks).
 **Impact:** Proactively surface what's fragmenting focus without any configuration.
 
-### C5. Daily focus score (0-100) on tracker [ ]
+### C5. Daily focus score (0-100) on tracker [x]
 **Why:** Users see DWS per session but no aggregate "how focused was today" score.
 **Action:** Compute composite score: (total deep work time + avg DWS + session count penalty). Show as ring gauge.
 **Impact:** Single motivating metric for the whole day.
@@ -169,7 +169,7 @@ Transform this from a "manual time tracker" into an **autonomous productivity la
 **Action:** On startup, check a GitHub releases API endpoint for a newer version. Show banner if available.
 **Note:** Requires publishing a release to GitHub.
 
-### D4. Windows startup integration [ ]
+### D4. Windows startup integration [x]
 **Why:** Users must remember to open the app. Power users want it always running.
 **Action:** Add "Start on login" toggle in Settings using Tauri's autostart plugin.
 **Impact:** Zero-friction daily activation.
@@ -200,7 +200,7 @@ Transform this from a "manual time tracker" into an **autonomous productivity la
 **Why:** Meetings are tracked manually. Calendar events could auto-create sessions.
 **Action:** OAuth + Calendar API to import today's events as sessions.
 
-### E5. Webhook payload enrichment [ ]
+### E5. Webhook payload enrichment [x]
 **Why:** Current webhooks are minimal. Integrators need more context.
 **Action:** Add DWS, session count, category breakdown to webhook payloads.
 
