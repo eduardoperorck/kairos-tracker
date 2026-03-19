@@ -28,6 +28,7 @@ import { createIntention, createEveningReview } from '../domain/intentions'
 import { formatElapsed } from '../domain/format'
 import { useInputActivity } from '../hooks/useInputActivity'
 import { usePassiveCapture } from '../hooks/usePassiveCapture'
+import { suggestSessionTag } from '../domain/sessionNaming'
 import type { Intention, EveningReview } from '../domain/intentions'
 import type { Storage } from '../persistence/storage'
 import { SettingKey } from '../persistence/storage'
@@ -61,7 +62,7 @@ export function App({ storage }: Props) {
     try { return JSON.parse(localStorage.getItem('mvd_items') ?? '[]') } catch { return [] }
   })
   // P1: passive window capture
-  const { blocks: captureBlocks, unclassifiedProcess, suggestedCategoryId, assignProcess, dismissProcess } = usePassiveCapture()
+  const { blocks: captureBlocks, unclassifiedProcess, suggestedCategoryId, recentTitles, assignProcess, dismissProcess } = usePassiveCapture()
 
   // N1: track last category switch
   const [lastSwitch, setLastSwitch] = useState<{ at: number; fromName: string } | null>(null)
@@ -294,14 +295,15 @@ export function App({ storage }: Props) {
     const cat = categories.find(c => c.id === id)
     const entry = cat?.activeEntry
     const weeklyBefore = computeWeekMs(sessions, id, weekDates)
-    stopTimer(id, tag)
+    const resolvedTag = tag ?? suggestSessionTag(recentTitles) ?? undefined
+    stopTimer(id, resolvedTag)
     const { sessions: s } = useTimerStore.getState()
     const saved = s[s.length - 1]
     await storage.saveSession(saved)
     await storage.clearActiveEntry()
 
     if (cat && entry) {
-      webhooks.onTimerStopped(cat.name, entry.startedAt, saved.endedAt, tag)
+      webhooks.onTimerStopped(cat.name, entry.startedAt, saved.endedAt, resolvedTag)
 
       // Notify if goal just reached
       const goalMs = cat.weeklyGoalMs ?? 0

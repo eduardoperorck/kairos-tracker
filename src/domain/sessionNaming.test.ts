@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { suggestSessionName, buildNamingPrompt } from './sessionNaming'
+import { suggestSessionName, suggestSessionTag, buildNamingPrompt } from './sessionNaming'
 
 describe('suggestSessionName', () => {
   it('returns "Session" for empty array', () => {
@@ -36,6 +36,40 @@ describe('suggestSessionName', () => {
 
   it('returns "Code Review" for GitHub title', () => {
     expect(suggestSessionName(['GitHub - Pull Request #123'])).toBe('Code Review')
+  })
+})
+
+describe('suggestSessionTag', () => {
+  it('returns null for empty titles', () => {
+    expect(suggestSessionTag([])).toBeNull()
+  })
+
+  it('extracts repo name from VSCode title', () => {
+    expect(suggestSessionTag(['timer.ts — productivity-challenge — Visual Studio Code'])).toBe('productivity-challenge')
+  })
+
+  it('extracts repo from Cursor title', () => {
+    expect(suggestSessionTag(['App.tsx — my-project — Cursor'])).toBe('my-project')
+  })
+
+  it('extracts ticket ID from Linear title', () => {
+    expect(suggestSessionTag(['PC-42 Fix timer stop bug — Linear'])).toBe('PC-42')
+  })
+
+  it('extracts Jira ticket ID', () => {
+    expect(suggestSessionTag(['PROJ-1234 Implement feature - Jira'])).toBe('PROJ-1234')
+  })
+
+  it('extracts PR number from GitHub title', () => {
+    expect(suggestSessionTag(['Fix timer #87 · Pull Request · anthropics/claude · GitHub'])).toBe('PR #87')
+  })
+
+  it('extracts repo from GitHub title', () => {
+    expect(suggestSessionTag(['anthropics/claude-code: Claude Code — GitHub'])).toBe('claude-code')
+  })
+
+  it('returns null when no pattern matches', () => {
+    expect(suggestSessionTag(['Some random window title'])).toBeNull()
   })
 })
 

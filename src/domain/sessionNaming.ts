@@ -49,6 +49,45 @@ export function suggestSessionName(titles: string[]): string {
   return mostFrequent
 }
 
+// Ordered extraction rules — first match wins.
+const TAG_EXTRACTORS: Array<{ pattern: RegExp; extract: (m: RegExpMatchArray) => string }> = [
+  // VSCode / Cursor: "filename — repo-name — Visual Studio Code"
+  {
+    pattern: /—\s+([^—]+?)\s+—\s+(?:Visual Studio Code|Cursor)\s*$/i,
+    extract: m => m[1].trim(),
+  },
+  // Linear: "PC-42 Issue title — Linear"
+  {
+    pattern: /^([A-Z]{1,8}-\d+)\s+.+—\s+Linear\s*$/i,
+    extract: m => m[1].toUpperCase(),
+  },
+  // Jira: "PROJ-1234 Title - Jira"
+  {
+    pattern: /^([A-Z]{1,8}-\d+)\s+/,
+    extract: m => m[1].toUpperCase(),
+  },
+  // GitHub PR: "title #N · Pull Request"
+  {
+    pattern: /#(\d+)\s*[·•]\s*Pull Request/i,
+    extract: m => `PR #${m[1]}`,
+  },
+  // GitHub repo: "org/repo-name: ..." or "org/repo-name — GitHub"
+  {
+    pattern: /[\w.-]+\/([\w.-]+?)(?::\s|—|\s*·)/,
+    extract: m => m[1].trim(),
+  },
+]
+
+export function suggestSessionTag(titles: string[]): string | null {
+  for (const title of titles) {
+    for (const { pattern, extract } of TAG_EXTRACTORS) {
+      const m = title.match(pattern)
+      if (m) return extract(m)
+    }
+  }
+  return null
+}
+
 export function buildNamingPrompt(titles: string[], categoryName: string): string {
   const uniqueTitles = [...new Set(titles)].slice(0, 10)
   return JSON.stringify({

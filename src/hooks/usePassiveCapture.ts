@@ -32,15 +32,19 @@ export type PassiveCaptureResult = {
   blocks: CaptureBlock[]
   unclassifiedProcess: UnclassifiedApp | null
   suggestedCategoryId: string | null   // non-null when active window matches an auto rule
+  recentTitles: string[]               // last MAX_TITLES unique window titles (newest first)
   assignProcess: (process: string, categoryId: string) => void
   dismissProcess: (process: string) => void
 }
+
+const MAX_TITLES = 20
 
 export function usePassiveCapture(): PassiveCaptureResult {
   const [blocks, setBlocks] = useState<CaptureBlock[]>([])
   const [userRules, setUserRules] = useState<WindowRule[]>(() => loadUserRules())
   const [pendingQueue, setPendingQueue] = useState<UnclassifiedApp[]>([])
   const [suggestedCategoryId, setSuggestedCategoryId] = useState<string | null>(null)
+  const [recentTitles, setRecentTitles] = useState<string[]>([])
   const eventsRef = useRef<RawPollEvent[]>([])
   const lastProcessRef = useRef<string | null>(null)
 
@@ -58,6 +62,14 @@ export function usePassiveCapture(): PassiveCaptureResult {
 
       eventsRef.current = [...eventsRef.current.slice(-MAX_EVENTS), event]
       setBlocks(aggregateBlocks(eventsRef.current, allRules))
+
+      // Keep a deduplicated list of recent titles (newest first)
+      if (win.title) {
+        setRecentTitles(prev => {
+          const without = prev.filter(t => t !== win.title)
+          return [win.title, ...without].slice(0, MAX_TITLES)
+        })
+      }
 
       const proc = win.process
 
@@ -117,5 +129,5 @@ export function usePassiveCapture(): PassiveCaptureResult {
     setPendingQueue(prev => prev.filter(a => a.process !== process))
   }, [])
 
-  return { blocks, unclassifiedProcess, suggestedCategoryId, assignProcess, dismissProcess }
+  return { blocks, unclassifiedProcess, suggestedCategoryId, recentTitles, assignProcess, dismissProcess }
 }
