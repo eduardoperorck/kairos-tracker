@@ -273,6 +273,11 @@ export function App({ storage }: Props) {
       const { sessions: s } = useTimerStore.getState()
       await storage.saveSession(s[s.length - 1])
     }
+    // Persist active timer so it survives crashes and is visible to CLI
+    const entry = useTimerStore.getState().categories.find(c => c.id === id)?.activeEntry
+    if (entry) {
+      await storage.setActiveEntry(id, entry.startedAt)
+    }
   }
 
   async function handleRename(id: string, newName: string) {
@@ -293,6 +298,7 @@ export function App({ storage }: Props) {
     const { sessions: s } = useTimerStore.getState()
     const saved = s[s.length - 1]
     await storage.saveSession(saved)
+    await storage.clearActiveEntry()
 
     if (cat && entry) {
       webhooks.onTimerStopped(cat.name, entry.startedAt, saved.endedAt, tag)

@@ -8,6 +8,7 @@ export function createInMemoryStorage(): Storage {
   const settings = new Map<string, string>()
   const intentionRows: Intention[] = []
   const eveningReviewRows: EveningReview[] = []
+  let activeEntry: { categoryId: string; startedAt: number } | null = null
 
   return {
     async loadCategories() {
@@ -81,6 +82,18 @@ export function createInMemoryStorage(): Storage {
       for (const s of incoming) {
         if (!sessionRows.find(r => r.id === s.id)) sessionRows.push(s)
       }
+    },
+
+    async setActiveEntry(categoryId, startedAt) {
+      activeEntry = { categoryId, startedAt }
+    },
+
+    async loadActiveEntry() {
+      return activeEntry
+    },
+
+    async clearActiveEntry() {
+      activeEntry = null
     },
   }
 }

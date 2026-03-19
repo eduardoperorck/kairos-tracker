@@ -125,6 +125,32 @@ export async function createTauriStorage(): Promise<Storage> {
       }))
     },
 
+    async setActiveEntry(categoryId: string, startedAt: number) {
+      await db.execute('DELETE FROM active_entries')
+      await db.execute(
+        'INSERT INTO active_entries (category_id, started_at) VALUES (?, ?)',
+        [categoryId, startedAt]
+      )
+    },
+
+    async loadActiveEntry() {
+      const rows = await db.select<{ category_id: string; started_at: number }[]>(
+        'SELECT category_id, started_at FROM active_entries LIMIT 1'
+      )
+      if (rows.length === 0) return null
+      // Stale guard: discard entries older than 16 hours (likely a crash)
+      const r = rows[0]
+      if (Date.now() - r.started_at > 16 * 3_600_000) {
+        await db.execute('DELETE FROM active_entries')
+        return null
+      }
+      return { categoryId: r.category_id, startedAt: r.started_at }
+    },
+
+    async clearActiveEntry() {
+      await db.execute('DELETE FROM active_entries')
+    },
+
     async setColor(id: string, color: string): Promise<void> {
       await db.execute('UPDATE categories SET color = ? WHERE id = ?', [color, id])
     },

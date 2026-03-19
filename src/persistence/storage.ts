@@ -31,11 +31,16 @@ export interface CategoryStorage {
   setColor(id: string, color: string): Promise<void>
 }
 
+export type ActiveEntry = { categoryId: string; startedAt: number }
+
 export interface SessionStorage {
   saveSession(session: Session): Promise<void>
   loadSessionsByDate(date: string): Promise<Session[]>
   loadSessionsSince(date: string): Promise<Session[]>
   importSessions(sessions: Session[]): Promise<void>
+  loadActiveEntry(): Promise<ActiveEntry | null>
+  setActiveEntry(categoryId: string, startedAt: number): Promise<void>
+  clearActiveEntry(): Promise<void>
 }
 
 export interface SettingsStorage {

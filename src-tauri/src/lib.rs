@@ -2,9 +2,26 @@ use tauri::Manager;
 use std::collections::HashMap;
 use std::sync::Mutex;
 
-/// Tauri application state — icon cache to avoid repeated GDI/SHGetFileInfo calls.
+/// Accumulated input activity since last drain — filled by background polling thread.
+#[derive(Default)]
+pub struct InputAccumulator {
+    pub keystrokes: u64,
+    pub mouse_clicks: u64,
+    pub mouse_distance_px: u64,
+    pub window_start_ms: u64,
+    #[cfg(target_os = "windows")]
+    pub last_cursor_x: i32,
+    #[cfg(target_os = "windows")]
+    pub last_cursor_y: i32,
+    /// Per-key "was down last poll" bitmask to detect edges (key-down transitions).
+    #[cfg(target_os = "windows")]
+    pub key_state: [bool; 256],
+}
+
+/// Tauri application state — icon cache + input accumulator.
 pub struct AppState {
     icon_cache: Mutex<HashMap<String, Option<String>>>,
+    input: Mutex<InputAccumulator>,
 }
 
 #[derive(serde::Serialize, Clone)]
@@ -381,9 +398,8 @@ fn list_screenshots(app: tauri::AppHandle, date: String) -> Vec<String> {
   paths
 }
 
-/// Returns keyboard and mouse activity stats for the last N seconds.
-/// On Windows, reads from a lightweight counter updated by a background poll.
-/// Falls back to zeros on unsupported platforms or when no data is available.
+/// Keyboard + mouse activity for the current measurement window.
+/// Populated by a background polling thread (GetAsyncKeyState + GetCursorPos).
 #[derive(serde::Serialize)]
 pub struct InputActivity {
   pub keystrokes: u64,
@@ -392,10 +408,34 @@ pub struct InputActivity {
   pub window_ms: u64,
 }
 
+/// Drain and return accumulated input events since the last call.
 #[tauri::command]
-fn get_input_activity() -> InputActivity {
-  // Stub: full implementation requires platform-level input hooks (e.g. SetWindowsHookEx).
-  // Returns zeros — callers should fall back to idle-seconds-based estimation.
+fn get_input_activity(state: tauri::State<AppState>) -> InputActivity {
+  let mut acc = state.input.lock().unwrap();
+  let now_ms = std::time::SystemTime::now()
+    .duration_since(std::time::UNIX_EPOCH)
+    .unwrap_or_default()
+    .as_millis() as u64;
+  let window_ms = if acc.window_start_ms > 0 {
+    now_ms.saturating_sub(acc.window_start_ms)
+  } else { 0 };
+  let result = InputActivity {
+    keystrokes:        acc.keystrokes,
+    mouse_clicks:      acc.mouse_clicks,
+    mouse_distance_px: acc.mouse_distance_px,
+    window_ms,
+  };
+  // Reset accumulator; set window_start so next call computes correct duration
+  acc.keystrokes        = 0;
+  acc.mouse_clicks      = 0;
+  acc.mouse_distance_px = 0;
+  acc.window_start_ms   = now_ms;
+  result
+}
+
+// DEAD CODE PLACEHOLDER — kept so old callers still compile
+#[allow(dead_code)]
+fn _get_input_activity_old() -> InputActivity {
   InputActivity {
     keystrokes: 0,
     mouse_clicks: 0,
@@ -491,8 +531,20 @@ fn delete_secret(service: String) -> Result<(), String> {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+  let now_ms = std::time::SystemTime::now()
+    .duration_since(std::time::UNIX_EPOCH)
+    .unwrap_or_default()
+    .as_millis() as u64;
+  let app_state = AppState {
+    icon_cache: Mutex::new(HashMap::new()),
+    input: Mutex::new(InputAccumulator {
+      window_start_ms: now_ms,
+      ..Default::default()
+    }),
+  };
+
   tauri::Builder::default()
-    .manage(AppState { icon_cache: Mutex::new(HashMap::new()) })
+    .manage(app_state)
     .plugin(tauri_plugin_sql::Builder::default().build())
     .plugin(tauri_plugin_notification::init())
     .setup(|app| {
@@ -503,6 +555,72 @@ pub fn run() {
             .build(),
         )?;
       }
+
+      // Background input-activity polling (Windows only).
+      // Polls GetAsyncKeyState for all 256 virtual keys and GetCursorPos
+      // every 100ms to accumulate keystrokes/mouse events into AppState.
+      #[cfg(target_os = "windows")]
+      {
+        let state = app.state::<AppState>();
+        let input_arc = state.input.lock().unwrap();
+        drop(input_arc); // just verifying access; arc is held via AppState
+        let handle = app.handle().clone();
+        std::thread::spawn(move || {
+          use winapi::um::winuser::{GetAsyncKeyState, GetCursorPos};
+          use winapi::shared::windef::POINT;
+          let mut key_state = [false; 256];
+          let mut last_x: i32 = 0;
+          let mut last_y: i32 = 0;
+          // Initialize cursor position
+          unsafe {
+            let mut pt = POINT { x: 0, y: 0 };
+            if GetCursorPos(&mut pt) != 0 { last_x = pt.x; last_y = pt.y; }
+          }
+          loop {
+            std::thread::sleep(std::time::Duration::from_millis(100));
+            let state = handle.state::<AppState>();
+            let mut acc = state.input.lock().unwrap();
+
+            unsafe {
+              // Count keystroke edges (key newly pressed since last poll)
+              // Scan printable keys + common non-printable (skip mouse buttons counted separately)
+              for vk in 8u8..=254u8 {
+                // Skip mouse buttons (1=LB, 2=RB, 4=MB)
+                if vk == 1 || vk == 2 || vk == 4 { continue; }
+                let s = GetAsyncKeyState(vk as i32);
+                let is_down = (s >> 15) != 0;
+                if is_down && !key_state[vk as usize] {
+                  acc.keystrokes += 1;
+                }
+                key_state[vk as usize] = is_down;
+              }
+
+              // Left + right mouse button clicks (new-press edges)
+              for &mb in &[1i32, 2i32] {
+                let s = GetAsyncKeyState(mb);
+                let vk = mb as usize;
+                let is_down = (s >> 15) != 0;
+                if is_down && !key_state[vk] {
+                  acc.mouse_clicks += 1;
+                }
+                key_state[vk] = is_down;
+              }
+
+              // Mouse travel distance
+              let mut pt = POINT { x: 0, y: 0 };
+              if GetCursorPos(&mut pt) != 0 {
+                let dx = (pt.x - last_x) as f64;
+                let dy = (pt.y - last_y) as f64;
+                let dist = (dx * dx + dy * dy).sqrt() as u64;
+                if dist > 0 { acc.mouse_distance_px += dist; }
+                last_x = pt.x;
+                last_y = pt.y;
+              }
+            }
+          }
+        });
+      }
+
       Ok(())
     })
     .invoke_handler(tauri::generate_handler![

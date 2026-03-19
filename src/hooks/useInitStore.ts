@@ -18,7 +18,8 @@ export function useInitStore(storage: Storage) {
     Promise.all([
       storage.loadCategories(),
       storage.loadSessionsSince(historyStart),
-    ]).then(([persisted, allSessions]) => {
+      storage.loadActiveEntry(),
+    ]).then(([persisted, allSessions, activeEntry]) => {
       const todaySessions = allSessions.filter(s => s.date === today)
       const weekSet = new Set(weekDates)
       const weekSessions = allSessions.filter(s => weekSet.has(s.date))
@@ -30,7 +31,10 @@ export function useInitStore(storage: Storage) {
             weeklyGoalMs: cat.weeklyGoalMs,
             color: cat.color,
             accumulatedMs: computeTodayMs(todaySessions, cat.id, today),
-            activeEntry: null as null,
+            // Restore active timer if this category was running when app last closed/crashed
+            activeEntry: activeEntry?.categoryId === cat.id
+              ? { startedAt: activeEntry.startedAt, endedAt: null }
+              : null,
           }))
         : undefined
 
