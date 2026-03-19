@@ -152,13 +152,22 @@ export function App({ storage }: Props) {
     setPostponeUsed(false)
   }, [activeCategory?.id])
 
-  // ── Long-session notification (every 2h without a break) ────────────────────
+  // ── Long-session notification — first at 90 min, then every 30 min ──────────
+  const lastLongSessionNotifRef = useRef<number>(0)
   useEffect(() => {
+    lastLongSessionNotifRef.current = 0 // reset when session starts
     if (!activeStartedAt || !activeCategory) return
     const id = setInterval(() => {
-      const elapsedH = (Date.now() - activeStartedAt) / 3_600_000
-      if (elapsedH >= 2) notifications.notifyLongSession(activeCategory.name, Math.round(elapsedH))
-    }, 30 * 60_000) // check every 30 min
+      const elapsedMin = (Date.now() - activeStartedAt) / 60_000
+      // Fire at 90 min, then every 30 min thereafter
+      if (elapsedMin >= 90) {
+        const threshold = Math.floor((elapsedMin - 90) / 30) * 30 + 90
+        if (threshold > lastLongSessionNotifRef.current) {
+          lastLongSessionNotifRef.current = threshold
+          notifications.notifyLongSession(activeCategory.name, Math.round(elapsedMin / 60 * 10) / 10)
+        }
+      }
+    }, 5 * 60_000) // check every 5 min
     return () => clearInterval(id)
   }, [activeStartedAt, activeCategory?.id])
 
