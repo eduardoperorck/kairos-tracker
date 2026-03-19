@@ -18,7 +18,6 @@ export const SettingKey = {
   ScreenshotsEnabled: 'screenshots_enabled',
   ScreenshotsRetention: 'screenshots_retention',
   SyncPath: 'sync_path',
-  AccountabilityPartner: 'accountability_partner',
 } as const
 
 export type SettingKeyType = typeof SettingKey[keyof typeof SettingKey]

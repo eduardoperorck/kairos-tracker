@@ -8,7 +8,6 @@ import { BurnoutRiskBadge } from './BurnoutRiskBadge'
 import { MakerManagerBadge } from './MakerManagerBadge'
 import { DistractionBudgetWidget } from './DistractionBudgetWidget'
 import { CodeQualityView } from './CodeQualityView'
-import { AccountabilityView } from './AccountabilityView'
 import { ScreenshotTimeline } from './ScreenshotTimeline'
 import { useGitHubActivity } from '../hooks/useGitHubActivity'
 import { computeHourDistribution, computeDayTotals, computeEnergyPattern, isFlowSession } from '../domain/history'
@@ -42,9 +41,6 @@ type Props = {
   gitCommits?: GitCommit[]
   // I6 — screenshots
   screenshotsEnabled?: boolean
-  // I7 — accountability
-  nickname?: string
-  weeklyGoalMs?: number
 }
 
 function offsetDate(today: string, offsetWeeks: number): string {
@@ -77,7 +73,7 @@ function heatColor(totalMs: number): string {
   return HEATMAP_COLORS[4]
 }
 
-export function StatsView({ stats, weeklyData, streaks, onBack, historySessions = [], categories = [], storage, onWrapped, githubUsername, captureBlocks = [], gitCommits = [], screenshotsEnabled = false, nickname = 'Anonymous', weeklyGoalMs = 0 }: Props) {
+export function StatsView({ stats, weeklyData, streaks, onBack, historySessions = [], categories = [], storage, onWrapped, githubUsername, captureBlocks = [], gitCommits = [], screenshotsEnabled = false }: Props) {
   const { t, lang } = useI18n()
   const [period, setPeriod] = useState<'today' | 'week' | 'patterns'>('today')
   const githubCommits = useGitHubActivity(githubUsername ?? null)
@@ -415,17 +411,6 @@ export function StatsView({ stats, weeklyData, streaks, onBack, historySessions 
               </h3>
               <ScreenshotTimeline date={today} enabled={screenshotsEnabled} />
             </div>
-          )}
-
-          {/* I7 Accountability Partner */}
-          {storage && (
-            <AccountabilityView
-              sessions={historySessions}
-              categories={categories}
-              storage={storage}
-              nickname={nickname}
-              weeklyGoalMs={weeklyGoalMs}
-            />
           )}
 
         </div>

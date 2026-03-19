@@ -481,7 +481,6 @@ export function App({ storage }: Props) {
             onBack={() => setView('tracker')}
             onWrapped={() => setWrappedOpen(true)}
             githubUsername={githubUsername}
-            nickname={githubUsername ?? 'Anonymous'}
             captureBlocks={captureBlocks}
             screenshotsEnabled={screenshotsEnabled}
           />
