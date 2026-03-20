@@ -183,7 +183,7 @@ describe('SettingsView — restore backup', () => {
     fireEvent.change(input)
 
     await waitFor(() => {
-      expect(screen.getByText(/Error: invalid backup file/i)).toBeTruthy()
+      expect(screen.getByText(/Invalid format/i)).toBeTruthy()
     })
   })
 })

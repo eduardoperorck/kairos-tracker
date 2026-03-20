@@ -84,11 +84,11 @@ describe('callLLM', () => {
   })
 
   it('throws when backend is none', async () => {
-    await expect(callLLM('test', 'none')).rejects.toThrow('No LLM backend available')
+    await expect(callLLM('test', 'none')).rejects.toThrow('llm.errorNoBackend')
   })
 
   it('throws when claude backend called without api key', async () => {
-    await expect(callLLM('test', 'claude')).rejects.toThrow('Claude API key required')
+    await expect(callLLM('test', 'claude')).rejects.toThrow('llm.errorKeyRequired')
   })
 
   it('throws on ollama non-ok response', async () => {
@@ -98,17 +98,17 @@ describe('callLLM', () => {
     await expect(callLLM('test', 'ollama')).rejects.toThrow('Ollama error: 500')
   })
 
-  it('throws descriptive error on claude 401', async () => {
+  it('throws i18n key on claude 401', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValueOnce(
       new Response('', { status: 401 })
     ))
-    await expect(callLLM('test', 'claude', { apiKey: 'bad-key' })).rejects.toThrow('Invalid API key.')
+    await expect(callLLM('test', 'claude', { apiKey: 'bad-key' })).rejects.toThrow('llm.errorInvalidKey')
   })
 
-  it('throws descriptive error on claude 429', async () => {
+  it('throws i18n key on claude 429', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValueOnce(
       new Response('', { status: 429 })
     ))
-    await expect(callLLM('test', 'claude', { apiKey: 'sk-ant-test' })).rejects.toThrow('Rate limited.')
+    await expect(callLLM('test', 'claude', { apiKey: 'sk-ant-test' })).rejects.toThrow('llm.errorRateLimit')
   })
 })

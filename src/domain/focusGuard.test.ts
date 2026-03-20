@@ -3,7 +3,6 @@ import {
   shouldBreakNow,
   getSessionMs,
   computeFocusStats,
-  getBreakSuggestions,
   PRESETS,
   type FocusGuardConfig,
 } from './focusGuard'
@@ -52,16 +51,6 @@ describe('PRESETS', () => {
   it('ultradian has 90 min focus and 20 min break', () => {
     expect(PRESETS.ultradian.focusMinutes).toBe(90)
     expect(PRESETS.ultradian.breakMinutes).toBe(20)
-  })
-})
-
-// ─── getBreakSuggestions ─────────────────────────────────────────────────────
-
-describe('getBreakSuggestions', () => {
-  it('returns a non-empty array of strings', () => {
-    const suggestions = getBreakSuggestions()
-    expect(suggestions.length).toBeGreaterThan(0)
-    expect(typeof suggestions[0]).toBe('string')
   })
 })
 

@@ -32,7 +32,7 @@ describe('computeBurnoutRisk', () => {
       })
     })
     const result = computeBurnoutRisk(lateSessions, today)
-    expect(result.signals.some(s => s.includes('late-night'))).toBe(true)
+    expect(result.signals).toContain('burnout.signal.lateNight')
     expect(result.score).toBeGreaterThan(0)
   })
 
@@ -43,7 +43,7 @@ describe('computeBurnoutRisk', () => {
       makeSession({ date: '2026-03-15' }),
     ]
     const result = computeBurnoutRisk(sessions, today)
-    expect(result.signals.some(s => s.includes('weekend'))).toBe(true)
+    expect(result.signals).toContain('burnout.signal.weekendBoth')
   })
 
   it('does NOT count a short Sunday session (5 min) as weekend work', () => {
@@ -54,7 +54,7 @@ describe('computeBurnoutRisk', () => {
       endedAt: new Date('2026-03-15T10:05:00Z').getTime(),
     })
     const result = computeBurnoutRisk([shortSession], today)
-    expect(result.signals.some(s => s.includes('weekend'))).toBe(false)
+    expect(result.signals).not.toContain('burnout.signal.weekendBoth')
   })
 
   it('counts a 30-min Sunday session as weekend work', () => {
@@ -73,7 +73,7 @@ describe('computeBurnoutRisk', () => {
     const noRisk = computeBurnoutRisk([], today, 'minimal')
     const highRisk = computeBurnoutRisk([], today, 'critical')
     expect(highRisk.score).toBeGreaterThan(noRisk.score)
-    expect(highRisk.signals.some(s => s.includes('focus debt'))).toBe(true)
+    expect(highRisk.signals).toContain('burnout.signal.focusDebt')
   })
 
   it('returns higher level when score is high', () => {
@@ -116,7 +116,7 @@ describe('computeBurnoutRisk', () => {
     })
     const result = computeBurnoutRisk([shortSession], today)
     // weekendDays === 0 → score += 0 from weekend signal
-    expect(result.signals.some(s => s.includes('weekend'))).toBe(false)
+    expect(result.signals).not.toContain('burnout.signal.weekendBoth')
     expect(result.score).toBe(0)
   })
 
@@ -131,7 +131,7 @@ describe('computeBurnoutRisk', () => {
       }))
     }
     const result = computeBurnoutRisk(sessions, today)
-    expect(result.signals.some(s => s.includes('No rest days'))).toBe(true)
+    expect(result.signals).toContain('burnout.signal.noRest')
   })
 
   it('does NOT trigger no-rest-days signal when all 7 days have only short sessions (< 20 min)', () => {
@@ -145,7 +145,7 @@ describe('computeBurnoutRisk', () => {
       }))
     }
     const result = computeBurnoutRisk(sessions, today)
-    expect(result.signals.some(s => s.includes('No rest days'))).toBe(false)
+    expect(result.signals).not.toContain('burnout.signal.noRest')
   })
 
   it('score does not exceed 100', () => {

@@ -2,23 +2,23 @@ import { describe, it, expect } from 'vitest'
 import { suggestSessionName, suggestSessionTag, buildNamingPrompt } from './sessionNaming'
 
 describe('suggestSessionName', () => {
-  it('returns "Session" for empty array', () => {
-    expect(suggestSessionName([])).toBe('Session')
+  it('returns session i18n key for empty array', () => {
+    expect(suggestSessionName([])).toBe('sessionTag.session')
   })
 
-  it('returns "Session" when all titles are ignored', () => {
-    expect(suggestSessionName(['', 'settings', 'desktop'])).toBe('Session')
+  it('returns session i18n key when all titles are ignored', () => {
+    expect(suggestSessionName(['', 'settings', 'desktop'])).toBe('sessionTag.session')
   })
 
-  it('returns "Coding" for VS Code title', () => {
-    expect(suggestSessionName(['Visual Studio Code - main.ts'])).toBe('Coding')
+  it('returns coding i18n key for VS Code title', () => {
+    expect(suggestSessionName(['Visual Studio Code - main.ts'])).toBe('sessionTag.coding')
   })
 
-  it('returns "Communication" for Slack title', () => {
-    expect(suggestSessionName(['Slack - #general'])).toBe('Communication')
+  it('returns communication i18n key for Slack title', () => {
+    expect(suggestSessionName(['Slack - #general'])).toBe('sessionTag.communication')
   })
 
-  it('returns most frequent title', () => {
+  it('returns most frequent title (raw, non-app)', () => {
     const titles = ['Report draft', 'Report draft', 'Report draft', 'settings']
     expect(suggestSessionName(titles)).toBe('Report draft')
   })
@@ -30,12 +30,12 @@ describe('suggestSessionName', () => {
     expect(result.endsWith('…')).toBe(true)
   })
 
-  it('returns "Design" for Figma title', () => {
-    expect(suggestSessionName(['Figma - Homepage design'])).toBe('Design')
+  it('returns design i18n key for Figma title', () => {
+    expect(suggestSessionName(['Figma - Homepage design'])).toBe('sessionTag.design')
   })
 
-  it('returns "Code Review" for GitHub title', () => {
-    expect(suggestSessionName(['GitHub - Pull Request #123'])).toBe('Code Review')
+  it('returns codeReview i18n key for GitHub title', () => {
+    expect(suggestSessionName(['GitHub - Pull Request #123'])).toBe('sessionTag.codeReview')
   })
 })
 

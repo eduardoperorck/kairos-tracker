@@ -60,19 +60,19 @@ describe('classifyDay', () => {
 })
 
 describe('getMakerManagerLabel', () => {
-  it('returns label for maker', () => {
-    expect(getMakerManagerLabel('maker')).toContain('Maker')
+  it('returns i18n key for maker', () => {
+    expect(getMakerManagerLabel('maker')).toBe('dayMode.maker')
   })
 
-  it('returns label for manager', () => {
-    expect(getMakerManagerLabel('manager')).toContain('Manager')
+  it('returns i18n key for manager', () => {
+    expect(getMakerManagerLabel('manager')).toBe('dayMode.manager')
   })
 
-  it('returns label for mixed', () => {
-    expect(getMakerManagerLabel('mixed')).toContain('Mixed')
+  it('returns i18n key for mixed', () => {
+    expect(getMakerManagerLabel('mixed')).toBe('dayMode.mixed')
   })
 
-  it('returns label for unknown', () => {
-    expect(getMakerManagerLabel('unknown')).toContain('Unknown')
+  it('returns i18n key for unknown', () => {
+    expect(getMakerManagerLabel('unknown')).toBe('dayMode.unknown')
   })
 })
