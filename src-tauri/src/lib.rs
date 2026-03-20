@@ -51,9 +51,11 @@ pub struct ActiveWindow {
 }
 
 /// Active browser tab context — posted by the browser extension (M-C1).
+/// Stores only the hostname (never the full URL) to avoid leaking auth tokens
+/// or sensitive query parameters. (Security fix: Fix-2)
 #[derive(serde::Serialize, serde::Deserialize, Clone)]
 pub struct BrowserContext {
-    pub url: String,
+    pub hostname: String,  // e.g. "github.com" — no path, no query, no fragment
     pub title: String,
 }
 
@@ -81,6 +83,56 @@ fn extract_json_str(json: &str, key: &str) -> Option<String> {
     Some(inner[..end].replace("\\\"", "\"").replace("\\\\", "\\"))
 }
 
+/// Fix-2: Extracts only the hostname from a URL, stripping path, query and fragment.
+/// Returns None for non-HTTP(S) URLs or malformed input.
+///
+/// Examples:
+///   "https://github.com/user/repo?token=abc" → Some("github.com")
+///   "chrome://newtab"                         → None
+///   "about:blank"                              → None
+fn extract_hostname(url: &str) -> Option<String> {
+    // Only handle http/https
+    let rest = url.strip_prefix("https://")
+        .or_else(|| url.strip_prefix("http://"))?;
+    // Drop path, query string and fragment
+    let host = rest
+        .split('/')
+        .next()?
+        .split('?')
+        .next()?
+        .split('#')
+        .next()?
+        .trim();
+    if host.is_empty() { return None; }
+    Some(host.to_ascii_lowercase())
+}
+
+/// Fix-1: Returns true when the HTTP Origin is from a trusted source.
+///
+/// Trusted sources:
+///   - No Origin header → local tool (VS Code extension via Node http, curl, etc.)
+///   - chrome-extension:// → our browser extension
+///   - moz-extension://    → Firefox variant
+///   - edge-extension://   → Edge variant
+///
+/// Any web page (http:// or https://) is rejected — prevents CSRF attacks
+/// where a malicious site POSTs fake context to manipulate the classifier.
+fn is_trusted_origin(request: &str) -> bool {
+    let origin_line = request
+        .lines()
+        .find(|l| l.to_ascii_lowercase().starts_with("origin:"));
+
+    match origin_line {
+        None => true, // No Origin header — local tool (VS Code, curl, etc.)
+        Some(line) => {
+            let origin = line[7..].trim().to_ascii_lowercase();
+            origin.starts_with("chrome-extension://")
+                || origin.starts_with("moz-extension://")
+                || origin.starts_with("edge-extension://")
+        }
+    }
+}
+
 /// Handles a single HTTP connection from the browser or VS Code extension.
 /// Expects POST /browser {url, title} or POST /editor {workspace, file, language}.
 /// Also handles CORS preflight (OPTIONS).
@@ -102,10 +154,10 @@ fn handle_http_connection(stream: std::net::TcpStream, handle: tauri::AppHandle)
     let method = parts.next().unwrap_or("");
     let path   = parts.next().unwrap_or("");
 
-    // CORS preflight
+    // CORS preflight — respond before origin check so the browser can send the real request
     if method == "OPTIONS" {
         let _ = stream.write_all(
-            b"HTTP/1.1 200 OK\r\n\
+            b"HTTP/1.1 204 No Content\r\n\
               Access-Control-Allow-Origin: *\r\n\
               Access-Control-Allow-Methods: POST, OPTIONS\r\n\
               Access-Control-Allow-Headers: Content-Type\r\n\
@@ -113,7 +165,18 @@ fn handle_http_connection(stream: std::net::TcpStream, handle: tauri::AppHandle)
         );
         return;
     }
+
     if method != "POST" { return; }
+
+    // Fix-1: Reject requests from untrusted origins (web pages)
+    if !is_trusted_origin(&request) {
+        let _ = stream.write_all(
+            b"HTTP/1.1 403 Forbidden\r\n\
+              Content-Type: text/plain\r\n\
+              Content-Length: 9\r\n\r\nForbidden"
+        );
+        return;
+    }
 
     let body = request.find("\r\n\r\n")
         .map(|pos| &request[pos + 4..])
@@ -123,11 +186,14 @@ fn handle_http_connection(stream: std::net::TcpStream, handle: tauri::AppHandle)
 
     match path {
         "/browser" => {
-            if let (Some(url), Some(title)) = (
+            // Fix-2: extract only hostname — never store the full URL
+            if let (Some(raw_url), Some(title)) = (
                 extract_json_str(body, "url"),
                 extract_json_str(body, "title"),
             ) {
-                *state.browser_ctx.lock().unwrap() = Some(BrowserContext { url, title });
+                if let Some(hostname) = extract_hostname(&raw_url) {
+                    *state.browser_ctx.lock().unwrap() = Some(BrowserContext { hostname, title });
+                }
             }
         }
         "/editor" => {

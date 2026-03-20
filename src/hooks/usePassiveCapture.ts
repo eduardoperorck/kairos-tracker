@@ -63,7 +63,7 @@ function trackCorrection(process: string, categoryId: string, threshold = 3): bo
 // ─── Tauri bridge ─────────────────────────────────────────────────────────────
 
 type TauriWindow = { title: string; process: string; display_name: string; icon_base64?: string }
-type TauriBrowserCtx = { url: string; title: string } | null
+type TauriBrowserCtx = { hostname: string; title: string } | null
 type TauriEditorCtx  = { workspace: string; file: string; language: string } | null
 
 async function fetchVisibleWindows(): Promise<TauriWindow[]> {
@@ -170,7 +170,7 @@ export function usePassiveCapture(
 
       // Domain: prefer extension URL > title extraction from primary > secondary windows
       const primaryDomain = browserCtx
-        ? (() => { try { return new URL(browserCtx.url).hostname } catch { return null } })()
+        ? browserCtx.hostname
         : extractDomainFromTitle(win.title, win.process)
 
       // M-C3: if primary has no domain, check secondary visible windows
