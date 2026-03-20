@@ -41,6 +41,7 @@ pub struct AppState {
     browser_ctx: Mutex<Option<BrowserContext>>,   // M-C1: latest URL from browser extension
     editor_ctx: Mutex<Option<EditorContext>>,      // M-C2: latest workspace from VS Code extension
     window_rules_json: Mutex<String>,             // M-BG2: user rules synced from frontend (JSON)
+    capture_buffer: Mutex<Vec<CaptureTickPayload>>, // M-BG3: ring buffer for webview wake-up recovery
 }
 
 #[derive(serde::Serialize, Clone)]
@@ -259,7 +260,9 @@ fn apply_rules_json(rules_json: &str, process: &str, title: &str) -> Option<Stri
         };
         if matches {
             if rule.mode == "ignore" { return None; }
-            if rule.mode == "auto"   { return rule.category_id.clone().flatten(); }
+            if rule.mode == "auto" {
+                if rule.category_id.is_some() { return rule.category_id.clone(); }
+            }
         }
     }
     None
@@ -705,10 +708,27 @@ fn get_git_log(repo_path: String, since_date: String) -> Vec<GitCommit> {
     }
 }
 
+/// M-BG3: Drain the in-memory capture buffer — called by the frontend on mount
+/// to replay events that arrived while the webview was initializing.
 #[tauri::command]
-fn update_tray_status(_category: String, _elapsed: String) {
-  // Update tray tooltip with active timer info
-  // Stub: full implementation requires tray handle
+fn drain_capture_buffer(state: tauri::State<AppState>) -> Vec<CaptureTickPayload> {
+  let mut buf = state.capture_buffer.lock().unwrap();
+  std::mem::take(&mut *buf)
+}
+
+#[tauri::command]
+fn update_tray_status(app: tauri::AppHandle, category: String, elapsed: String) {
+  #[cfg(target_os = "windows")]
+  if let Some(tray) = app.tray_by_id("kairos") {
+    let tooltip = if category.is_empty() {
+      "Kairos — idle".to_string()
+    } else {
+      format!("Kairos — {} ({})", category, elapsed)
+    };
+    let _ = tray.set_tooltip(Some(&tooltip));
+  }
+  #[cfg(not(target_os = "windows"))]
+  let _ = (app, category, elapsed);
 }
 
 #[tauri::command]
@@ -1013,6 +1033,7 @@ pub fn run() {
     browser_ctx: Mutex::new(None),
     editor_ctx: Mutex::new(None),
     window_rules_json: Mutex::new("[]".to_string()),
+    capture_buffer: Mutex::new(Vec::new()),
   };
 
   tauri::Builder::default()
@@ -1122,14 +1143,24 @@ pub fn run() {
               .unwrap_or_default()
               .as_millis() as i64;
 
-            let _ = bg_handle.emit("capture_tick", CaptureTickPayload {
+            let payload = CaptureTickPayload {
               ts,
               process,
               title,
               hostname,
               category_id,
               display_name,
-            });
+            };
+
+            // M-BG3: push to ring buffer (max 300 events) for wake-up recovery
+            {
+              let state = bg_handle.state::<AppState>();
+              let mut buf = state.capture_buffer.lock().unwrap();
+              if buf.len() >= 300 { buf.remove(0); }
+              buf.push(payload.clone());
+            }
+
+            let _ = bg_handle.emit("capture_tick", payload);
           }
         });
       }
@@ -1147,10 +1178,62 @@ pub fn run() {
         });
       }
 
+      // System tray — minimize-to-tray support.
+      #[cfg(target_os = "windows")]
+      {
+        use tauri::menu::{MenuBuilder, MenuItemBuilder};
+        use tauri::tray::TrayIconBuilder;
+
+        let show_item = MenuItemBuilder::with_id("show", "Show Kairos").build(app)?;
+        let quit_item = MenuItemBuilder::with_id("quit", "Quit").build(app)?;
+        let menu = MenuBuilder::new(app)
+          .items(&[&show_item, &quit_item])
+          .build()?;
+
+        let tray_handle = app.handle().clone();
+        TrayIconBuilder::with_id("kairos")
+          .tooltip("Kairos")
+          .menu(&menu)
+          .on_menu_event(move |_tray, event| match event.id().as_ref() {
+            "show" => {
+              if let Some(win) = tray_handle.get_webview_window("main") {
+                let _ = win.show();
+                let _ = win.set_focus();
+              }
+            }
+            "quit" => std::process::exit(0),
+            _ => {}
+          })
+          .on_tray_icon_event(|tray, event| {
+            if let tauri::tray::TrayIconEvent::DoubleClick { .. } = event {
+              let app = tray.app_handle();
+              if let Some(win) = app.get_webview_window("main") {
+                let _ = win.show();
+                let _ = win.set_focus();
+              }
+            }
+          })
+          .build(app)?;
+      }
+
+      // Minimize to tray on close (Windows only).
+      #[cfg(target_os = "windows")]
+      {
+        let main_win = app.get_webview_window("main").expect("no main window");
+        let win_for_close = main_win.clone();
+        main_win.on_window_event(move |event| {
+          if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+            api.prevent_close();
+            let _ = win_for_close.hide();
+          }
+        });
+      }
+
       Ok(())
     })
     .invoke_handler(tauri::generate_handler![
       update_tray_status,
+      drain_capture_buffer,
       sync_window_rules,
       get_idle_seconds,
       set_always_on_top,

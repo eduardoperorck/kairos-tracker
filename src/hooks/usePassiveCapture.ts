@@ -310,6 +310,13 @@ export function usePassiveCapture(
           void handleTick(ev.payload)
         })
         cleanup = unlisten
+
+        // M-BG3: replay events buffered while the webview was initializing
+        try {
+          const { invoke } = await import('@tauri-apps/api/core')
+          const buffered = await invoke<CaptureTickPayload[]>('drain_capture_buffer')
+          for (const p of buffered) void handleTick(p)
+        } catch { /* not in Tauri or buffer empty */ }
       } catch {
         // Not in Tauri — fall back to polling
         const id = setInterval(async () => {
