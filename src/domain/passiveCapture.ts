@@ -17,6 +17,7 @@ export type ActiveWindow = {
 export type CaptureBlock = {
   process: string
   title: string
+  domain: string | null
   startedAt: number
   endedAt: number
   categoryId: string | null
@@ -26,6 +27,7 @@ export type CaptureBlock = {
 
 export type RawPollEvent = {
   window: ActiveWindow
+  domain: string | null
   timestamp: number
 }
 
@@ -48,6 +50,7 @@ export function aggregateBlocks(events: RawPollEvent[], rules: WindowRule[]): Ca
   const blocks: CaptureBlock[] = []
   let currentProcess = events[0].window.process
   let currentTitle = events[0].window.title
+  let currentDomain = events[0].domain
   let blockStart = events[0].timestamp
   let lastTimestamp = events[0].timestamp
 
@@ -62,6 +65,7 @@ export function aggregateBlocks(events: RawPollEvent[], rules: WindowRule[]): Ca
         blocks.push({
           process: currentProcess,
           title: currentTitle,
+          domain: currentDomain,
           startedAt: blockStart,
           endedAt: lastTimestamp,
           categoryId: rule?.categoryId ?? null,
@@ -71,9 +75,11 @@ export function aggregateBlocks(events: RawPollEvent[], rules: WindowRule[]): Ca
       }
       currentProcess = ev.window.process
       currentTitle = ev.window.title
+      currentDomain = ev.domain
       blockStart = ev.timestamp
     } else {
       currentTitle = ev.window.title  // keep most-recent title within same process
+      if (ev.domain) currentDomain = ev.domain  // keep most-recent domain
     }
     lastTimestamp = ev.timestamp
   }
@@ -85,6 +91,7 @@ export function aggregateBlocks(events: RawPollEvent[], rules: WindowRule[]): Ca
     blocks.push({
       process: currentProcess,
       title: currentTitle,
+      domain: currentDomain,
       startedAt: blockStart,
       endedAt: lastTimestamp,
       categoryId: rule?.categoryId ?? null,
@@ -347,3 +354,40 @@ export const DEFAULT_DEV_RULES: WindowRule[] = [
   { id: 'calculator',  matchType: 'process', pattern: 'Calculator.exe',      categoryId: null, mode: 'ignore', enabled: true },
   { id: 'vlc',         matchType: 'process', pattern: 'vlc.exe',             categoryId: null, mode: 'ignore', enabled: true },
 ]
+
+// ─── M-B1: Default category slot suggestions ─────────────────────────────────
+//
+// Maps known app process/title IDs to a semantic category slot.
+// Used during onboarding to pre-assign the user's actual category IDs.
+// 'work' | 'study' | 'personal' are slot names — not actual categoryIds.
+
+export type CategorySlot = 'work' | 'study' | 'personal'
+
+/**
+ * Suggested category slot for each DEFAULT_DEV_RULES entry that has a clear
+ * default. Used by the onboarding wizard to pre-fill category assignments.
+ * Apps with ambiguous intent (browsers, terminals) are omitted.
+ */
+export const DEFAULT_CATEGORY_SUGGESTIONS: Record<string, CategorySlot> = {
+  // Editors & IDEs → work
+  vscode: 'work', 'vscode-ins': 'work', idea: 'work', webstorm: 'work',
+  pycharm: 'work', rider: 'work', clion: 'work', goland: 'work',
+  rustrover: 'work', sublimetext: 'work', notepadpp: 'work', vim: 'work',
+  neovim: 'work', cursor: 'work',
+  // Dev tools → work
+  postman: 'work', insomnia: 'work', dbeaver: 'work', tableplus: 'work',
+  docker: 'work', sourcetree: 'work', gitkraken: 'work',
+  // Communication → work (can be overridden by user)
+  zoom: 'work', teams: 'work', slack: 'work', outlook: 'work', thunderbird: 'work',
+  loom: 'work',
+  // Office & docs → work
+  word: 'work', excel: 'work', powerpoint: 'work', onenote: 'work',
+  // Design → work
+  figma: 'work', photoshop: 'work', illustrator: 'work', xd: 'work',
+  affinity: 'work', blender: 'work',
+  // Browser title hints → work
+  'github-title': 'work', 'gitlab-title': 'work', 'linear-title': 'work',
+  'jira-title': 'work', 'stackoverflow-title': 'study',
+  // Notes → study (Obsidian often used for study/PKM)
+  obsidian: 'study',
+}
