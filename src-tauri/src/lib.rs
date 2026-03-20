@@ -1,4 +1,4 @@
-use tauri::Manager;
+use tauri::{Emitter, Manager};
 use std::collections::HashMap;
 use std::sync::Mutex;
 
