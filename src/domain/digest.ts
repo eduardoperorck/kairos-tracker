@@ -228,9 +228,9 @@ Input to parse: ${JSON.stringify(text)}`
   })
 
   if (!response.ok) {
-    if (response.status === 401) throw new Error('Invalid API key. Check your settings.')
-    if (response.status === 429) throw new Error('Rate limited. Please wait before trying again.')
-    throw new Error('Unable to parse entry. Please try again.')
+    if (response.status === 401) throw new Error('llm.errorInvalidKey')
+    if (response.status === 429) throw new Error('llm.errorRateLimit')
+    throw new Error('llm.errorParseFailed')
   }
   const data = await response.json() as { content: { text: string }[] }
   const raw = data.content[0]?.text?.trim() ?? 'null'
@@ -275,9 +275,9 @@ export async function callDigestAPI(prompt: string, apiKey: string): Promise<str
   })
 
   if (!response.ok) {
-    if (response.status === 401) throw new Error('Invalid API key. Check your settings.')
-    if (response.status === 429) throw new Error('Rate limited. Please wait before trying again.')
-    throw new Error('Unable to generate digest. Please try again.')
+    if (response.status === 401) throw new Error('llm.errorInvalidKey')
+    if (response.status === 429) throw new Error('llm.errorRateLimit')
+    throw new Error('llm.errorDigestFailed')
   }
 
   const data = await response.json() as { content: { text: string }[] }

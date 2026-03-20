@@ -65,9 +65,9 @@ async function callClaude(prompt: string, apiKey: string): Promise<string> {
     }),
   })
   if (!r.ok) {
-    if (r.status === 401) throw new Error('Invalid API key.')
-    if (r.status === 429) throw new Error('Rate limited.')
-    throw new Error('AI service unavailable.')
+    if (r.status === 401) throw new Error('llm.errorInvalidKey')
+    if (r.status === 429) throw new Error('llm.errorRateLimit')
+    throw new Error('llm.errorUnavailable')
   }
   const data = await r.json() as { content: { text: string }[] }
   return data.content[0]?.text ?? ''
@@ -80,8 +80,8 @@ export async function callLLM(
 ): Promise<string> {
   if (backend === 'ollama') return callOllama(prompt, options.model)
   if (backend === 'claude') {
-    if (!options.apiKey) throw new Error('Claude API key required')
+    if (!options.apiKey) throw new Error('llm.errorKeyRequired')
     return callClaude(prompt, options.apiKey)
   }
-  throw new Error('No LLM backend available. Configure Ollama or Claude API key.')
+  throw new Error('llm.errorNoBackend')
 }

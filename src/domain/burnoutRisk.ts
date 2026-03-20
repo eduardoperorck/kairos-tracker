@@ -47,7 +47,7 @@ export function computeBurnoutRisk(
   // Late night sessions
   const lateNightCount = recentSessions.filter(s => isLateNight(s.startedAt)).length
   if (lateNightCount >= 3) {
-    signals.push('Frequent late-night sessions')
+    signals.push('burnout.signal.lateNight')
     score += 25
   } else if (lateNightCount >= 1) {
     score += 10
@@ -59,7 +59,7 @@ export function computeBurnoutRisk(
   )
   const weekendDays = new Set(weekendSessions.map(s => s.date)).size
   if (weekendDays >= 2) {
-    signals.push('Working both weekend days')
+    signals.push('burnout.signal.weekendBoth')
     score += 20
   } else if (weekendDays === 1) {
     score += 8
@@ -69,7 +69,7 @@ export function computeBurnoutRisk(
   const dailyMs = getDailyWorkMs(recentSessions, last7)
   const overworkDays = dailyMs.filter(ms => ms > 9 * 3_600_000).length
   if (overworkDays >= 3) {
-    signals.push('Repeated 9+ hour days')
+    signals.push('burnout.signal.overwork')
     score += 25
   } else if (overworkDays >= 1) {
     score += 10
@@ -77,7 +77,7 @@ export function computeBurnoutRisk(
 
   // Focus debt contribution
   if (weeklyFocusDebtLevel === 'critical') {
-    signals.push('Critical focus debt')
+    signals.push('burnout.signal.focusDebt')
     score += 30
   } else if (weeklyFocusDebtLevel === 'high') {
     score += 20
@@ -89,7 +89,7 @@ export function computeBurnoutRisk(
   const significantSessions = recentSessions.filter(s => (s.endedAt - s.startedAt) >= MIN_WORK_SESSION_MS)
   const daysWithSessions = new Set(significantSessions.map(s => s.date)).size
   if (daysWithSessions === 7) {
-    signals.push('No rest days in last 7 days')
+    signals.push('burnout.signal.noRest')
     score += 20
   }
 

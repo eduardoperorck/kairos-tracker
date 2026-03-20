@@ -11,16 +11,17 @@ const IGNORED_TITLES = new Set([
   'desktop',
 ])
 
+// Labels are i18n keys — components resolve via t(label as TKey)
 const APP_PATTERNS: Array<{ pattern: RegExp; label: string }> = [
-  { pattern: /visual studio code|vscode/i, label: 'Coding' },
-  { pattern: /github|gitlab|bitbucket/i, label: 'Code Review' },
-  { pattern: /figma|sketch|adobe xd/i, label: 'Design' },
-  { pattern: /slack|teams|discord|zoom|meet/i, label: 'Communication' },
-  { pattern: /notion|obsidian|roam|logseq/i, label: 'Notes' },
-  { pattern: /chrome|firefox|safari|edge/i, label: 'Browsing' },
-  { pattern: /terminal|cmd|powershell|bash/i, label: 'Terminal' },
-  { pattern: /word|excel|sheets|docs|spreadsheet/i, label: 'Documents' },
-  { pattern: /jira|linear|trello|asana/i, label: 'Project Management' },
+  { pattern: /visual studio code|vscode/i, label: 'sessionTag.coding' },
+  { pattern: /github|gitlab|bitbucket/i,   label: 'sessionTag.codeReview' },
+  { pattern: /figma|sketch|adobe xd/i,     label: 'sessionTag.design' },
+  { pattern: /slack|teams|discord|zoom|meet/i, label: 'sessionTag.communication' },
+  { pattern: /notion|obsidian|roam|logseq/i,   label: 'sessionTag.notes' },
+  { pattern: /chrome|firefox|safari|edge/i,    label: 'sessionTag.browsing' },
+  { pattern: /terminal|cmd|powershell|bash/i,  label: 'sessionTag.terminal' },
+  { pattern: /word|excel|sheets|docs|spreadsheet/i, label: 'sessionTag.documents' },
+  { pattern: /jira|linear|trello|asana/i,      label: 'sessionTag.projectManagement' },
 ]
 
 export function suggestSessionName(titles: string[]): string {
@@ -28,7 +29,7 @@ export function suggestSessionName(titles: string[]): string {
     .map(t => t.trim())
     .filter(t => !IGNORED_TITLES.has(t.toLowerCase()) && t.length > 0)
 
-  if (filtered.length === 0) return 'Session'
+  if (filtered.length === 0) return 'sessionTag.session'
 
   // Count frequency of each title
   const freq = new Map<string, number>()
@@ -88,12 +89,16 @@ export function suggestSessionTag(titles: string[]): string | null {
   return null
 }
 
-export function buildNamingPrompt(titles: string[], categoryName: string): string {
+export function buildNamingPrompt(titles: string[], categoryName: string, lang: 'en' | 'pt' = 'en'): string {
   const uniqueTitles = [...new Set(titles)].slice(0, 10)
   return JSON.stringify({
-    task: 'Suggest a short session name (2-4 words) based on these window titles',
+    task: lang === 'pt'
+      ? 'Sugira um nome curto (2-4 palavras) em português para esta sessão de trabalho'
+      : 'Suggest a short session name (2-4 words) based on these window titles',
     category: categoryName,
     titles: uniqueTitles,
-    constraint: 'Return only the name, nothing else.',
+    constraint: lang === 'pt'
+      ? 'Responda APENAS o nome, nada mais. Em português.'
+      : 'Return only the name, nothing else.',
   })
 }

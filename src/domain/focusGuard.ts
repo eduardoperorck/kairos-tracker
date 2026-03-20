@@ -21,33 +21,22 @@ export type FocusStats = {
 
 // ─── Presets ──────────────────────────────────────────────────────────────────
 
-export const PRESETS: Record<FocusGuardMode, { focusMinutes: number; breakMinutes: number; label: string; description: string }> = {
-  'pomodoro':  { focusMinutes: 25,  breakMinutes: 5,  label: 'Pomodoro',  description: '25 min focus · 5 min break' },
-  '52-17':     { focusMinutes: 52,  breakMinutes: 17, label: '52/17',     description: '52 min focus · 17 min break' },
-  'ultradian': { focusMinutes: 90,  breakMinutes: 20, label: 'Ultradian', description: '90 min focus · 20 min break' },
-  'custom':    { focusMinutes: 60,  breakMinutes: 10, label: 'Custom',    description: 'Your own interval' },
+export const PRESETS: Record<FocusGuardMode, { focusMinutes: number; breakMinutes: number }> = {
+  'pomodoro':  { focusMinutes: 25,  breakMinutes: 5  },
+  '52-17':     { focusMinutes: 52,  breakMinutes: 17 },
+  'ultradian': { focusMinutes: 90,  breakMinutes: 20 },
+  'custom':    { focusMinutes: 60,  breakMinutes: 10 },
 }
 
-export type FocusPreset = { name: string; workMs: number; breakMs: number }
+/** key: stable i18n identifier used for display; name: stored value (English) used for persistence. */
+export type FocusPreset = { key?: string; name: string; workMs: number; breakMs: number }
 
 export const FOCUS_PRESETS: FocusPreset[] = [
-  { name: 'Pomodoro', workMs: 25 * 60_000, breakMs: 5 * 60_000 },
-  { name: '52/17',    workMs: 52 * 60_000, breakMs: 17 * 60_000 },
-  { name: 'Ultradian', workMs: 90 * 60_000, breakMs: 20 * 60_000 },
-  { name: 'Custom',   workMs: 60 * 60_000, breakMs: 10 * 60_000 },
+  { key: 'pomodoro',  name: 'Pomodoro',  workMs: 25 * 60_000, breakMs: 5 * 60_000 },
+  { key: '52-17',     name: '52/17',     workMs: 52 * 60_000, breakMs: 17 * 60_000 },
+  { key: 'ultradian', name: 'Ultradian', workMs: 90 * 60_000, breakMs: 20 * 60_000 },
+  { key: 'custom',    name: 'Custom',    workMs: 60 * 60_000, breakMs: 10 * 60_000 },
 ]
-
-// ─── getBreakSuggestions ──────────────────────────────────────────────────────
-
-export function getBreakSuggestions(): string[] {
-  return [
-    'Take a short walk',
-    'Stretch your neck and shoulders',
-    'Drink some water',
-    'Look at something 20 feet away for 20 seconds',
-    'Do a few deep breaths',
-  ]
-}
 
 // ─── getSessionMs ─────────────────────────────────────────────────────────────
 

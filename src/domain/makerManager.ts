@@ -34,11 +34,12 @@ export function classifyDay(blocks: CaptureBlock[]): DayClassification {
   return { mode, makerPct, managerPct, totalBlocks: total, longestBlockMs }
 }
 
+/** Returns the i18n key for this mode — use t(getMakerManagerLabel(mode)) in components. */
 export function getMakerManagerLabel(mode: DayMode): string {
   switch (mode) {
-    case 'maker': return 'Maker Day — deep, uninterrupted work'
-    case 'manager': return 'Manager Day — many short tasks & meetings'
-    case 'mixed': return 'Mixed Day — blend of deep work and meetings'
-    default: return 'Unknown — not enough data'
+    case 'maker':   return 'dayMode.maker'
+    case 'manager': return 'dayMode.manager'
+    case 'mixed':   return 'dayMode.mixed'
+    default:        return 'dayMode.unknown'
   }
 }
