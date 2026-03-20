@@ -41,6 +41,7 @@ const en = {
   'history.empty': 'No history yet.',
   'history.importToggl': 'Import Toggl',
   'intentions.title': "Today's Intentions",
+  'intentions.subtitle': 'Broader goals and plans for today',
   'intentions.placeholder': 'What do you intend to accomplish today?',
   'intentions.add': 'Add',
   'intentions.empty': 'No intentions set yet.',
@@ -85,6 +86,8 @@ const en = {
   'energy.peakSub': 'Based on your last 30 days',
   'energy.valley': 'Valley hour — consider a lighter task',
   'energy.valleySub': 'Your focus tends to dip at this hour',
+  'energy.peakHoursInsight': 'Your peak hours are {hours}.',
+  'energy.noDataInsight': 'Not enough data to determine peak hours.',
   'palette.placeholder': 'Type a command...',
   'palette.noResults': 'No results.',
   'onboarding.step1Title': 'Track your time. Understand your energy.',
@@ -150,6 +153,11 @@ const en = {
   'burnout.moderate': 'Moderate',
   'burnout.high': 'High',
   'burnout.critical': 'Critical',
+  'burnout.signal.lateNight': 'Frequent late-night sessions',
+  'burnout.signal.weekendBoth': 'Working both weekend days',
+  'burnout.signal.overwork': 'Repeated 9+ hour days',
+  'burnout.signal.focusDebt': 'Critical focus debt',
+  'burnout.signal.noRest': 'No rest days in last 7 days',
   'maker.title': 'Maker vs. Manager',
   'maker.mode': 'Maker Day',
   'manager.mode': 'Manager Day',
@@ -169,6 +177,7 @@ const en = {
   'input.active': 'active',
   'input.intense': 'intense',
   'mvd.title': 'Minimum Viable Day',
+  'mvd.subtitle': '3 critical tasks that define a successful day',
   'mvd.achieved': 'Achieved!',
   'mvd.max': 'Max 3 must-dos per day.',
   'mvd.add': 'Add',
@@ -213,11 +222,11 @@ const en = {
   'tracker.whenever': 'whenever active?',
 
   // CategoryItem menu
-  'category.rename': '✏ Rename',
-  'category.tagLastSession': '🏷 Tag last session',
+  'category.rename': 'Rename',
+  'category.tagLastSession': 'Tag last session',
   'category.tagLastSessionLabel': 'Tag last session:',
   'category.color': 'Color',
-  'category.deleteIcon': '🗑 Delete',
+  'category.deleteIcon': 'Delete',
 
   // CategoryGoal
   'goal.setWeekly': 'Set weekly goal',
@@ -274,6 +283,8 @@ const en = {
   // App
   'app.goodMorning': 'Good morning — what are your priorities today?',
   'app.setIntentions': 'Set intentions →',
+  'app.yesterdayPrefix': 'Yesterday:',
+  'app.topPrefix': '· Top:',
 
   // IntentionsView
   'intentions.eveningOnly': 'Evening review available after 5pm.',
@@ -314,6 +325,16 @@ const en = {
   // StatsView
   'stats.showMorePatterns': 'Show more patterns ▾',
   'stats.showLess': 'Show less ▴',
+  'stats.passiveInactive': 'Passive capture is inactive — DWS, context switching, and peak hours require it.',
+  'stats.setupCapture': 'Set up passive capture',
+  'stats.trackingAccuracy': 'Tracking Accuracy',
+  'stats.captureCovers': '— Passive capture covers',
+  'stats.ofYourSessions': 'of your sessions.',
+  'stats.autoAccuracy': 'Auto Accuracy',
+  'stats.coverage': 'Coverage',
+  'stats.stability': 'Stability',
+  'stats.noiseRatio': 'Noise',
+  'stats.tasDescription': 'TAS measures how reliably the system classifies your time automatically. Higher is better.',
 
   // FocusLock label
   'focusLock.label': 'Focus Lock',
@@ -347,6 +368,86 @@ const en = {
   'error.detail': 'An error occurred and could not be recovered.',
   'error.reload': 'Reload app',
   'error.copyDetails': 'Copy error details',
+
+  // Dead time task suggestions (id-based keys)
+  'deadTime.task.review-inbox': 'Review inbox',
+  'deadTime.task.review-tasks': 'Review task backlog',
+  'deadTime.task.respond-messages': 'Respond to messages',
+  'deadTime.task.plan-tomorrow': 'Plan tomorrow',
+  'deadTime.task.capture-ideas': 'Capture ideas or notes',
+  'deadTime.task.stretch': 'Stand up and stretch',
+  'deadTime.task.review-docs': 'Read documentation',
+  'deadTime.task.code-review': 'Do a quick code review',
+
+  // Focus presets
+  'preset.pomodoro.label': 'Pomodoro',
+  'preset.pomodoro.desc': '25 min focus · 5 min break',
+  'preset.52-17.label': '52/17',
+  'preset.52-17.desc': '52 min focus · 17 min break',
+  'preset.ultradian.label': 'Ultradian',
+  'preset.ultradian.desc': '90 min focus · 20 min break',
+  'preset.custom.label': 'Custom',
+  'preset.custom.desc': 'Your own interval',
+
+  // Maker / Manager day mode
+  'dayMode.maker': 'Maker Day — deep, uninterrupted work',
+  'dayMode.manager': 'Manager Day — many short tasks & meetings',
+  'dayMode.mixed': 'Mixed Day — blend of deep work and meetings',
+  'dayMode.unknown': 'Unknown — not enough data',
+
+  // Command palette actions
+  'palette.logTime': 'Log time manually',
+  'palette.changePreset': 'Change focus preset',
+  'palette.weeklyDigest': 'View weekly digest',
+  'palette.setGoals': "Set today's goals",
+
+  // Notion integration
+  'notion.configRequired': 'Configure Notion token and database ID in Settings first.',
+  'notion.exporting': 'Exporting…',
+  'notion.exportProgress': 'Exporting… {done}/{total}',
+  'notion.exportSuccess': 'Exported {n} sessions to Notion.',
+  'notion.exportErrors': ' ({n} errors)',
+  'notion.exportFailed': 'Export failed. Check your token and database ID.',
+
+  // Calendar import
+  'calendar.noEvents': 'No importable events found.',
+  'calendar.importSuccess': 'Imported {n} calendar events as sessions.',
+  'calendar.importFallback': ' ({n} events used fallback category)',
+
+  // System tray
+  'tray.noTimer': 'No active timer',
+
+  // LLM / AI error codes (thrown as Error(key) by services/domain)
+  'llm.errorInvalidKey': 'Invalid API key. Check your settings.',
+  'llm.errorRateLimit': 'Rate limited. Please wait before trying again.',
+  'llm.errorUnavailable': 'AI service unavailable.',
+  'llm.errorNoBackend': 'No AI backend configured. Set up Ollama or Claude API key.',
+  'llm.errorKeyRequired': 'Claude API key required.',
+  'llm.errorParseFailed': 'Unable to parse entry. Please try again.',
+  'llm.errorDigestFailed': 'Unable to generate digest. Please try again.',
+  'llm.errorUnknown': 'An unexpected error occurred.',
+
+  // Backup / restore
+  'backup.errorInvalid': 'Error: invalid backup file.',
+  'backup.errorBadFormat': 'Invalid format',
+  'backup.errorBadSession': 'Invalid session',
+  'backup.errorBadFields': 'Invalid session fields',
+  'backup.restoreSuccess': 'Restored {n} sessions.',
+
+  // Language name (shown in settings accordion status)
+  'settings.langName': 'English',
+
+  // Session auto-naming labels (returned as i18n keys by suggestSessionName)
+  'sessionTag.coding': 'Coding',
+  'sessionTag.codeReview': 'Code Review',
+  'sessionTag.design': 'Design',
+  'sessionTag.communication': 'Communication',
+  'sessionTag.notes': 'Notes',
+  'sessionTag.browsing': 'Browsing',
+  'sessionTag.terminal': 'Terminal',
+  'sessionTag.documents': 'Documents',
+  'sessionTag.projectManagement': 'Project Management',
+  'sessionTag.session': 'Session',
 } as const
 
 const pt: { [K in keyof typeof en]: string } = {
@@ -388,6 +489,7 @@ const pt: { [K in keyof typeof en]: string } = {
   'history.empty': 'Sem histórico ainda.',
   'history.importToggl': 'Importar Toggl',
   'intentions.title': 'Intenções do Dia',
+  'intentions.subtitle': 'Intenções mais amplas e planejamento do dia',
   'intentions.placeholder': 'O que você pretende realizar hoje?',
   'intentions.add': 'Adicionar',
   'intentions.empty': 'Nenhuma intenção definida ainda.',
@@ -432,6 +534,8 @@ const pt: { [K in keyof typeof en]: string } = {
   'energy.peakSub': 'Baseado nos seus últimos 30 dias',
   'energy.valley': 'Hora de baixa — considere uma tarefa mais leve',
   'energy.valleySub': 'Seu foco tende a cair neste horário',
+  'energy.peakHoursInsight': 'Seus horários de pico são {hours}.',
+  'energy.noDataInsight': 'Dados insuficientes para determinar horários de pico.',
   'palette.placeholder': 'Digite um comando...',
   'palette.noResults': 'Sem resultados.',
   'onboarding.step1Title': 'Registre seu tempo. Entenda sua energia.',
@@ -497,6 +601,11 @@ const pt: { [K in keyof typeof en]: string } = {
   'burnout.moderate': 'Moderado',
   'burnout.high': 'Alto',
   'burnout.critical': 'Crítico',
+  'burnout.signal.lateNight': 'Sessões frequentes à noite',
+  'burnout.signal.weekendBoth': 'Trabalhando nos dois dias do fim de semana',
+  'burnout.signal.overwork': 'Dias repetidos com 9+ horas',
+  'burnout.signal.focusDebt': 'Dívida de foco crítica',
+  'burnout.signal.noRest': 'Sem dias de descanso nos últimos 7 dias',
   'maker.title': 'Maker vs. Manager',
   'maker.mode': 'Dia Maker',
   'manager.mode': 'Dia Manager',
@@ -516,6 +625,7 @@ const pt: { [K in keyof typeof en]: string } = {
   'input.active': 'ativo',
   'input.intense': 'intenso',
   'mvd.title': 'Dia Mínimo Viável',
+  'mvd.subtitle': '3 tarefas essenciais para o dia ser um sucesso',
   'mvd.achieved': 'Conquistado!',
   'mvd.max': 'Máx 3 tarefas obrigatórias por dia.',
   'mvd.add': 'Adicionar',
@@ -560,11 +670,11 @@ const pt: { [K in keyof typeof en]: string } = {
   'tracker.whenever': 'quando ativo?',
 
   // CategoryItem menu
-  'category.rename': '✏ Renomear',
-  'category.tagLastSession': '🏷 Marcar última sessão',
+  'category.rename': 'Renomear',
+  'category.tagLastSession': 'Marcar última sessão',
   'category.tagLastSessionLabel': 'Marcar última sessão:',
   'category.color': 'Cor',
-  'category.deleteIcon': '🗑 Excluir',
+  'category.deleteIcon': 'Excluir',
 
   // CategoryGoal
   'goal.setWeekly': 'Definir meta semanal',
@@ -621,6 +731,8 @@ const pt: { [K in keyof typeof en]: string } = {
   // App
   'app.goodMorning': 'Bom dia — quais são suas prioridades hoje?',
   'app.setIntentions': 'Definir intenções →',
+  'app.yesterdayPrefix': 'Ontem:',
+  'app.topPrefix': '· Topo:',
 
   // IntentionsView
   'intentions.eveningOnly': 'Revisão disponível após as 17h.',
@@ -661,6 +773,16 @@ const pt: { [K in keyof typeof en]: string } = {
   // StatsView
   'stats.showMorePatterns': 'Mostrar mais padrões ▾',
   'stats.showLess': 'Mostrar menos ▴',
+  'stats.passiveInactive': 'Captura passiva inativa — DWS, troca de contexto e horários de pico exigem ela.',
+  'stats.setupCapture': 'Configurar captura passiva',
+  'stats.trackingAccuracy': 'Precisão do Rastreamento',
+  'stats.captureCovers': '— Captura passiva cobre',
+  'stats.ofYourSessions': 'das suas sessões.',
+  'stats.autoAccuracy': 'Precisão Auto',
+  'stats.coverage': 'Cobertura',
+  'stats.stability': 'Estabilidade',
+  'stats.noiseRatio': 'Ruído',
+  'stats.tasDescription': 'O TAS mede com que confiabilidade o sistema classifica seu tempo automaticamente. Quanto maior, melhor.',
 
   // FocusLock label
   'focusLock.label': 'Focus Lock',
@@ -694,11 +816,96 @@ const pt: { [K in keyof typeof en]: string } = {
   'error.detail': 'Ocorreu um erro e não foi possível recuperar.',
   'error.reload': 'Recarregar app',
   'error.copyDetails': 'Copiar detalhes do erro',
+
+  // Dead time task suggestions
+  'deadTime.task.review-inbox': 'Revisar caixa de entrada',
+  'deadTime.task.review-tasks': 'Revisar tarefas pendentes',
+  'deadTime.task.respond-messages': 'Responder mensagens',
+  'deadTime.task.plan-tomorrow': 'Planejar amanhã',
+  'deadTime.task.capture-ideas': 'Capturar ideias ou notas',
+  'deadTime.task.stretch': 'Levantar e se alongar',
+  'deadTime.task.review-docs': 'Ler documentação',
+  'deadTime.task.code-review': 'Fazer uma revisão rápida de código',
+
+  // Focus presets
+  'preset.pomodoro.label': 'Pomodoro',
+  'preset.pomodoro.desc': '25 min foco · 5 min pausa',
+  'preset.52-17.label': '52/17',
+  'preset.52-17.desc': '52 min foco · 17 min pausa',
+  'preset.ultradian.label': 'Ultradiano',
+  'preset.ultradian.desc': '90 min foco · 20 min pausa',
+  'preset.custom.label': 'Personalizado',
+  'preset.custom.desc': 'Seu próprio intervalo',
+
+  // Maker / Manager day mode
+  'dayMode.maker': 'Dia Maker — trabalho profundo e sem interrupções',
+  'dayMode.manager': 'Dia Manager — várias tarefas curtas e reuniões',
+  'dayMode.mixed': 'Dia Misto — mix de trabalho profundo e reuniões',
+  'dayMode.unknown': 'Indefinido — dados insuficientes',
+
+  // Command palette actions
+  'palette.logTime': 'Registrar tempo manualmente',
+  'palette.changePreset': 'Mudar preset de foco',
+  'palette.weeklyDigest': 'Ver resumo semanal',
+  'palette.setGoals': 'Definir metas de hoje',
+
+  // Notion integration
+  'notion.configRequired': 'Configure o token e o ID do banco Notion nas Configurações.',
+  'notion.exporting': 'Exportando…',
+  'notion.exportProgress': 'Exportando… {done}/{total}',
+  'notion.exportSuccess': '{n} sessões exportadas para o Notion.',
+  'notion.exportErrors': ' ({n} erros)',
+  'notion.exportFailed': 'Falha na exportação. Verifique o token e o ID do banco.',
+
+  // Calendar import
+  'calendar.noEvents': 'Nenhum evento importável encontrado.',
+  'calendar.importSuccess': '{n} eventos de calendário importados como sessões.',
+  'calendar.importFallback': ' ({n} eventos usaram categoria padrão)',
+
+  // System tray
+  'tray.noTimer': 'Nenhum timer ativo',
+
+  // LLM / AI error codes
+  'llm.errorInvalidKey': 'Chave de API inválida. Verifique nas Configurações.',
+  'llm.errorRateLimit': 'Limite de requisições atingido. Aguarde antes de tentar novamente.',
+  'llm.errorUnavailable': 'Serviço de IA indisponível.',
+  'llm.errorNoBackend': 'Nenhum backend de IA configurado. Configure o Ollama ou a chave Claude.',
+  'llm.errorKeyRequired': 'Chave Claude API obrigatória.',
+  'llm.errorParseFailed': 'Não foi possível processar a entrada. Tente novamente.',
+  'llm.errorDigestFailed': 'Não foi possível gerar o resumo. Tente novamente.',
+  'llm.errorUnknown': 'Ocorreu um erro inesperado.',
+
+  // Backup / restore
+  'backup.errorInvalid': 'Erro: arquivo de backup inválido.',
+  'backup.errorBadFormat': 'Formato inválido',
+  'backup.errorBadSession': 'Sessão inválida',
+  'backup.errorBadFields': 'Campos de sessão inválidos',
+  'backup.restoreSuccess': '{n} sessões restauradas.',
+
+  // Language name
+  'settings.langName': 'Português',
+
+  // Session auto-naming labels
+  'sessionTag.coding': 'Programação',
+  'sessionTag.codeReview': 'Revisão de Código',
+  'sessionTag.design': 'Design',
+  'sessionTag.communication': 'Comunicação',
+  'sessionTag.notes': 'Anotações',
+  'sessionTag.browsing': 'Navegação',
+  'sessionTag.terminal': 'Terminal',
+  'sessionTag.documents': 'Documentos',
+  'sessionTag.projectManagement': 'Gestão de Projetos',
+  'sessionTag.session': 'Sessão',
 }
 
 export const translations: Record<Lang, { [K in keyof typeof en]: string }> = { en, pt }
 
 export type TKey = keyof typeof en
+
+/** Returns true if the string is a valid i18n key — useful for domain errors thrown as key strings. */
+export function isI18nKey(value: string): value is TKey {
+  return value in en
+}
 
 export const DAY_LABELS: Record<Lang, string[]> = {
   en: ['Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa', 'Su'],

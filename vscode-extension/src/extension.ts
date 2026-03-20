@@ -3,6 +3,9 @@ import { spawnSync } from 'child_process'
 
 let statusBar: vscode.StatusBarItem
 let pollInterval: NodeJS.Timeout | undefined
+let contextDebounce: NodeJS.Timeout | undefined
+
+const TRACKER_ENDPOINT = 'http://localhost:27183/editor'
 
 // Run CLI with a fixed argument array — never via a shell string to prevent injection.
 function runCli(args: string[]): string {
@@ -46,6 +49,46 @@ function updateStatusBar() {
   }
 }
 
+/**
+ * M-C2: Reports the current workspace and open file to the Tauri tracker.
+ * Debounced to 500 ms to avoid flooding on rapid file switches.
+ */
+function reportEditorContext() {
+  clearTimeout(contextDebounce)
+  contextDebounce = setTimeout(() => {
+    const workspaceName = vscode.workspace.workspaceFolders?.[0]?.name ?? ''
+    const editor = vscode.window.activeTextEditor
+    const filePath = editor?.document?.fileName ?? ''
+    const language = editor?.document?.languageId ?? ''
+
+    if (!workspaceName) return
+
+    // Extract just the filename, not the full path, to avoid leaking personal paths
+    const fileName = filePath.split(/[\\/]/).pop() ?? ''
+
+    const body = JSON.stringify({
+      workspace: workspaceName,
+      file: fileName,
+      language,
+    })
+
+    // Use Node.js http module — no external dependencies, works in VS Code extension host
+    try {
+      const http = require('http') as typeof import('http')
+      const req = http.request(
+        { hostname: '127.0.0.1', port: 27183, path: '/editor', method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body) } },
+        () => {} // ignore response
+      )
+      req.on('error', () => {}) // tracker not running — ignore silently
+      req.write(body)
+      req.end()
+    } catch {
+      // http module unavailable — ignore
+    }
+  }, 500)
+}
+
 export function activate(context: vscode.ExtensionContext) {
   statusBar = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 100)
   context.subscriptions.push(statusBar)
@@ -82,10 +125,19 @@ export function activate(context: vscode.ExtensionContext) {
     }),
   )
 
+  // M-C2: Report editor context on file changes and workspace changes
+  context.subscriptions.push(
+    vscode.window.onDidChangeActiveTextEditor(() => reportEditorContext()),
+    vscode.workspace.onDidChangeWorkspaceFolders(() => reportEditorContext()),
+  )
+
   // Poll every 30 seconds
   updateStatusBar()
   pollInterval = setInterval(updateStatusBar, 30_000)
   context.subscriptions.push({ dispose: () => clearInterval(pollInterval) })
+
+  // Report initial context
+  reportEditorContext()
 }
 
 function getCategoryNames(): string[] {
@@ -100,4 +152,5 @@ function getCategoryNames(): string[] {
 
 export function deactivate() {
   clearInterval(pollInterval)
+  clearTimeout(contextDebounce)
 }

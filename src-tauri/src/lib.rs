@@ -34,10 +34,12 @@ impl Default for InputAccumulator {
     }
 }
 
-/// Tauri application state — icon cache + input accumulator.
+/// Tauri application state — icon cache + input accumulator + context receivers.
 pub struct AppState {
     icon_cache: Mutex<HashMap<String, Option<String>>>,
     input: Mutex<InputAccumulator>,
+    browser_ctx: Mutex<Option<BrowserContext>>,  // M-C1: latest URL from browser extension
+    editor_ctx: Mutex<Option<EditorContext>>,     // M-C2: latest workspace from VS Code extension
 }
 
 #[derive(serde::Serialize, Clone)]
@@ -47,6 +49,108 @@ pub struct ActiveWindow {
     pub display_name: String,
     pub icon_base64: Option<String>,
 }
+
+/// Active browser tab context — posted by the browser extension (M-C1).
+#[derive(serde::Serialize, serde::Deserialize, Clone)]
+pub struct BrowserContext {
+    pub url: String,
+    pub title: String,
+}
+
+/// Active VS Code editor context — posted by the VS Code extension (M-C2).
+#[derive(serde::Serialize, serde::Deserialize, Clone)]
+pub struct EditorContext {
+    pub workspace: String,
+    pub file: String,
+    pub language: String,
+}
+
+// ─── M-C1/C2: HTTP context receiver ─────────────────────────────────────────
+
+/// Extracts the value of a JSON string field from a raw JSON body.
+/// Minimal implementation — avoids adding serde_json as a dependency.
+/// Only handles flat objects with string values.
+fn extract_json_str(json: &str, key: &str) -> Option<String> {
+    let pattern = format!("\"{}\"", key);
+    let pos = json.find(&pattern)?;
+    let after = json[pos + pattern.len()..].trim_start();
+    let after = after.strip_prefix(':')?.trim_start();
+    if !after.starts_with('"') { return None; }
+    let inner = &after[1..];
+    let end = inner.find('"')?;
+    Some(inner[..end].replace("\\\"", "\"").replace("\\\\", "\\"))
+}
+
+/// Handles a single HTTP connection from the browser or VS Code extension.
+/// Expects POST /browser {url, title} or POST /editor {workspace, file, language}.
+/// Also handles CORS preflight (OPTIONS).
+fn handle_http_connection(stream: std::net::TcpStream, handle: tauri::AppHandle) {
+    use std::io::{Read, Write};
+    let mut stream = stream;
+    stream.set_read_timeout(Some(std::time::Duration::from_millis(500))).ok();
+    stream.set_write_timeout(Some(std::time::Duration::from_millis(500))).ok();
+
+    let mut buf = [0u8; 8192];
+    let n = match stream.read(&mut buf) {
+        Ok(n) if n > 0 => n,
+        _ => return,
+    };
+    let request = String::from_utf8_lossy(&buf[..n]);
+
+    let first_line = request.lines().next().unwrap_or("");
+    let mut parts = first_line.split_whitespace();
+    let method = parts.next().unwrap_or("");
+    let path   = parts.next().unwrap_or("");
+
+    // CORS preflight
+    if method == "OPTIONS" {
+        let _ = stream.write_all(
+            b"HTTP/1.1 200 OK\r\n\
+              Access-Control-Allow-Origin: *\r\n\
+              Access-Control-Allow-Methods: POST, OPTIONS\r\n\
+              Access-Control-Allow-Headers: Content-Type\r\n\
+              Content-Length: 0\r\n\r\n"
+        );
+        return;
+    }
+    if method != "POST" { return; }
+
+    let body = request.find("\r\n\r\n")
+        .map(|pos| &request[pos + 4..])
+        .unwrap_or("");
+
+    let state = handle.state::<AppState>();
+
+    match path {
+        "/browser" => {
+            if let (Some(url), Some(title)) = (
+                extract_json_str(body, "url"),
+                extract_json_str(body, "title"),
+            ) {
+                *state.browser_ctx.lock().unwrap() = Some(BrowserContext { url, title });
+            }
+        }
+        "/editor" => {
+            if let Some(workspace) = extract_json_str(body, "workspace") {
+                *state.editor_ctx.lock().unwrap() = Some(EditorContext {
+                    workspace,
+                    file:     extract_json_str(body, "file").unwrap_or_default(),
+                    language: extract_json_str(body, "language").unwrap_or_default(),
+                });
+            }
+        }
+        _ => {}
+    }
+
+    let _ = stream.write_all(
+        b"HTTP/1.1 200 OK\r\n\
+          Access-Control-Allow-Origin: *\r\n\
+          Content-Type: text/plain\r\n\
+          Content-Length: 2\r\n\r\nOK"
+    );
+}
+
+// ─── Windows helpers ─────────────────────────────────────────────────────────
 
 /// Returns the exe name without the .exe extension.
 #[cfg(target_os = "windows")]
@@ -268,6 +372,132 @@ pub struct GitCommit {
     pub hash: String,
     pub timestamp: String,
     pub subject: String,
+}
+
+/// Returns the latest browser tab context posted by the browser extension (M-C1).
+#[tauri::command]
+fn get_browser_context(state: tauri::State<AppState>) -> Option<BrowserContext> {
+    state.browser_ctx.lock().unwrap().clone()
+}
+
+/// Returns the latest VS Code editor context posted by the extension (M-C2).
+#[tauri::command]
+fn get_editor_context(state: tauri::State<AppState>) -> Option<EditorContext> {
+    state.editor_ctx.lock().unwrap().clone()
+}
+
+// ─── M-C3: Multi-monitor visible window enumeration ───────────────────────────
+
+/// EnumWindows callback — collects HWNDs into a Vec passed via lparam.
+#[cfg(target_os = "windows")]
+unsafe extern "system" fn collect_hwnds(
+    hwnd: winapi::shared::windef::HWND,
+    lparam: winapi::shared::minwindef::LPARAM,
+) -> winapi::shared::minwindef::BOOL {
+    let list = &mut *(lparam as *mut Vec<winapi::shared::windef::HWND>);
+    list.push(hwnd);
+    1
+}
+
+/// Returns up to `max_count` visible, non-minimised top-level windows.
+/// The first entry is the foreground window; the rest are in Z-order.
+#[tauri::command]
+fn get_visible_windows(state: tauri::State<AppState>) -> Vec<ActiveWindow> {
+    #[cfg(target_os = "windows")]
+    {
+        use winapi::um::winuser::{
+            EnumWindows, GetForegroundWindow, GetWindowTextW, GetWindowThreadProcessId,
+            IsWindowVisible, IsIconic,
+        };
+        use winapi::um::processthreadsapi::OpenProcess;
+        use winapi::um::psapi::GetModuleFileNameExW;
+        use winapi::um::handleapi::CloseHandle;
+        use winapi::um::winnt::PROCESS_QUERY_INFORMATION;
+
+        const MAX: usize = 5;
+
+        unsafe {
+            // Collect all top-level HWNDs in Z-order
+            let mut hwnds: Vec<winapi::shared::windef::HWND> = Vec::with_capacity(64);
+            EnumWindows(
+                Some(collect_hwnds),
+                &mut hwnds as *mut _ as winapi::shared::minwindef::LPARAM,
+            );
+
+            // Put foreground window first
+            let fg = GetForegroundWindow();
+            if !fg.is_null() {
+                hwnds.retain(|&h| h != fg);
+                hwnds.insert(0, fg);
+            }
+
+            let mut results = Vec::with_capacity(MAX);
+
+            for hwnd in hwnds.iter().take(MAX * 4) {
+                if results.len() >= MAX { break; }
+                if IsWindowVisible(*hwnd) == 0 { continue; }
+                if IsIconic(*hwnd) != 0 { continue; }
+
+                let mut title_buf = [0u16; 512];
+                let title_len = GetWindowTextW(*hwnd, title_buf.as_mut_ptr(), title_buf.len() as i32);
+                if title_len == 0 { continue; }
+                let title = String::from_utf16_lossy(&title_buf[..title_len as usize]);
+
+                // Skip system/shell windows
+                let title_lc = title.to_ascii_lowercase();
+                if title_lc == "program manager"
+                    || title_lc.contains("windows taskbar")
+                    || title_lc.is_empty()
+                {
+                    continue;
+                }
+
+                let mut pid: u32 = 0;
+                GetWindowThreadProcessId(*hwnd, &mut pid);
+                let handle = OpenProcess(
+                    PROCESS_QUERY_INFORMATION | 0x0010,
+                    0,
+                    pid,
+                );
+                if handle.is_null() { continue; }
+
+                let mut path_buf = [0u16; 512];
+                let path_len = GetModuleFileNameExW(
+                    handle,
+                    std::ptr::null_mut(),
+                    path_buf.as_mut_ptr(),
+                    path_buf.len() as u32,
+                );
+                CloseHandle(handle);
+                if path_len == 0 { continue; }
+
+                let path_wide = &path_buf[..path_len as usize];
+                let process = String::from_utf16_lossy(path_wide)
+                    .split('\\').last().unwrap_or("unknown").to_string();
+                let display_name = get_display_name(path_wide);
+
+                let icon_base64 = {
+                    let mut cache = state.icon_cache.lock().unwrap();
+                    if let Some(cached) = cache.get(&process) {
+                        cached.clone()
+                    } else {
+                        let icon = extract_icon_base64(path_wide);
+                        cache.insert(process.clone(), icon.clone());
+                        icon
+                    }
+                };
+
+                results.push(ActiveWindow { title, process, display_name, icon_base64 });
+            }
+
+            results
+        }
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        let _ = state;
+        vec![]
+    }
 }
 
 #[tauri::command]
@@ -625,6 +855,8 @@ pub fn run() {
       window_start_ms: now_ms,
       ..Default::default()
     }),
+    browser_ctx: Mutex::new(None),
+    editor_ctx: Mutex::new(None),
   };
 
   tauri::Builder::default()
@@ -705,6 +937,19 @@ pub fn run() {
         });
       }
 
+      // M-C1/C2: HTTP context receiver — accepts browser URL and VS Code workspace.
+      // Listens on 127.0.0.1:27183 for POST /browser and POST /editor.
+      {
+        let http_handle = app.handle().clone();
+        std::thread::spawn(move || {
+          let Ok(listener) = std::net::TcpListener::bind("127.0.0.1:27183") else { return };
+          for stream in listener.incoming().flatten() {
+            let h = http_handle.clone();
+            std::thread::spawn(move || handle_http_connection(stream, h));
+          }
+        });
+      }
+
       Ok(())
     })
     .invoke_handler(tauri::generate_handler![
@@ -712,6 +957,9 @@ pub fn run() {
       get_idle_seconds,
       set_always_on_top,
       get_active_window,
+      get_visible_windows,
+      get_browser_context,
+      get_editor_context,
       get_git_log,
       capture_screenshot,
       list_screenshots,

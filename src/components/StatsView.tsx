@@ -13,6 +13,7 @@ import { ScreenshotTimeline } from './ScreenshotTimeline'
 import { useGitHubActivity } from '../hooks/useGitHubActivity'
 import { computeHourDistribution, computeDayTotals, computeEnergyPattern, isFlowSession } from '../domain/history'
 import { computeCaptureRatio, computeTrackingAccuracy } from '../domain/passiveCapture'
+import { TrackingAccuracyWidget } from './TrackingAccuracyWidget'
 import { computeWeekMs, getWeekDates, toDateString } from '../domain/timer'
 import type { StatEntry } from '../domain/stats'
 import type { Session, Category } from '../domain/timer'
@@ -175,7 +176,7 @@ export function StatsView({ stats, weeklyData, streaks, onBack, historySessions 
       {showCaptureNotice && (
         <div className="flex items-start gap-3 rounded-lg border border-amber-500/20 bg-amber-500/5 px-4 py-3 text-xs text-amber-400">
           <span className="flex-1">
-            Passive capture is inactive — DWS, context switching, and peak hours require it.
+            {t('stats.passiveInactive')}
           </span>
           <button
             onClick={() => {
@@ -191,19 +192,13 @@ export function StatsView({ stats, weeklyData, streaks, onBack, historySessions 
             onClick={onBack}
             className="shrink-0 underline hover:text-amber-300 transition-colors"
           >
-            Set up passive capture
+            {t('stats.setupCapture')}
           </button>
         </div>
       )}
 
-      {/* M90: Tracking Accuracy Score */}
-      {showTAS && (
-        <div className="text-xs text-zinc-500">
-          Tracking Accuracy: <span className="font-semibold text-zinc-300">{tas.weeklyTAS}</span>
-          {' — '}Passive capture covers{' '}
-          <span className="text-zinc-300">{Math.round(tas.coverage)}%</span> of your sessions.
-        </div>
-      )}
+      {/* M-C4: Tracking Accuracy Widget */}
+      {showTAS && <TrackingAccuracyWidget tas={tas} />}
 
       {isEmpty ? (
         <p className="mt-16 text-center text-sm text-zinc-700">{t('stats.empty')}</p>
@@ -336,7 +331,11 @@ export function StatsView({ stats, weeklyData, streaks, onBack, historySessions 
                       </div>
                     ))}
                   </div>
-                  {energy.insight && <p className="mt-2 text-xs text-zinc-600 italic">{energy.insight}</p>}
+                  {energy.peakHours.length > 0 && (
+                    <p className="mt-2 text-xs text-zinc-600 italic">
+                      {t('energy.peakHoursInsight').replace('{hours}', energy.peakHours.map(h => `${h}h`).join(', '))}
+                    </p>
+                  )}
                 </div>
 
                 {/* 2. 13-week heatmap */}

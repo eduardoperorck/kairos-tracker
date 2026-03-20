@@ -63,11 +63,31 @@ function trackCorrection(process: string, categoryId: string, threshold = 3): bo
 // ─── Tauri bridge ─────────────────────────────────────────────────────────────
 
 type TauriWindow = { title: string; process: string; display_name: string; icon_base64?: string }
+type TauriBrowserCtx = { url: string; title: string } | null
+type TauriEditorCtx  = { workspace: string; file: string; language: string } | null
 
-async function fetchActiveWindow(): Promise<TauriWindow | null> {
+async function fetchVisibleWindows(): Promise<TauriWindow[]> {
   try {
     const { invoke } = await import('@tauri-apps/api/core')
-    return await invoke<TauriWindow | null>('get_active_window')
+    const wins = await invoke<TauriWindow[]>('get_visible_windows')
+    if (wins && wins.length > 0) return wins
+    // Fallback to single window if visible-windows returns empty
+    const single = await invoke<TauriWindow | null>('get_active_window')
+    return single ? [single] : []
+  } catch { return [] }
+}
+
+async function fetchBrowserContext(): Promise<TauriBrowserCtx> {
+  try {
+    const { invoke } = await import('@tauri-apps/api/core')
+    return await invoke<TauriBrowserCtx>('get_browser_context')
+  } catch { return null }
+}
+
+async function fetchEditorContext(): Promise<TauriEditorCtx> {
+  try {
+    const { invoke } = await import('@tauri-apps/api/core')
+    return await invoke<TauriEditorCtx>('get_editor_context')
   } catch { return null }
 }
 
@@ -139,11 +159,29 @@ export function usePassiveCapture(
 
   useEffect(() => {
     const interval = setInterval(async () => {
-      const win = await fetchActiveWindow()
+      // M-C3: fetch all visible windows (foreground first)
+      const [win, ...secondaryWins] = await fetchVisibleWindows()
       if (!win) return
 
-      const domain = extractDomainFromTitle(win.title, win.process)
-      const vsWorkspace = extractVsCodeWorkspace(win.title, win.process)
+      // M-C1: browser context from extension (highest-fidelity URL signal)
+      const browserCtx = await fetchBrowserContext()
+      // M-C2: editor context from VS Code extension
+      const editorCtx = await fetchEditorContext()
+
+      // Domain: prefer extension URL > title extraction from primary > secondary windows
+      const primaryDomain = browserCtx
+        ? (() => { try { return new URL(browserCtx.url).hostname } catch { return null } })()
+        : extractDomainFromTitle(win.title, win.process)
+
+      // M-C3: if primary has no domain, check secondary visible windows
+      const secondaryDomain = primaryDomain === null
+        ? secondaryWins.map(w => extractDomainFromTitle(w.title, w.process)).find(d => d !== null) ?? null
+        : null
+
+      const domain = primaryDomain ?? secondaryDomain
+
+      // VS Code workspace: prefer extension IPC context > title parsing
+      const vsWorkspace = editorCtx?.workspace ?? extractVsCodeWorkspace(win.title, win.process)
 
       const event: RawPollEvent = {
         window: { title: win.title, process: win.process, timestamp: Date.now() },
@@ -173,15 +211,14 @@ export function usePassiveCapture(
         }
       }
 
-      // Recalculate when process changes
-      if (proc !== lastProcessRef.current) {
-        lastProcessRef.current = proc
+      // Recalculate when process or domain changes (domain can change without process change in browser)
+      const contextKey = `${proc}::${domain ?? ''}`
+      if (contextKey !== lastProcessRef.current) {
+        lastProcessRef.current = contextKey
 
-        // M-B4: momentum bonus — recently active category gets +0.10 for 30 min
         const momentum = momentumRef.current
         const momentumActive = momentum && Date.now() - momentum.changedAt < MOMENTUM_WINDOW_MS
 
-        // Determine inputRate from recent poll data
         const ia = inputActivityRef.current
         const inputRate: SignalSet['inputRate'] =
           ia ? (ia.keystrokes > 0 || ia.mouseClicks > 0 ? 'high' : 'none') : 'none'
@@ -201,7 +238,7 @@ export function usePassiveCapture(
           activeCategoryIdRef.current ?? undefined,
         )
 
-        // Apply momentum bonus to recently-active category (M-B4)
+        // M-B4: apply momentum bonus to recently-active category
         if (momentumActive && momentum) {
           const entry = scores.find(s => s.categoryId === momentum.categoryId)
           if (entry) entry.score = Math.min(1.0, entry.score + 0.10)
