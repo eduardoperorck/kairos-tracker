@@ -195,12 +195,11 @@ export function TrackerView({
     if (tag && deferredTagCatId) onSetTag(deferredTagCatId, tag)
   }
 
-  // Banner priority: deadtime > unclassified > elevation > focusdebt
+  // Banner priority: deadtime > elevation > focusdebt (unclassified moved to global overlay in App)
   const showDeadTime = !!activeCategory && !deadTimeDismissed && idleMs >= 3 * 60_000
-  const showUnclassified = !showDeadTime && !!unclassifiedProcess && !!onAssignProcess && !!onDismissProcess
-  const showElevation = !showDeadTime && !showUnclassified && !!elevationSuggestion && !!onElevateProcess && !!onDismissElevation
+  const showElevation = !showDeadTime && !!elevationSuggestion && !!onElevateProcess && !!onDismissElevation
   const isRunning = !!activeCategory?.activeEntry
-  const showFocusDebt = !showDeadTime && !showUnclassified && !showElevation && !isRunning
+  const showFocusDebt = !showDeadTime && !showElevation && !isRunning
 
   const mvdAchieved = isMVDAchieved(mvdItems)
   const mvdProgress = getMVDProgress(mvdItems)
@@ -215,31 +214,6 @@ export function TrackerView({
             onSelectTask={task => { onSetTag(activeCategory!.id, task.text); setDeadTimeDismissed(true) }}
             onDismiss={() => setDeadTimeDismissed(true)}
           />
-        </div>
-      )}
-
-      {showUnclassified && (
-        <div className="mb-4 rounded-lg border border-sky-500/20 bg-sky-500/[0.06] px-4 py-3 text-sm">
-          <div className="mb-2 flex items-center gap-2">
-            {unclassifiedProcess!.iconBase64 && (
-              <img src={unclassifiedProcess!.iconBase64} alt="" className="h-6 w-6 rounded" aria-hidden="true" />
-            )}
-            <span className="font-medium text-sky-300">{unclassifiedProcess!.displayName}</span>
-            <span className="text-sky-600 text-xs">({unclassifiedProcess!.process})</span>
-            <span className="text-sky-500">{t('tracker.whichCategory')}</span>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            {categories.filter(c => !c.archived).map(c => (
-              <button key={c.id} onClick={() => onAssignProcess!(unclassifiedProcess!.process, c.id)}
-                className="rounded border border-white/[0.08] bg-white/[0.04] px-3 py-1 text-xs text-zinc-300 hover:text-zinc-100 hover:border-white/20 transition-all">
-                {c.name}
-              </button>
-            ))}
-            <button onClick={() => onDismissProcess!(unclassifiedProcess!.process)}
-              className="rounded border border-white/[0.05] px-3 py-1 text-xs text-zinc-600 hover:text-zinc-400 transition-all">
-              {t('tracker.ignore')}
-            </button>
-          </div>
         </div>
       )}
 
