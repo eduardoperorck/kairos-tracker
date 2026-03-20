@@ -706,7 +706,7 @@ export function SettingsView({ categories, sessions, storage, webhookUrl, onWebh
                                 className="flex-1 rounded-lg border border-white/[0.07] bg-white/[0.03] px-3 py-2 text-xs text-zinc-100 placeholder-zinc-600 outline-none focus:border-white/[0.15] transition-all"
                                 value={githubUsername}
                                 onChange={e => setGithubUsername(e.target.value)}
-                                onBlur={() => storage.getSetting(SettingKey.GithubUsername).then(v => v !== githubUsername && storage.setSetting(SettingKey.GithubUsername, githubUsername).then(() => setGithubSaved(true)))}
+                                onBlur={() => { storage.getSetting(SettingKey.GithubUsername).then(v => { if (v !== githubUsername) storage.setSetting(SettingKey.GithubUsername, githubUsername).then(() => setGithubSaved(true)) }) }}
                                 onKeyDown={e => e.key === 'Enter' && storage.setSetting(SettingKey.GithubUsername, githubUsername).then(() => setGithubSaved(true))}
                               />
                               {githubSaved && <span className="self-center text-xs text-emerald-400">Saved ✓</span>}

@@ -43,7 +43,8 @@ import { loadCredential } from '../services/credentials'
 import type { MVDItem } from '../domain/minimumViableDay'
 import { filterToday } from '../domain/minimumViableDay'
 import { DEFAULT_CATEGORY_SUGGESTIONS } from '../domain/passiveCapture'
-import type { CategorySlot } from '../domain/passiveCapture'
+import type { CategorySlot, UnclassifiedApp } from '../domain/passiveCapture'
+import type { Category } from '../domain/timer'
 
 const POSTPONE_MS = 5 * 60_000 // 5 minutes
 const MIN_SESSION_MS = 30_000 // 30 seconds — micro-session gate
@@ -648,7 +649,7 @@ export function App({ storage }: Props) {
                         view === v ? 'text-zinc-100 bg-white/[0.04]' : 'text-zinc-400 hover:text-zinc-100 hover:bg-white/[0.03]'
                       }`}
                     >
-                      {v === 'today' ? t('nav.today') : v === 'history' ? t('nav.history') : t('nav.settings')}
+                      {v === 'history' ? t('nav.history') : t('nav.settings')}
                     </button>
                   ))}
                 </div>
@@ -966,8 +967,8 @@ function ClassifyOverlay({
   onAssign,
   onDismiss,
 }: {
-  process: import('../domain/passiveCapture').UnclassifiedApp
-  categories: import('../store/useTimerStore').Category[]
+  process: UnclassifiedApp
+  categories: Category[]
   onAssign: (process: string, categoryId: string) => void
   onDismiss: (process: string) => void
 }) {

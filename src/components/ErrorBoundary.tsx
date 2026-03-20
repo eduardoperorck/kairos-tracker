@@ -6,9 +6,9 @@ type State = { error: Error | null; info: string }
 
 async function writeErrorLog(content: string): Promise<void> {
   try {
-    const { writeTextFile, BaseDirectory } = await import(/* @vite-ignore */ '@tauri-apps/plugin-fs')
+    const fs = await import(/* @vite-ignore */ '@tauri-apps/plugin-fs')
     const timestamp = new Date().toISOString().slice(0, 10)
-    await writeTextFile(`crash-${timestamp}.log`, content, { baseDir: BaseDirectory.AppLog })
+    await fs.writeTextFile(`crash-${timestamp}.log`, content)
   } catch {
     // Not in Tauri or FS unavailable — skip silently
   }

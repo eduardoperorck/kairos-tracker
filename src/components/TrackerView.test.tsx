@@ -1,4 +1,4 @@
-import { render, screen, fireEvent } from '@testing-library/react'
+import { render, screen } from '@testing-library/react'
 import { describe, it, expect, vi } from 'vitest'
 import { TrackerView } from './TrackerView'
 import { I18nProvider } from '../i18n'
@@ -71,7 +71,7 @@ describe('TrackerView — M70: NLP log time button', () => {
 
 describe('TrackerView — M103: no MVD input field', () => {
   it('does not render an MVD text input field', () => {
-    const mvdItems = [{ id: 'm1', text: 'Write tests', done: false }]
+    const mvdItems = [{ id: 'm1', text: 'Write tests', done: false, createdAt: Date.now() }]
     renderWithI18n(
       <TrackerView
         {...baseProps}
@@ -89,8 +89,8 @@ describe('TrackerView — M103: no MVD input field', () => {
 
   it('renders MVD items as chips, not as form inputs', () => {
     const mvdItems = [
-      { id: 'm1', text: 'Deep focus', done: false },
-      { id: 'm2', text: 'Review PR', done: true },
+      { id: 'm1', text: 'Deep focus', done: false, createdAt: Date.now() },
+      { id: 'm2', text: 'Review PR', done: true, createdAt: Date.now() },
     ]
     renderWithI18n(
       <TrackerView

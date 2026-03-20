@@ -17,7 +17,7 @@ export type ActiveWindow = {
 export type CaptureBlock = {
   process: string
   title: string
-  domain: string | null
+  domain?: string | null
   startedAt: number
   endedAt: number
   categoryId: string | null
@@ -27,7 +27,7 @@ export type CaptureBlock = {
 
 export type RawPollEvent = {
   window: ActiveWindow
-  domain: string | null
+  domain?: string | null
   timestamp: number
 }
 
@@ -50,7 +50,7 @@ export function aggregateBlocks(events: RawPollEvent[], rules: WindowRule[]): Ca
   const blocks: CaptureBlock[] = []
   let currentProcess = events[0].window.process
   let currentTitle = events[0].window.title
-  let currentDomain = events[0].domain
+  let currentDomain = events[0].domain ?? null
   let blockStart = events[0].timestamp
   let lastTimestamp = events[0].timestamp
 
@@ -75,7 +75,7 @@ export function aggregateBlocks(events: RawPollEvent[], rules: WindowRule[]): Ca
       }
       currentProcess = ev.window.process
       currentTitle = ev.window.title
-      currentDomain = ev.domain
+      currentDomain = ev.domain ?? null
       blockStart = ev.timestamp
     } else {
       currentTitle = ev.window.title  // keep most-recent title within same process

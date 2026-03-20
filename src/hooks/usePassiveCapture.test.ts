@@ -3,7 +3,7 @@ import { renderHook, act } from '@testing-library/react'
 import { usePassiveCapture } from './usePassiveCapture'
 
 // Mock Tauri invoke — always returns null (no active window) unless overridden per test
-const mockInvoke = vi.fn<() => Promise<null>>().mockResolvedValue(null)
+const mockInvoke = vi.fn().mockResolvedValue(null)
 
 vi.mock('@tauri-apps/api/core', () => ({
   invoke: (...args: unknown[]) => mockInvoke(...args),

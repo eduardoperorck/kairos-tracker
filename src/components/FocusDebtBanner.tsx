@@ -1,5 +1,5 @@
 import { useMemo } from 'react'
-import { computeFocusDebt, getDebtLevel, getDebtColor, getDebtDescription, buildDebtEventsFromSessions } from '../domain/focusDebt'
+import { computeFocusDebt, getDebtLevel, getDebtColor, buildDebtEventsFromSessions } from '../domain/focusDebt'
 import { useI18n } from '../i18n'
 import type { Session } from '../domain/timer'
 
