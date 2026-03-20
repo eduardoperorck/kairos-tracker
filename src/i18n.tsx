@@ -1,4 +1,6 @@
-import { createContext, useContext, useState, type ReactNode } from 'react'
+import { createContext, useContext, useState, useEffect, type ReactNode } from 'react'
+import { SettingKey } from './persistence/storage'
+import type { Storage } from './persistence/storage'
 
 export type Lang = 'en' | 'pt'
 
@@ -931,14 +933,28 @@ const I18nContext = createContext<I18nContextType>({
   setLang: () => {},
 })
 
-export function I18nProvider({ children }: { children: ReactNode }) {
+export function I18nProvider({ children, storage }: { children: ReactNode; storage?: Storage }) {
   const [lang, setLangState] = useState<Lang>(() =>
     localStorage.getItem('lang') === 'pt' ? 'pt' : 'en'
   )
 
+  // M99: on mount, prefer SQLite-persisted language over localStorage
+  useEffect(() => {
+    if (!storage) return
+    storage.getSetting(SettingKey.Language).then(saved => {
+      if (saved === 'pt' || saved === 'en') {
+        setLangState(saved)
+        localStorage.setItem('lang', saved)
+      }
+    }).catch(() => { /* storage not available yet */ })
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
   function setLang(next: Lang) {
     setLangState(next)
     localStorage.setItem('lang', next)
+    // M99: persist to SQLite so language survives reinstall / localStorage clear
+    storage?.setSetting(SettingKey.Language, next).catch(() => { /* non-critical */ })
   }
 
   const t = (key: TKey): string => translations[lang][key]

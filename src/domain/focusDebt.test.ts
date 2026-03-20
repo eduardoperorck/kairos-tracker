@@ -227,4 +227,22 @@ describe('buildDebtEventsFromSessions', () => {
     const events = buildDebtEventsFromSessions(sessions, 0)
     expect(events.some(e => e.type === 'lateNightSession')).toBe(false)
   })
+
+  it('M66/M78: emits highDwsDay for days with score >= 70', () => {
+    const scores = { '2026-01-07': 72, '2026-01-06': 55, '2026-01-05': 80 }
+    const events = buildDebtEventsFromSessions([], 0, 0, undefined, scores)
+    const highDws = events.filter(e => e.type === 'highDwsDay')
+    expect(highDws).toHaveLength(2) // 72 and 80 qualify; 55 does not
+  })
+
+  it('M66/M78: debt decreases when high-DWS days are provided', () => {
+    const baseEvents = buildDebtEventsFromSessions([], 1, 0) // breakSkipped +15
+    const withDws = buildDebtEventsFromSessions([], 1, 0, undefined, { '2026-01-07': 85 })
+    expect(computeFocusDebt(withDws)).toBeLessThan(computeFocusDebt(baseEvents))
+  })
+
+  it('M66/M78: does not emit highDwsDay when dailyDwsScores is undefined', () => {
+    const events = buildDebtEventsFromSessions([], 0, 0)
+    expect(events.some(e => e.type === 'highDwsDay')).toBe(false)
+  })
 })
