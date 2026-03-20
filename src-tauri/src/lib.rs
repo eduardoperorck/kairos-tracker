@@ -38,8 +38,9 @@ impl Default for InputAccumulator {
 pub struct AppState {
     icon_cache: Mutex<HashMap<String, Option<String>>>,
     input: Mutex<InputAccumulator>,
-    browser_ctx: Mutex<Option<BrowserContext>>,  // M-C1: latest URL from browser extension
-    editor_ctx: Mutex<Option<EditorContext>>,     // M-C2: latest workspace from VS Code extension
+    browser_ctx: Mutex<Option<BrowserContext>>,   // M-C1: latest URL from browser extension
+    editor_ctx: Mutex<Option<EditorContext>>,      // M-C2: latest workspace from VS Code extension
+    window_rules_json: Mutex<String>,             // M-BG2: user rules synced from frontend (JSON)
 }
 
 #[derive(serde::Serialize, Clone)]
@@ -214,6 +215,94 @@ fn handle_http_connection(stream: std::net::TcpStream, handle: tauri::AppHandle)
           Content-Type: text/plain\r\n\
           Content-Length: 2\r\n\r\nOK"
     );
+}
+
+// ─── M-BG: Background capture ────────────────────────────────────────────────
+
+/// Minimal window rule shape for deserializing rules synced from the frontend.
+/// Only the fields needed for process/title matching are included.
+#[derive(serde::Deserialize)]
+struct BgWindowRule {
+    #[serde(rename = "matchType")]
+    match_type: String,
+    pattern: String,
+    #[serde(rename = "categoryId")]
+    category_id: Option<String>,
+    mode: String,
+    enabled: bool,
+}
+
+/// Payload emitted as a Tauri event every poll cycle.
+/// The frontend hook listens to "capture_tick" and runs classification from there.
+#[derive(serde::Serialize, Clone)]
+pub struct CaptureTickPayload {
+    pub ts: i64,
+    pub process: String,
+    pub title: String,
+    pub hostname: Option<String>,
+    /// Pre-matched categoryId from the synced user rules (auto mode only).
+    /// null when no auto rule matches — frontend scores further with domain/workspace signals.
+    pub category_id: Option<String>,
+    pub display_name: String,
+}
+
+/// Apply the first matching auto rule from JSON-encoded rules.
+/// Returns the categoryId if an auto rule matches, None otherwise (ignore or suggest).
+fn apply_rules_json(rules_json: &str, process: &str, title: &str) -> Option<String> {
+    let rules: Vec<BgWindowRule> = serde_json::from_str(rules_json).unwrap_or_default();
+    for rule in &rules {
+        if !rule.enabled { continue; }
+        let matches = match rule.match_type.as_str() {
+            "process" => rule.pattern.to_lowercase() == process.to_lowercase(),
+            "title"   => title.to_lowercase().contains(&rule.pattern.to_lowercase()),
+            _         => false,
+        };
+        if matches {
+            if rule.mode == "ignore" { return None; }
+            if rule.mode == "auto"   { return rule.category_id.clone().flatten(); }
+        }
+    }
+    None
+}
+
+/// Lightweight foreground-window query used by the background thread.
+/// Returns (process_exe, title) without icon extraction (too heavy for a background loop).
+#[cfg(target_os = "windows")]
+fn foreground_window_basic() -> Option<(String, String)> {
+    use winapi::um::winuser::{GetForegroundWindow, GetWindowTextW, GetWindowThreadProcessId};
+    use winapi::um::processthreadsapi::OpenProcess;
+    use winapi::um::psapi::GetModuleFileNameExW;
+    use winapi::um::handleapi::CloseHandle;
+    use winapi::um::winnt::PROCESS_QUERY_INFORMATION;
+    unsafe {
+        let hwnd = GetForegroundWindow();
+        if hwnd.is_null() { return None; }
+        let mut title_buf = [0u16; 512];
+        let title_len = GetWindowTextW(hwnd, title_buf.as_mut_ptr(), title_buf.len() as i32);
+        if title_len == 0 { return None; }
+        let title = String::from_utf16_lossy(&title_buf[..title_len as usize]);
+        let mut pid: u32 = 0;
+        GetWindowThreadProcessId(hwnd, &mut pid);
+        let handle = OpenProcess(PROCESS_QUERY_INFORMATION | 0x0010, 0, pid);
+        if handle.is_null() { return None; }
+        let mut path_buf = [0u16; 512];
+        let path_len = GetModuleFileNameExW(handle, std::ptr::null_mut(), path_buf.as_mut_ptr(), path_buf.len() as u32);
+        CloseHandle(handle);
+        if path_len == 0 { return None; }
+        let path_wide = &path_buf[..path_len as usize];
+        let process = String::from_utf16_lossy(path_wide)
+            .split('\\').last().unwrap_or("unknown").to_string();
+        Some((process, title))
+    }
+}
+
+#[cfg(not(target_os = "windows"))]
+fn foreground_window_basic() -> Option<(String, String)> { None }
+
+/// Sync window rules from the frontend so the background thread can pre-classify.
+#[tauri::command]
+fn sync_window_rules(rules_json: String, state: tauri::State<AppState>) {
+    *state.window_rules_json.lock().unwrap() = rules_json;
 }
 
 // ─── Windows helpers ─────────────────────────────────────────────────────────
@@ -923,6 +1012,7 @@ pub fn run() {
     }),
     browser_ctx: Mutex::new(None),
     editor_ctx: Mutex::new(None),
+    window_rules_json: Mutex::new("[]".to_string()),
   };
 
   tauri::Builder::default()
@@ -1003,6 +1093,47 @@ pub fn run() {
         });
       }
 
+      // M-BG1: Background window capture thread.
+      // Polls the foreground window every 5 s and emits a "capture_tick" Tauri event.
+      // Runs regardless of whether the app window is visible — enables system-wide tracking.
+      {
+        let bg_handle = app.handle().clone();
+        std::thread::spawn(move || {
+          loop {
+            std::thread::sleep(std::time::Duration::from_secs(5));
+
+            let Some((process, title)) = foreground_window_basic() else { continue };
+
+            let state = bg_handle.state::<AppState>();
+
+            // M-C1: attach latest browser hostname if available
+            let hostname = state.browser_ctx.lock().unwrap()
+              .as_ref().map(|c| c.hostname.clone());
+
+            // M-BG2: pre-classify with synced user rules
+            let rules_json = state.window_rules_json.lock().unwrap().clone();
+            let category_id = apply_rules_json(&rules_json, &process, &title);
+
+            // Display name: cached icon lookup (no icon in BG — too heavy)
+            let display_name = process.trim_end_matches(".exe").trim_end_matches(".EXE").to_string();
+
+            let ts = std::time::SystemTime::now()
+              .duration_since(std::time::UNIX_EPOCH)
+              .unwrap_or_default()
+              .as_millis() as i64;
+
+            let _ = bg_handle.emit("capture_tick", CaptureTickPayload {
+              ts,
+              process,
+              title,
+              hostname,
+              category_id,
+              display_name,
+            });
+          }
+        });
+      }
+
       // M-C1/C2: HTTP context receiver — accepts browser URL and VS Code workspace.
       // Listens on 127.0.0.1:27183 for POST /browser and POST /editor.
       {
@@ -1020,6 +1151,7 @@ pub fn run() {
     })
     .invoke_handler(tauri::generate_handler![
       update_tray_status,
+      sync_window_rules,
       get_idle_seconds,
       set_always_on_top,
       get_active_window,

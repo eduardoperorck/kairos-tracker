@@ -62,32 +62,50 @@ function trackCorrection(process: string, categoryId: string, threshold = 3): bo
 
 // ─── Tauri bridge ─────────────────────────────────────────────────────────────
 
-type TauriWindow = { title: string; process: string; display_name: string; icon_base64?: string }
-type TauriBrowserCtx = { hostname: string; title: string } | null
-type TauriEditorCtx  = { workspace: string; file: string; language: string } | null
-
-async function fetchVisibleWindows(): Promise<TauriWindow[]> {
-  try {
-    const { invoke } = await import('@tauri-apps/api/core')
-    const wins = await invoke<TauriWindow[]>('get_visible_windows')
-    if (wins && wins.length > 0) return wins
-    // Fallback to single window if visible-windows returns empty
-    const single = await invoke<TauriWindow | null>('get_active_window')
-    return single ? [single] : []
-  } catch { return [] }
+// Payload emitted by the Rust background thread (matches CaptureTickPayload in lib.rs)
+type CaptureTickPayload = {
+  ts: number
+  process: string
+  title: string
+  hostname: string | null
+  category_id: string | null
+  display_name: string
 }
 
-async function fetchBrowserContext(): Promise<TauriBrowserCtx> {
-  try {
-    const { invoke } = await import('@tauri-apps/api/core')
-    return await invoke<TauriBrowserCtx>('get_browser_context')
-  } catch { return null }
-}
+type TauriEditorCtx = { workspace: string; file: string; language: string } | null
 
 async function fetchEditorContext(): Promise<TauriEditorCtx> {
   try {
     const { invoke } = await import('@tauri-apps/api/core')
     return await invoke<TauriEditorCtx>('get_editor_context')
+  } catch { return null }
+}
+
+async function syncRulesToRust(rulesJson: string): Promise<void> {
+  try {
+    const { invoke } = await import('@tauri-apps/api/core')
+    await invoke('sync_window_rules', { rulesJson })
+  } catch { /* not in Tauri */ }
+}
+
+// Fallback polling when Tauri events are unavailable (browser / dev mode)
+async function fetchWindowFallback(): Promise<CaptureTickPayload | null> {
+  try {
+    const { invoke } = await import('@tauri-apps/api/core')
+    type TauriWindow = { title: string; process: string; display_name: string; icon_base64?: string }
+    const wins = await invoke<TauriWindow[]>('get_visible_windows')
+    const win = wins?.[0] ?? await invoke<TauriWindow | null>('get_active_window')
+    if (!win) return null
+    type BrowserCtx = { hostname: string; title: string } | null
+    const browserCtx = await invoke<BrowserCtx>('get_browser_context').catch(() => null)
+    return {
+      ts: Date.now(),
+      process: win.process,
+      title: win.title,
+      hostname: browserCtx?.hostname ?? null,
+      category_id: null,
+      display_name: win.display_name,
+    }
   } catch { return null }
 }
 
@@ -157,151 +175,162 @@ export function usePassiveCapture(
   useEffect(() => { allRulesRef.current = [...DEFAULT_DEV_RULES, ...userRules] }, [userRules])
   useEffect(() => { domainRulesRef.current = domainRules }, [domainRules])
 
+  // Sync rules to Rust whenever user rules change (M-BG2)
   useEffect(() => {
-    const interval = setInterval(async () => {
-      // M-C3: fetch all visible windows (foreground first)
-      const [win, ...secondaryWins] = await fetchVisibleWindows()
-      if (!win) return
+    syncRulesToRust(JSON.stringify([...DEFAULT_DEV_RULES, ...userRules]))
+  }, [userRules])
 
-      // M-C1: browser context from extension (highest-fidelity URL signal)
-      const browserCtx = await fetchBrowserContext()
-      // M-C2: editor context from VS Code extension
-      const editorCtx = await fetchEditorContext()
+  // Core tick handler — runs on every window poll (from Tauri event or fallback interval)
+  const handleTick = useCallback(async (payload: CaptureTickPayload) => {
+    const proc = payload.process
+    const title = payload.title
 
-      // Domain: prefer extension URL > title extraction from primary > secondary windows
-      const primaryDomain = browserCtx
-        ? browserCtx.hostname
-        : extractDomainFromTitle(win.title, win.process)
+    // M-C2: editor context from VS Code extension (only available via invoke)
+    const editorCtx = await fetchEditorContext()
+    const domain = payload.hostname ?? extractDomainFromTitle(title, proc)
+    const vsWorkspace = editorCtx?.workspace ?? extractVsCodeWorkspace(title, proc)
 
-      // M-C3: if primary has no domain, check secondary visible windows
-      const secondaryDomain = primaryDomain === null
-        ? secondaryWins.map(w => extractDomainFromTitle(w.title, w.process)).find(d => d !== null) ?? null
-        : null
+    const event: RawPollEvent = {
+      window: { title, process: proc, timestamp: payload.ts },
+      domain,
+      timestamp: payload.ts,
+    }
 
-      const domain = primaryDomain ?? secondaryDomain
+    eventsRef.current = [...eventsRef.current.slice(-MAX_EVENTS), event]
+    setBlocks(aggregateBlocks(eventsRef.current, allRulesRef.current))
 
-      // VS Code workspace: prefer extension IPC context > title parsing
-      const vsWorkspace = editorCtx?.workspace ?? extractVsCodeWorkspace(win.title, win.process)
+    if (title) {
+      setRecentTitles(prev => {
+        const without = prev.filter(t => t !== title)
+        return [title, ...without].slice(0, MAX_TITLES)
+      })
+    }
 
-      const event: RawPollEvent = {
-        window: { title: win.title, process: win.process, timestamp: Date.now() },
-        domain,
-        timestamp: Date.now(),
+    // Idle tracking
+    if (inputActivityRef.current) {
+      const { keystrokes, mouseClicks } = inputActivityRef.current
+      if (keystrokes === 0 && mouseClicks === 0) {
+        idleConsecutivePollsRef.current++
+      } else {
+        idleConsecutivePollsRef.current = 0
+      }
+    }
+
+    const contextKey = `${proc}::${domain ?? ''}`
+    if (contextKey !== lastProcessRef.current) {
+      lastProcessRef.current = contextKey
+
+      const momentum = momentumRef.current
+      const momentumActive = momentum && Date.now() - momentum.changedAt < MOMENTUM_WINDOW_MS
+
+      const ia = inputActivityRef.current
+      const inputRate: SignalSet['inputRate'] =
+        ia ? (ia.keystrokes > 0 || ia.mouseClicks > 0 ? 'high' : 'none') : 'none'
+
+      const signals: SignalSet = { process: proc, title, domain, vsWorkspace, inputRate }
+
+      const scores = scoreWindow(
+        signals,
+        allRulesRef.current,
+        domainRulesRef.current,
+        activeCategoryIdRef.current ?? undefined,
+      )
+
+      // M-B4: apply momentum bonus to recently-active category
+      if (momentumActive && momentum) {
+        const entry = scores.find(s => s.categoryId === momentum.categoryId)
+        if (entry) entry.score = Math.min(1.0, entry.score + 0.10)
+        scores.sort((a, b) => b.score - a.score)
       }
 
-      eventsRef.current = [...eventsRef.current.slice(-MAX_EVENTS), event]
-      setBlocks(aggregateBlocks(eventsRef.current, allRulesRef.current))
+      const topScore = scores[0]
+      const catId = topScore && topScore.score >= SCORE_THRESHOLD_AUTO ? topScore.categoryId : null
 
-      if (win.title) {
-        setRecentTitles(prev => {
-          const without = prev.filter(t => t !== win.title)
-          return [win.title, ...without].slice(0, MAX_TITLES)
-        })
-      }
-
-      const proc = win.process
-
-      // Idle tracking
-      if (inputActivityRef.current) {
-        const { keystrokes, mouseClicks } = inputActivityRef.current
-        if (keystrokes === 0 && mouseClicks === 0) {
-          idleConsecutivePollsRef.current++
-        } else {
-          idleConsecutivePollsRef.current = 0
-        }
-      }
-
-      // Recalculate when process or domain changes (domain can change without process change in browser)
-      const contextKey = `${proc}::${domain ?? ''}`
-      if (contextKey !== lastProcessRef.current) {
-        lastProcessRef.current = contextKey
-
-        const momentum = momentumRef.current
-        const momentumActive = momentum && Date.now() - momentum.changedAt < MOMENTUM_WINDOW_MS
-
-        const ia = inputActivityRef.current
-        const inputRate: SignalSet['inputRate'] =
-          ia ? (ia.keystrokes > 0 || ia.mouseClicks > 0 ? 'high' : 'none') : 'none'
-
-        const signals: SignalSet = {
-          process: proc,
-          title: win.title,
-          domain,
-          vsWorkspace,
-          inputRate,
-        }
-
-        const scores = scoreWindow(
-          signals,
-          allRulesRef.current,
-          domainRulesRef.current,
-          activeCategoryIdRef.current ?? undefined,
-        )
-
-        // M-B4: apply momentum bonus to recently-active category
-        if (momentumActive && momentum) {
-          const entry = scores.find(s => s.categoryId === momentum.categoryId)
-          if (entry) entry.score = Math.min(1.0, entry.score + 0.10)
-          scores.sort((a, b) => b.score - a.score)
-        }
-
-        const topScore = scores[0]
-        const catId = topScore && topScore.score >= SCORE_THRESHOLD_AUTO ? topScore.categoryId : null
-
-        if (catId) {
-          if (pendingAutoStartRef.current?.categoryId !== catId) {
-            if (pendingAutoStartRef.current) clearTimeout(pendingAutoStartRef.current.timeout)
-            const timeout = setTimeout(() => {
-              const currentlyIdle = inputActivityRef.current !== undefined && idleConsecutivePollsRef.current >= 2
-              if (!currentlyIdle) setSuggestedCategoryId(catId)
-              pendingAutoStartRef.current = null
-            }, DEBOUNCE_MS)
-            pendingAutoStartRef.current = { categoryId: catId, timeout }
-          }
-        } else {
-          if (pendingAutoStartRef.current) {
-            clearTimeout(pendingAutoStartRef.current.timeout)
+      if (catId) {
+        if (pendingAutoStartRef.current?.categoryId !== catId) {
+          if (pendingAutoStartRef.current) clearTimeout(pendingAutoStartRef.current.timeout)
+          const timeout = setTimeout(() => {
+            const currentlyIdle = inputActivityRef.current !== undefined && idleConsecutivePollsRef.current >= 2
+            if (!currentlyIdle) setSuggestedCategoryId(catId)
             pendingAutoStartRef.current = null
-          }
-          setSuggestedCategoryId(null)
+          }, DEBOUNCE_MS)
+          pendingAutoStartRef.current = { categoryId: catId, timeout }
         }
+      } else {
+        if (pendingAutoStartRef.current) {
+          clearTimeout(pendingAutoStartRef.current.timeout)
+          pendingAutoStartRef.current = null
+        }
+        setSuggestedCategoryId(null)
+      }
 
-        // Elevation suggestion
-        if (activeCategoryIdRef.current) {
-          const matchedRule = matchRule({ title: win.title, process: proc, timestamp: 0 }, allRulesRef.current)
-          const hasUserRule = userRules.some(r => r.pattern.toLowerCase() === proc.toLowerCase())
-          const isSuggestOnly = matchedRule?.mode === 'suggest' && matchedRule?.categoryId === null
-          if (isSuggestOnly && !hasUserRule && !dismissedElevations.has(proc)) {
-            setElevationSuggestion({
-              process: proc,
-              displayName: win.display_name || proc.replace(/\.exe$/i, ''),
-              categoryId: activeCategoryIdRef.current,
-            })
-          } else {
-            setElevationSuggestion(null)
-          }
+      // Elevation suggestion
+      if (activeCategoryIdRef.current) {
+        const matchedRule = matchRule({ title, process: proc, timestamp: 0 }, allRulesRef.current)
+        const hasUserRule = userRulesRef.current.some(r => r.pattern.toLowerCase() === proc.toLowerCase())
+        const isSuggestOnly = matchedRule?.mode === 'suggest' && matchedRule?.categoryId === null
+        if (isSuggestOnly && !hasUserRule && !dismissedElevationsRef.current.has(proc)) {
+          setElevationSuggestion({
+            process: proc,
+            displayName: payload.display_name || proc.replace(/\.exe$/i, ''),
+            categoryId: activeCategoryIdRef.current,
+          })
         } else {
           setElevationSuggestion(null)
         }
+      } else {
+        setElevationSuggestion(null)
       }
+    }
 
-      if (needsClassification(proc, allRulesRef.current)) {
-        const displayName = win.display_name || proc.replace(/\.exe$/i, '')
-        const iconBase64 = win.icon_base64
-        setPendingQueue(prev =>
-          prev.some(a => a.process === proc) ? prev : [...prev, { process: proc, displayName, iconBase64 }]
-        )
+    if (needsClassification(proc, allRulesRef.current)) {
+      const displayName = payload.display_name || proc.replace(/\.exe$/i, '')
+      setPendingQueue(prev =>
+        prev.some(a => a.process === proc) ? prev : [...prev, { process: proc, displayName }]
+      )
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  // Refs for values accessed inside handleTick (avoids stale closures without re-subscribing)
+  const userRulesRef = useRef(userRules)
+  const dismissedElevationsRef = useRef(dismissedElevations)
+  useEffect(() => { userRulesRef.current = userRules }, [userRules])
+  useEffect(() => { dismissedElevationsRef.current = dismissedElevations }, [dismissedElevations])
+
+  // M-BG1/BG3: Subscribe to Tauri background capture events.
+  // Falls back to a polling interval when running outside Tauri (dev/browser).
+  useEffect(() => {
+    let cleanup: (() => void) | null = null
+
+    async function setup() {
+      try {
+        const { listen } = await import('@tauri-apps/api/event')
+        const unlisten = await listen<CaptureTickPayload>('capture_tick', (ev) => {
+          void handleTick(ev.payload)
+        })
+        cleanup = unlisten
+      } catch {
+        // Not in Tauri — fall back to polling
+        const id = setInterval(async () => {
+          const payload = await fetchWindowFallback()
+          if (payload) void handleTick(payload)
+        }, POLL_INTERVAL_MS)
+        cleanup = () => clearInterval(id)
       }
-    }, POLL_INTERVAL_MS)
+    }
+
+    void setup()
 
     return () => {
-      clearInterval(interval)
+      cleanup?.()
       if (pendingAutoStartRef.current) {
         clearTimeout(pendingAutoStartRef.current.timeout)
         pendingAutoStartRef.current = null
       }
     }
-  }, [userRules, dismissedElevations])
+  // handleTick is stable (useCallback with no deps)
+  }, [handleTick])
 
   const unclassifiedProcess = pendingQueue[0] ?? null
 
