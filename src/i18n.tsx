@@ -285,6 +285,7 @@ const en = {
   'app.setIntentions': 'Set intentions →',
   'app.yesterdayPrefix': 'Yesterday:',
   'app.topPrefix': '· Top:',
+  'app.addIntention': 'Add intention…',
 
   // IntentionsView
   'intentions.eveningOnly': 'Evening review available after 5pm.',
@@ -733,6 +734,7 @@ const pt: { [K in keyof typeof en]: string } = {
   'app.setIntentions': 'Definir intenções →',
   'app.yesterdayPrefix': 'Ontem:',
   'app.topPrefix': '· Topo:',
+  'app.addIntention': 'Adicionar intenção…',
 
   // IntentionsView
   'intentions.eveningOnly': 'Revisão disponível após as 17h.',

@@ -36,6 +36,14 @@ export function formatRelativeTime(ms: number, now: number, lang: 'en' | 'pt' = 
   return lang === 'pt' ? `há ${days} dias` : `${days} days ago`
 }
 
+/** Format a YYYY-MM-DD date string for display: MM/DD/YYYY (en) or DD/MM/YYYY (pt). */
+export function formatDisplayDate(dateStr: string, lang: 'en' | 'pt'): string {
+  const parts = dateStr.split('-')
+  if (parts.length < 3) return dateStr
+  const [y, m, d] = parts
+  return lang === 'pt' ? `${d}/${m}/${y}` : `${m}/${d}/${y}`
+}
+
 export function formatShortDate(dateStr: string, lang: 'en' | 'pt'): string {
   const parts = dateStr.split('-')
   if (parts.length < 3) return dateStr
