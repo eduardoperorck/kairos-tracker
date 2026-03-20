@@ -61,30 +61,31 @@ describe('FocusGuard', () => {
     expect(onPostpone).toHaveBeenCalledOnce()
   })
 
-  it('shows SKIP typing confirmation when allowPostpone is false', () => {
+  it('shows Skip break confirmation button when allowPostpone is false', () => {
     renderWithI18n(<FocusGuard {...defaultProps} allowPostpone={false} />)
+    // First click shows confirmation state — button still present
     fireEvent.click(screen.getByText('Skip break'))
-    expect(screen.getByPlaceholderText('SKIP')).toBeInTheDocument()
+    expect(screen.getByText('Skip break')).toBeInTheDocument()
   })
 
-  it('calls onBreakSkipped and onBreakComplete when SKIP is typed and confirmed', () => {
+  it('calls onBreakSkipped and onBreakComplete when Skip break is confirmed', () => {
     const onBreakSkipped = vi.fn()
     const onBreakComplete = vi.fn()
     renderWithI18n(<FocusGuard {...defaultProps} allowPostpone={false} onBreakSkipped={onBreakSkipped} onBreakComplete={onBreakComplete} />)
+    // Two clicks: first shows confirm state, second confirms skip
     fireEvent.click(screen.getByText('Skip break'))
-    fireEvent.change(screen.getByPlaceholderText('SKIP'), { target: { value: 'SKIP' } })
-    fireEvent.click(screen.getByText('Confirm skip'))
+    fireEvent.click(screen.getByText('Skip break'))
     expect(onBreakSkipped).toHaveBeenCalledOnce()
     expect(onBreakComplete).toHaveBeenCalledOnce()
   })
 
-  it('confirm skip button is disabled until SKIP is typed', () => {
-    renderWithI18n(<FocusGuard {...defaultProps} allowPostpone={false} />)
+  it('first Skip break click does not immediately call callbacks', () => {
+    const onBreakSkipped = vi.fn()
+    const onBreakComplete = vi.fn()
+    renderWithI18n(<FocusGuard {...defaultProps} allowPostpone={false} onBreakSkipped={onBreakSkipped} onBreakComplete={onBreakComplete} />)
     fireEvent.click(screen.getByText('Skip break'))
-    const btn = screen.getByText('Confirm skip')
-    expect(btn).toBeDisabled()
-    fireEvent.change(screen.getByPlaceholderText('SKIP'), { target: { value: 'SKIP' } })
-    expect(btn).not.toBeDisabled()
+    expect(onBreakSkipped).not.toHaveBeenCalled()
+    expect(onBreakComplete).not.toHaveBeenCalled()
   })
 
   it('shows strict mode message and no skip button in strict mode', () => {

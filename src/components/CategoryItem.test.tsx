@@ -64,7 +64,8 @@ describe('CategoryItem', () => {
 
   it('shows delete confirm flow', () => {
     renderWithI18n(<CategoryItem category={makeCategory()} {...defaultProps} />)
-    fireEvent.click(screen.getByRole('button', { name: 'Delete' }))
+    fireEvent.click(screen.getByRole('button', { name: 'More options' }))
+    fireEvent.click(screen.getByRole('button', { name: /delete/i }))
     expect(screen.getByText('Confirm')).toBeInTheDocument()
     expect(screen.getByText('Cancel')).toBeInTheDocument()
   })
@@ -72,14 +73,16 @@ describe('CategoryItem', () => {
   it('calls onDelete after confirming delete', () => {
     const onDelete = vi.fn()
     renderWithI18n(<CategoryItem category={makeCategory()} {...defaultProps} onDelete={onDelete} />)
-    fireEvent.click(screen.getByRole('button', { name: 'Delete' }))
+    fireEvent.click(screen.getByRole('button', { name: 'More options' }))
+    fireEvent.click(screen.getByRole('button', { name: /delete/i }))
     fireEvent.click(screen.getByText('Confirm'))
     expect(onDelete).toHaveBeenCalledOnce()
   })
 
   it('cancels delete when Cancel is clicked', () => {
     renderWithI18n(<CategoryItem category={makeCategory()} {...defaultProps} />)
-    fireEvent.click(screen.getByRole('button', { name: 'Delete' }))
+    fireEvent.click(screen.getByRole('button', { name: 'More options' }))
+    fireEvent.click(screen.getByRole('button', { name: /delete/i }))
     fireEvent.click(screen.getByText('Cancel'))
     expect(screen.getByRole('button', { name: 'Start' })).toBeInTheDocument()
   })
@@ -103,9 +106,9 @@ describe('CategoryItem', () => {
   })
 
   it('shows accumulated time', () => {
-    const category = makeCategory({ accumulatedMs: 3_661_000 }) // 61 min 1 sec → 61:01
+    const category = makeCategory({ accumulatedMs: 3_661_000 }) // 1h 1m 1s → 1:01:01
     renderWithI18n(<CategoryItem category={category} {...defaultProps} />)
-    expect(screen.getByText('61:01')).toBeInTheDocument()
+    expect(screen.getByText('1:01:01')).toBeInTheDocument()
   })
 
   it('shows last tracked text when lastTracked is provided and timer is stopped', () => {

@@ -58,8 +58,12 @@ export function buildDigestPayload(
 
 // ─── formatDigestPrompt ───────────────────────────────────────────────────────
 
-export function formatDigestPrompt(payload: DigestPayload): string {
+export function formatDigestPrompt(payload: DigestPayload, lang: 'en' | 'pt' = 'en'): string {
   const msToH = (ms: number) => (ms / 3_600_000).toFixed(1)
+
+  const langInstruction = lang === 'pt'
+    ? 'Respond ONLY in Brazilian Portuguese.'
+    : 'Respond ONLY in English.'
 
   const catLines = payload.categories
     .filter(c => c.weeklyMs > 0 || c.goalMs > 0)
@@ -76,7 +80,9 @@ export function formatDigestPrompt(payload: DigestPayload): string {
     ? `Peak hours: ${payload.energyPeakHours.map(h => `${h}h`).join(', ')}`
     : ''
 
-  return `You are a productivity coach. Analyze this week's time tracking data and give a concise, encouraging 2-3 sentence insight in the same language the user appears to be using.
+  return `${langInstruction}
+
+You are a productivity coach. Analyze this week's time tracking data and give a concise, encouraging 2-3 sentence insight.
 
 Week: ${payload.week}
 Total tracked: ${msToH(payload.totalMs)}h
@@ -93,6 +99,7 @@ export function parseTimeEntryLocally(
   text: string,
   categories: { id: string; name: string }[],
   todayDate: string,
+  lang: 'en' | 'pt' = 'en',
 ): ParsedTimeEntry | null {
   const lower = text.toLowerCase().trim()
 
@@ -110,17 +117,32 @@ export function parseTimeEntryLocally(
   if (hours === 0 && minutes === 0) return null
   const durationMs = (hours * 60 + minutes) * 60_000
 
-  // Extract date: "yesterday" → yesterday's ISO string, otherwise today
+  // Extract date: "yesterday" / "ontem" → yesterday's ISO string, otherwise today
   let date = todayDate
-  if (/yesterday/.test(lower)) {
-    date = toLocalDateString(Date.now() - 86_400_000)
+  if (/yesterday/.test(lower) || (lang === 'pt' && /ontem/.test(lower))) {
+    // Parse todayDate as local midnight to avoid UTC offset shifting the day
+    const [y, m, d] = todayDate.split('-').map(Number)
+    const todayMidnight = new Date(y, m - 1, d).getTime()
+    date = toLocalDateString(todayMidnight - 86_400_000)
   }
 
-  // Remove duration and date words to find remaining tokens
+  // Extract start hour from time-of-day keywords
+  let startHour = 9
+  if (/this morning/.test(lower)) startHour = 9
+  else if (/this afternoon/.test(lower)) startHour = 14
+  else if (/tonight/.test(lower)) startHour = 20
+  if (lang === 'pt') {
+    if (/esta manhã/.test(lower)) startHour = 9
+    else if (/esta tarde/.test(lower)) startHour = 14
+    else if (/esta noite/.test(lower)) startHour = 20
+  }
+
+  // Remove duration and date/time words to find remaining tokens
   const clean = lower
     .replace(/\d+h\s*\d*m?(?:in)?/g, '')
     .replace(/\d+\s*m(?:in)?/g, '')
-    .replace(/yesterday|today/g, '')
+    .replace(/yesterday|today|this morning|this afternoon|tonight/g, '')
+    .replace(lang === 'pt' ? /ontem|hoje|esta manhã|esta tarde|esta noite/g : /(?:)/g, '')
     .replace(/\s+/g, ' ')
     .trim()
 
@@ -145,10 +167,13 @@ export function parseTimeEntryLocally(
   const tagWords = clean.split(/\s+/).filter(w => w && !catTokens.some(ct => w.startsWith(ct) || ct.startsWith(w)))
   const tag = tagWords.join(' ') || undefined
 
-  return { categoryId: bestCat.id, date, startHour: 9, durationMs, tag }
+  return { categoryId: bestCat.id, date, startHour, durationMs, tag }
 }
 
 // ─── callClaudeForParsing ─────────────────────────────────────────────────────
+
+// TODO: Move to src/services/digest.ts — these functions make network calls
+// and should live in the services layer, not the domain layer.
 
 export type ParsedTimeEntry = {
   categoryId: string
@@ -162,11 +187,17 @@ export async function callClaudeForParsing(
   text: string,
   categories: { id: string; name: string }[],
   apiKey: string | null,
-  todayDate: string
+  todayDate: string,
+  lang: 'en' | 'pt' = 'en',
 ): Promise<ParsedTimeEntry | null> {
-  if (!apiKey) return parseTimeEntryLocally(text, categories, todayDate)
+  if (!apiKey) return parseTimeEntryLocally(text, categories, todayDate, lang)
   // Serialize category data as JSON to prevent prompt injection via category names.
   const catJson = JSON.stringify(categories.map(c => ({ id: c.id, name: c.name })))
+
+  const ptHint = lang === 'pt'
+    ? '\n- PT keywords: "ontem" = yesterday, "hoje" = today, "esta manhã" = 9h, "esta tarde" = 14h, "esta noite" = 20h'
+    : ''
+
   const prompt = `You parse natural language time entries into JSON. Today is ${todayDate}.
 Available categories (JSON array): ${catJson}
 
@@ -175,7 +206,7 @@ Parse this entry and respond ONLY with valid JSON:
 
 Rules:
 - Pick the best matching categoryId from the categories array above
-- "this morning" = 9h, "this afternoon" = 14h, "tonight" = 20h, "yesterday" = yesterday's date
+- "this morning" = 9h, "this afternoon" = 14h, "tonight" = 20h, "yesterday" = yesterday's date${ptHint}
 - durationMs in milliseconds
 - tag is optional: deep work, meeting, admin, learning, review
 - If the input cannot be parsed, respond with the single word: null
@@ -204,7 +235,21 @@ Input to parse: ${JSON.stringify(text)}`
   const data = await response.json() as { content: { text: string }[] }
   const raw = data.content[0]?.text?.trim() ?? 'null'
   try {
-    return JSON.parse(raw) as ParsedTimeEntry | null
+    const parsed: unknown = JSON.parse(raw)
+    if (parsed === null || typeof parsed !== 'object') return null
+    const p = parsed as Record<string, unknown>
+    if (
+      typeof p.categoryId !== 'string' ||
+      typeof p.date !== 'string' ||
+      !/^\d{4}-\d{2}-\d{2}$/.test(p.date) ||
+      typeof p.startHour !== 'number' ||
+      p.startHour < 0 || p.startHour > 23 ||
+      typeof p.durationMs !== 'number' ||
+      p.durationMs <= 0 || p.durationMs > 24 * 3_600_000
+    ) return null
+    const knownIds = new Set(categories.map(c => c.id))
+    if (!knownIds.has(p.categoryId as string)) return null
+    return parsed as ParsedTimeEntry
   } catch {
     return null
   }
@@ -212,6 +257,8 @@ Input to parse: ${JSON.stringify(text)}`
 
 // ─── callDigestAPI ────────────────────────────────────────────────────────────
 
+// TODO: Move to src/services/digest.ts — these functions make network calls
+// and should live in the services layer, not the domain layer.
 export async function callDigestAPI(prompt: string, apiKey: string): Promise<string> {
   const response = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',

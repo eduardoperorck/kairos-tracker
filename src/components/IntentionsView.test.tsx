@@ -62,12 +62,16 @@ describe('IntentionsView', () => {
   })
 
   it('calls onSaveReview with selected mood and notes', () => {
+    // Mock time to be after 5pm so the evening review section is visible
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-03-15T18:00:00'))
     const onSaveReview = vi.fn()
     renderWithI18n(<IntentionsView {...defaultProps} onSaveReview={onSaveReview} />)
-    fireEvent.click(screen.getByRole('button', { name: 'Mood 4' }))
+    fireEvent.click(screen.getByRole('button', { name: /Mood 4/i }))
     fireEvent.change(screen.getByPlaceholderText(/notes about/i), { target: { value: 'Great day' } })
     fireEvent.click(screen.getByText('Save Review'))
     expect(onSaveReview).toHaveBeenCalledWith(4, 'Great day')
+    vi.useRealTimers()
   })
 
   it('shows saved review summary', () => {

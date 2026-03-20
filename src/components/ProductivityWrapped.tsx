@@ -2,7 +2,8 @@ import { useState, useMemo } from 'react'
 import { formatElapsed } from '../domain/format'
 import { computeEnergyPattern, isFlowSession } from '../domain/history'
 import { computeStreak, toDateString } from '../domain/timer'
-import { useI18n } from '../i18n'
+import { useI18n, DAY_NAMES } from '../i18n'
+import type { TKey } from '../i18n'
 import type { Session, Category } from '../domain/timer'
 
 type Props = {
@@ -18,7 +19,7 @@ type Slide = {
   sub?: string
 }
 
-function buildSlides(sessions: Session[], categories: Category[]): Slide[] {
+function buildSlides(sessions: Session[], categories: Category[], t: (key: TKey) => string, dayNames: string[]): Slide[] {
   if (sessions.length === 0) return []
 
   const totalMs = sessions.reduce((sum, s) => sum + (s.endedAt - s.startedAt), 0)
@@ -51,46 +52,45 @@ function buildSlides(sessions: Session[], categories: Category[]): Slide[] {
     const dow = new Date(s.date).getDay()
     msByDow[dow] = (msByDow[dow] ?? 0) + (s.endedAt - s.startedAt)
   }
-  const DOW = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
   const bestDow = Object.entries(msByDow).sort((a, b) => Number(b[1]) - Number(a[1]))[0]
 
   const slides: Slide[] = [
-    { emoji: '⏱', label: 'This month you tracked', value: formatElapsed(totalMs), sub: 'of focused time' },
+    { emoji: '⏱', label: t('wrapped.thisMonthTracked'), value: formatElapsed(totalMs), sub: t('wrapped.ofFocusedTime') },
   ]
 
   if (topCat) {
-    slides.push({ emoji: '🏆', label: 'Your dominant category was', value: topCat.name, sub: `${topPct}% of your time` })
+    slides.push({ emoji: '🏆', label: t('wrapped.dominantCategory'), value: topCat.name, sub: `${topPct}% ${t('wrapped.ofYourTime')}` })
   }
 
   if (flowCount > 0) {
-    slides.push({ emoji: '⚡', label: 'You entered flow state', value: `${flowCount} times`, sub: 'sessions longer than 45 min' })
+    slides.push({ emoji: '⚡', label: t('wrapped.enteredFlow'), value: `${flowCount} ${t('wrapped.times')}`, sub: t('wrapped.flowSub') })
   }
 
   if (bestStreak > 0) {
-    slides.push({ emoji: '🔥', label: 'Your longest streak was', value: `${bestStreak} days`, sub: 'consecutive days tracked' })
+    slides.push({ emoji: '🔥', label: t('wrapped.longestStreak'), value: `${bestStreak} ${t('wrapped.days')}`, sub: t('wrapped.streakSub') })
   }
 
   if (peakHour !== undefined) {
-    slides.push({ emoji: '🧠', label: 'Your peak focus hour is', value: `${peakHour}:00`, sub: 'based on your last 30 days' })
+    slides.push({ emoji: '🧠', label: t('wrapped.peakFocusHour'), value: `${peakHour}:00`, sub: t('wrapped.peakSub') })
   }
 
   if (bestDow) {
-    slides.push({ emoji: '📅', label: 'Your most productive day', value: DOW[Number(bestDow[0])], sub: formatElapsed(Number(bestDow[1])) + ' avg' })
+    slides.push({ emoji: '📅', label: t('wrapped.mostProductiveDay'), value: dayNames[Number(bestDow[0])], sub: formatElapsed(Number(bestDow[1])) + ' ' + t('wrapped.avg') })
   }
 
   return slides
 }
 
 export function ProductivityWrapped({ sessions, categories, onClose }: Props) {
-  const { t } = useI18n()
+  const { t, lang } = useI18n()
   const [step, setStep] = useState(0)
-  const slides = useMemo(() => buildSlides(sessions, categories), [sessions, categories])
+  const slides = useMemo(() => buildSlides(sessions, categories, t, DAY_NAMES[lang]), [sessions, categories, lang]) // eslint-disable-line react-hooks/exhaustive-deps
 
   if (slides.length === 0) {
     return (
       <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80">
         <div className="text-center">
-          <p className="text-zinc-500 text-sm">Not enough data yet.</p>
+          <p className="text-zinc-500 text-sm">{t('wrapped.notEnoughData')}</p>
           <button onClick={onClose} className="mt-4 text-xs text-zinc-600 hover:text-zinc-300">{t('wrapped.close')}</button>
         </div>
       </div>
@@ -131,7 +131,7 @@ export function ProductivityWrapped({ sessions, categories, onClose }: Props) {
             onClick={() => setStep(s => s - 1)}
             className="text-zinc-600 hover:text-zinc-300 text-sm transition-colors"
           >
-            ← Back
+            {t('wrapped.back')}
           </button>
         )}
         {!isLast ? (
@@ -146,7 +146,7 @@ export function ProductivityWrapped({ sessions, categories, onClose }: Props) {
             onClick={onClose}
             className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-6 py-2.5 text-sm text-emerald-400 hover:bg-emerald-500/20 transition-all"
           >
-            Done
+            {t('wrapped.done')}
           </button>
         )}
       </div>

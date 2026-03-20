@@ -1,11 +1,16 @@
 import { describe, it, expect, vi } from 'vitest'
 import { render, screen, fireEvent } from '@testing-library/react'
 import { DeadTimeRecoveryWidget } from './DeadTimeRecoveryWidget'
+import { I18nProvider } from '../i18n'
 import type { MicroTask } from '../domain/deadTimeRecovery'
+
+function renderWithI18n(ui: React.ReactElement) {
+  return render(<I18nProvider>{ui}</I18nProvider>)
+}
 
 describe('DeadTimeRecoveryWidget', () => {
   it('renders nothing when not dead time', () => {
-    const { container } = render(
+    const { container } = renderWithI18n(
       <DeadTimeRecoveryWidget
         idleMs={2 * 60_000}
         onSelectTask={() => {}}
@@ -16,7 +21,7 @@ describe('DeadTimeRecoveryWidget', () => {
   })
 
   it('shows idle time when dead', () => {
-    render(
+    renderWithI18n(
       <DeadTimeRecoveryWidget
         idleMs={15 * 60_000}
         onSelectTask={() => {}}
@@ -29,7 +34,7 @@ describe('DeadTimeRecoveryWidget', () => {
 
   it('calls onDismiss when dismiss button clicked', () => {
     const onDismiss = vi.fn()
-    render(
+    renderWithI18n(
       <DeadTimeRecoveryWidget
         idleMs={15 * 60_000}
         onSelectTask={() => {}}
@@ -45,7 +50,7 @@ describe('DeadTimeRecoveryWidget', () => {
     const customTasks: MicroTask[] = [
       { id: 'test', text: 'Custom task', estimatedMinutes: 5 },
     ]
-    render(
+    renderWithI18n(
       <DeadTimeRecoveryWidget
         idleMs={15 * 60_000}
         customTasks={customTasks}

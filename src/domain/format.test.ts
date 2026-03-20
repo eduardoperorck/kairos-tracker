@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { formatElapsed, formatRelativeTime } from './format'
+import { formatElapsed, formatRelativeTime, formatShortDate } from './format'
 
 describe('formatElapsed', () => {
   it('formats zero as 00:00', () => {
@@ -23,7 +23,7 @@ describe('formatElapsed', () => {
   })
 
   it('rolls over at 60 minutes', () => {
-    expect(formatElapsed(3_600_000)).toBe('60:00')
+    expect(formatElapsed(3_600_000)).toBe('1:00:00')
   })
 
   it('ignores sub-second precision', () => {
@@ -56,5 +56,64 @@ describe('formatRelativeTime', () => {
 
   it('returns "X days ago" for multiple days', () => {
     expect(formatRelativeTime(now - 3 * 86_400_000, now)).toBe('3 days ago')
+  })
+
+  // lang='pt' variants
+  it('returns "agora" for less than 1 minute ago (pt)', () => {
+    expect(formatRelativeTime(now - 30_000, now, 'pt')).toBe('agora')
+  })
+
+  it('returns "agora" for exactly 0 ms ago (pt)', () => {
+    expect(formatRelativeTime(now, now, 'pt')).toBe('agora')
+  })
+
+  it('returns "há X min" for minutes ago (pt)', () => {
+    expect(formatRelativeTime(now - 5 * 60_000, now, 'pt')).toBe('há 5 min')
+  })
+
+  it('returns "há Xh" for hours ago (pt)', () => {
+    expect(formatRelativeTime(now - 2 * 3_600_000, now, 'pt')).toBe('há 2h')
+  })
+
+  it('returns "ontem" for 1 day ago (pt)', () => {
+    expect(formatRelativeTime(now - 86_400_000, now, 'pt')).toBe('ontem')
+  })
+
+  it('returns "há X dias" for multiple days ago (pt)', () => {
+    expect(formatRelativeTime(now - 3 * 86_400_000, now, 'pt')).toBe('há 3 dias')
+  })
+})
+
+describe('formatShortDate', () => {
+  it('formats a PT date as DD/MM', () => {
+    expect(formatShortDate('2026-03-20', 'pt')).toBe('20/03')
+  })
+
+  it('formats an EN date as MM/DD', () => {
+    expect(formatShortDate('2026-03-20', 'en')).toBe('03/20')
+  })
+
+  it('returns the original string when input has fewer than 3 parts', () => {
+    expect(formatShortDate('invalid', 'pt')).toBe('invalid')
+  })
+
+  it('returns the original string for a two-part malformed input (pt)', () => {
+    expect(formatShortDate('2026-03', 'pt')).toBe('2026-03')
+  })
+
+  it('formats a date at the start of the year correctly (pt)', () => {
+    expect(formatShortDate('2026-01-01', 'pt')).toBe('01/01')
+  })
+
+  it('formats a date at the start of the year correctly (en)', () => {
+    expect(formatShortDate('2026-01-01', 'en')).toBe('01/01')
+  })
+
+  it('formats end of year date correctly (pt)', () => {
+    expect(formatShortDate('2025-12-31', 'pt')).toBe('31/12')
+  })
+
+  it('formats end of year date correctly (en)', () => {
+    expect(formatShortDate('2025-12-31', 'en')).toBe('12/31')
   })
 })

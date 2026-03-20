@@ -12,8 +12,8 @@ const MIN_SESSION_MS = 10 * 60_000  // 10 min
 const MIN_SAMPLES = 10
 
 export function computeNaturalCycle(blocks: CaptureBlock[]): NaturalCycle | null {
-  const durations = blocks
-    .filter(b => b.categoryId !== null && b.confirmed)
+  const confirmedBlocks = blocks.filter(b => b.categoryId !== null && b.confirmed)
+  const durations = confirmedBlocks
     .map(b => b.endedAt - b.startedAt)
     .filter(d => d >= MIN_SESSION_MS)
 
@@ -24,9 +24,29 @@ export function computeNaturalCycle(blocks: CaptureBlock[]): NaturalCycle | null
   const stddev = Math.sqrt(variance)
   const confidence = Math.min(durations.length / 30, 1)
 
+  // Compute actual break durations from inter-block gaps
+  const sortedBlocks = [...confirmedBlocks].sort((a, b) => a.startedAt - b.startedAt)
+  const breakGaps: number[] = []
+  for (let i = 1; i < sortedBlocks.length; i++) {
+    const gap = sortedBlocks[i].startedAt - sortedBlocks[i - 1].endedAt
+    const MIN_BREAK = 60_000        // 1 minute
+    const MAX_BREAK = 60 * 60_000   // 60 minutes
+    if (gap >= MIN_BREAK && gap <= MAX_BREAK) {
+      breakGaps.push(gap)
+    }
+  }
+
+  // Use median of gap durations if we have enough samples, otherwise fall back to 25% heuristic
+  const breakMs = breakGaps.length >= 3
+    ? (() => {
+        const sorted = [...breakGaps].sort((a, b) => a - b)
+        return sorted[Math.floor(sorted.length / 2)]
+      })()
+    : Math.round(mean * 0.25)
+
   return {
     focusMs: Math.round(mean),
-    breakMs: Math.round(mean * 0.25),
+    breakMs,
     confidence,
     sampleCount: durations.length,
     stddevMs: Math.round(stddev),

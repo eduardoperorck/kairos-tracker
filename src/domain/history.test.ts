@@ -10,6 +10,7 @@ import {
   exportSessionsToJSON,
   exportSessionsToHTML,
   parseTogglCSV,
+  suggestWeeklyGoal,
 } from './history'
 import type { Session, Category } from './timer'
 
@@ -235,6 +236,39 @@ describe('computeEnergyPattern', () => {
     expect(typeof result.insight).toBe('string')
     expect(result.insight.length).toBeGreaterThan(0)
   })
+
+  it('sorts peak hours by quality (DWS) when dwsScores provided', () => {
+    // 4 hours so we can distinguish top-3 in volume vs quality mode
+    // Hour 9: big volume (120 min), low DWS
+    // Hour 10: medium volume (60 min), low DWS
+    // Hour 11: small volume (30 min), low DWS
+    // Hour 14: tiny volume (15 min), very high DWS
+    const sessions = [
+      makeSession({ id: 's1', startedAt: new Date('2026-03-10T09:00:00').getTime(), endedAt: new Date('2026-03-10T11:00:00').getTime() }),
+      makeSession({ id: 's2', startedAt: new Date('2026-03-10T10:00:00').getTime(), endedAt: new Date('2026-03-10T11:00:00').getTime() }),
+      makeSession({ id: 's3', startedAt: new Date('2026-03-10T11:00:00').getTime(), endedAt: new Date('2026-03-10T11:30:00').getTime() }),
+      makeSession({ id: 's4', startedAt: new Date('2026-03-10T14:00:00').getTime(), endedAt: new Date('2026-03-10T14:15:00').getTime() }),
+    ]
+
+    // Volume-only: top-3 should be 9, 10, 11 — hour 14 excluded
+    const volumeResult = computeEnergyPattern(sessions, 30)
+    expect(volumeResult.peakHours).toContain(9)
+    expect(volumeResult.peakHours).toContain(10)
+    expect(volumeResult.peakHours).toContain(11)
+    expect(volumeResult.peakHours).not.toContain(14)
+
+    // Quality-weighted: hour 14 has the highest DWS, so it should be in top-3
+    const dwsScores = [
+      { hour: 9,  score: 30 },
+      { hour: 10, score: 20 },
+      { hour: 11, score: 10 },
+      { hour: 14, score: 95 },
+    ]
+    const qualityResult = computeEnergyPattern(sessions, 30, dwsScores)
+    expect(qualityResult.peakHours).toContain(14)
+    // The peak sets should differ
+    expect(qualityResult.peakHours).not.toEqual(volumeResult.peakHours)
+  })
 })
 
 // ─── isFlowSession ───────────────────────────────────────────────────────────
@@ -323,5 +357,71 @@ describe('parseTogglCSV', () => {
     const { sessions, newCategories } = parseTogglCSV(header, [])
     expect(sessions).toHaveLength(0)
     expect(newCategories).toHaveLength(0)
+  })
+})
+
+// ─── suggestWeeklyGoal ────────────────────────────────────────────────────────
+
+describe('suggestWeeklyGoal', () => {
+  it('returns 0 for empty sessions', () => {
+    expect(suggestWeeklyGoal([], 'cat-1')).toBe(0)
+  })
+
+  it('returns 0 when the category has no sessions', () => {
+    const s = makeSession({ categoryId: 'cat-2', startedAt: 0, endedAt: 3_600_000, date: '2026-01-05' })
+    expect(suggestWeeklyGoal([s], 'cat-1')).toBe(0)
+  })
+
+  it('returns 0 when fewer than 4 distinct weeks are present', () => {
+    // Only 3 weeks of data — not enough to suggest a goal
+    const sessions = [
+      makeSession({ id: 's1', startedAt: 0, endedAt: 3_600_000, date: '2026-01-05' }), // week 2026-01-05
+      makeSession({ id: 's2', startedAt: 0, endedAt: 3_600_000, date: '2026-01-12' }), // week 2026-01-12
+      makeSession({ id: 's3', startedAt: 0, endedAt: 3_600_000, date: '2026-01-19' }), // week 2026-01-19
+    ]
+    expect(suggestWeeklyGoal(sessions, 'cat-1')).toBe(0)
+  })
+
+  it('picks the correct recent weeks regardless of insertion order', () => {
+    // Build sessions for 5 distinct weeks (Monday-start ISO weeks).
+    // The 4 most recent weeks have 2 h each; the oldest week has 10 h.
+    // If the function uses insertion order instead of sorted order the older
+    // high-value week would pollute the slice and produce a higher suggestion.
+    const recentWeekDates = ['2026-02-02', '2026-02-09', '2026-02-16', '2026-02-23'] // 4 recent weeks
+    const oldWeekDate = '2026-01-05' // 1 old week
+
+    // Insert older session FIRST — should not affect the recent-week slice
+    const sessions = [
+      makeSession({ id: 's-old', categoryId: 'cat-1', startedAt: 0, endedAt: 10 * 3_600_000, date: oldWeekDate }),
+      ...recentWeekDates.map((date, i) =>
+        makeSession({ id: `s-new-${i}`, categoryId: 'cat-1', startedAt: 0, endedAt: 2 * 3_600_000, date })
+      ),
+    ]
+
+    const result = suggestWeeklyGoal(sessions, 'cat-1')
+
+    // Expected: avg of 4 recent weeks (2 h each) × 1.1 = 2.2 h → rounded to nearest 0.5 h = 2.5 h
+    const expected2h = 2 * 3_600_000
+    const expectedSuggestion = Math.round((expected2h * 1.1) / 1_800_000) * 1_800_000
+
+    expect(result).toBe(expectedSuggestion)
+
+    // Verify it differs from what a naive insertion-order approach would give
+    // (old week has 10 h, so the wrong answer would be much larger)
+    const wrongResult = Math.round(
+      (((10 * 3_600_000 + 3 * 2 * 3_600_000) / 4) * 1.1) / 1_800_000
+    ) * 1_800_000
+    expect(result).not.toBe(wrongResult)
+  })
+
+  it('returns a suggestion that is 10% above the recent average (rounded to nearest 0.5h)', () => {
+    // 4 weeks, each exactly 4 h
+    const dates = ['2026-01-05', '2026-01-12', '2026-01-19', '2026-01-26']
+    const sessions = dates.map((date, i) =>
+      makeSession({ id: `s${i}`, categoryId: 'cat-1', startedAt: 0, endedAt: 4 * 3_600_000, date })
+    )
+    const result = suggestWeeklyGoal(sessions, 'cat-1')
+    // avg = 4 h, +10% = 4.4 h → rounded to nearest 0.5 h = 4.5 h
+    expect(result).toBe(4.5 * 3_600_000)
   })
 })

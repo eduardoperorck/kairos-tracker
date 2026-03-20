@@ -10,7 +10,18 @@ vi.mock('../services/credentials', () => ({
   deleteCredential: vi.fn().mockResolvedValue(undefined),
 }))
 
+// Mock callDigestAPI so tests do not hit the network.
+// Individual tests override this with mockResolvedValueOnce / mockReturnValue / mockRejectedValueOnce.
+vi.mock('../domain/digest', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../domain/digest')>()
+  return {
+    ...actual,
+    callDigestAPI: vi.fn().mockResolvedValue('Weekly digest text'),
+  }
+})
+
 import { loadCredential } from '../services/credentials'
+import { callDigestAPI } from '../domain/digest'
 
 function mockApiKey(key: string | null) {
   vi.mocked(loadCredential).mockResolvedValue(key)
@@ -29,8 +40,10 @@ const defaultProps = {
 
 describe('DigestView', () => {
   beforeEach(() => {
-    vi.stubGlobal('fetch', vi.fn())
     mockApiKey(null)
+    // Reset call history so tests don't bleed into each other
+    vi.mocked(callDigestAPI).mockClear()
+    vi.mocked(callDigestAPI).mockResolvedValue('Weekly digest text')
   })
 
   afterEach(() => {
@@ -54,8 +67,8 @@ describe('DigestView', () => {
 
   it('shows loading state when generating', async () => {
     mockApiKey('sk-ant-test')
-    // fetch never resolves
-    vi.mocked(fetch).mockReturnValue(new Promise(() => {}))
+    // Suspend callDigestAPI forever so loading stays true
+    vi.mocked(callDigestAPI).mockReturnValue(new Promise(() => {}))
 
     renderWithI18n(<DigestView {...defaultProps} />)
 
@@ -68,12 +81,6 @@ describe('DigestView', () => {
 
   it('respects 10s cooldown', async () => {
     mockApiKey('sk-ant-test')
-    const mockResponse = {
-      content: [{ text: 'Your weekly summary here.' }]
-    }
-    vi.mocked(fetch).mockResolvedValue(
-      new Response(JSON.stringify(mockResponse), { status: 200 })
-    )
 
     renderWithI18n(<DigestView {...defaultProps} />)
 
@@ -83,19 +90,17 @@ describe('DigestView', () => {
       expect(screen.getByText('Regenerate')).toBeTruthy()
     })
 
-    // Clicking again within cooldown should not call fetch again
-    const callsBefore = vi.mocked(fetch).mock.calls.length
+    // Clicking again within the 10-second cooldown must not call callDigestAPI again
+    const callsBefore = vi.mocked(callDigestAPI).mock.calls.length
     fireEvent.click(screen.getByText('Regenerate'))
 
     await new Promise(r => setTimeout(r, 50))
-    expect(vi.mocked(fetch).mock.calls.length).toBe(callsBefore)
+    expect(vi.mocked(callDigestAPI).mock.calls.length).toBe(callsBefore)
   })
 
   it('shows generic error message on failure', async () => {
     mockApiKey('sk-ant-test')
-    vi.mocked(fetch).mockResolvedValueOnce(
-      new Response('Internal Server Error', { status: 500 })
-    )
+    vi.mocked(callDigestAPI).mockRejectedValueOnce(new Error('Unable to generate digest. Please try again.'))
 
     renderWithI18n(<DigestView {...defaultProps} />)
 
@@ -104,8 +109,99 @@ describe('DigestView', () => {
     await waitFor(() => {
       const errorEl = document.querySelector('.text-red-400')
       expect(errorEl).toBeTruthy()
-      // Should not expose raw "Internal Server Error" from API
+      // Should not expose raw API status text
       expect(errorEl?.textContent).not.toBe('Internal Server Error')
+    })
+  })
+
+  // ── auto-generate on mount (M69) ────────────────────────────────────────────
+
+  it('auto-calls generate on mount when claudeApiKey is set and sessions exist and no cache', async () => {
+    localStorage.removeItem('digest_cache_2026-W12')
+
+    const sessions = [
+      { id: 's1', categoryId: 'cat-1', startedAt: 1_000_000, endedAt: 4_600_000, date: '2026-03-17' },
+    ]
+
+    renderWithI18n(
+      <DigestView
+        {...defaultProps}
+        sessions={sessions}
+        claudeApiKey="sk-ant-auto"
+        weekKey="2026-W12"
+      />
+    )
+
+    // callDigestAPI should be invoked automatically without any user click
+    await waitFor(() => {
+      expect(vi.mocked(callDigestAPI)).toHaveBeenCalledOnce()
+    })
+  })
+
+  it('does not auto-generate when sessions is empty even if claudeApiKey is set', async () => {
+    localStorage.removeItem('digest_cache_2026-W11')
+
+    renderWithI18n(
+      <DigestView
+        {...defaultProps}
+        sessions={[]}
+        claudeApiKey="sk-ant-auto"
+        weekKey="2026-W11"
+      />
+    )
+
+    // Wait long enough that any stray async effect would have fired
+    await new Promise(r => setTimeout(r, 50))
+    expect(vi.mocked(callDigestAPI)).not.toHaveBeenCalled()
+  })
+
+  it('does not auto-generate when a cached digest already exists for the week', async () => {
+    const cacheKey = 'digest_cache_2026-W10'
+    localStorage.setItem(cacheKey, 'Cached weekly digest')
+
+    const sessions = [
+      { id: 's1', categoryId: 'cat-1', startedAt: 1_000_000, endedAt: 4_600_000, date: '2026-03-17' },
+    ]
+
+    renderWithI18n(
+      <DigestView
+        {...defaultProps}
+        sessions={sessions}
+        claudeApiKey="sk-ant-auto"
+        weekKey="2026-W10"
+      />
+    )
+
+    await new Promise(r => setTimeout(r, 50))
+    expect(vi.mocked(callDigestAPI)).not.toHaveBeenCalled()
+
+    // The cached text is displayed directly without a network call
+    expect(screen.getByText('Cached weekly digest')).toBeTruthy()
+
+    localStorage.removeItem(cacheKey)
+  })
+
+  it('shows loading state during auto-generate on mount', async () => {
+    localStorage.removeItem('digest_cache_2026-W09')
+
+    // Suspend callDigestAPI forever so loading stays true
+    vi.mocked(callDigestAPI).mockReturnValue(new Promise(() => {}))
+
+    const sessions = [
+      { id: 's1', categoryId: 'cat-1', startedAt: 1_000_000, endedAt: 4_600_000, date: '2026-03-17' },
+    ]
+
+    renderWithI18n(
+      <DigestView
+        {...defaultProps}
+        sessions={sessions}
+        claudeApiKey="sk-ant-auto"
+        weekKey="2026-W09"
+      />
+    )
+
+    await waitFor(() => {
+      expect(screen.getByText('Generating…')).toBeTruthy()
     })
   })
 })

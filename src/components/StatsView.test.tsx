@@ -26,20 +26,23 @@ describe('StatsView', () => {
 
   it('renders each category name', () => {
     renderStats()
-    expect(screen.getByText('Work')).toBeInTheDocument()
-    expect(screen.getByText('Study')).toBeInTheDocument()
+    // Categories appear in both Today and This Week sections
+    expect(screen.getAllByText('Work').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('Study').length).toBeGreaterThan(0)
   })
 
   it('renders formatted times', () => {
     renderStats()
-    expect(screen.getByText('60:00')).toBeInTheDocument()
-    expect(screen.getByText('20:00')).toBeInTheDocument()
+    // 3_600_000ms = 1:00:00 in Today section
+    expect(screen.getAllByText('1:00:00').length).toBeGreaterThan(0)
+    // 1_200_000ms = 20:00 in Today section
+    expect(screen.getAllByText('20:00').length).toBeGreaterThan(0)
   })
 
   it('renders percentage labels', () => {
     renderStats()
-    expect(screen.getByText('75%')).toBeInTheDocument()
-    expect(screen.getByText('25%')).toBeInTheDocument()
+    expect(screen.getAllByText('75%').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('25%').length).toBeGreaterThan(0)
   })
 
   it('calls onBack when back button is clicked', async () => {
@@ -54,29 +57,27 @@ describe('StatsView', () => {
     expect(screen.getByText(/no data/i)).toBeInTheDocument()
   })
 
-  it('shows Today and This week tab buttons', () => {
+  it('shows Today and This Week section headings', () => {
     renderStats()
-    expect(screen.getByRole('button', { name: /today/i })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /this week/i })).toBeInTheDocument()
+    expect(screen.getByText(/today/i)).toBeInTheDocument()
+    expect(screen.getByText(/this week/i)).toBeInTheDocument()
   })
 
-  it('defaults to Today view showing today totals', () => {
+  it('shows today totals in Today section', () => {
     renderStats()
-    // 3_600_000ms = 60:00
-    expect(screen.getByText('60:00')).toBeInTheDocument()
+    // 3_600_000ms = 1:00:00 shown in Today section
+    expect(screen.getAllByText('1:00:00').length).toBeGreaterThan(0)
   })
 
-  it('switching to This week shows weekly totals', async () => {
+  it('shows weekly totals in This Week section', () => {
     renderStats()
-    await userEvent.click(screen.getByRole('button', { name: /this week/i }))
-    // 10_800_000ms = 180:00
-    expect(screen.getByText('180:00')).toBeInTheDocument()
+    // 10_800_000ms = 3:00:00 shown in This Week section
+    expect(screen.getByText('3:00:00')).toBeInTheDocument()
   })
 
-  it('weekly view shows goal progress bar when goal is set', async () => {
+  it('weekly view shows goal progress bar when goal is set', () => {
     renderStats()
-    await userEvent.click(screen.getByRole('button', { name: /this week/i }))
-    // 10_800_000 / 18_000_000 = 60%
+    // 10_800_000 / 18_000_000 = 60% shown in This Week section
     expect(screen.getByText('60%')).toBeInTheDocument()
   })
 })

@@ -16,14 +16,20 @@ type Props = {
   onStop: () => void
   onNavigate: (view: View) => void
   onClose: () => void
+  onOpenNLP?: () => void
+  onCyclePreset?: () => void
 }
 
-export function CommandPalette({ categories, activeId, onStart, onStop, onNavigate, onClose }: Props) {
+export function CommandPalette({ categories, activeId, onStart, onStop, onNavigate, onClose, onOpenNLP, onCyclePreset }: Props) {
   const { t } = useI18n()
   const [query, setQuery] = useState('')
+  const [selectedIdx, setSelectedIdx] = useState(0)
   const inputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => { inputRef.current?.focus() }, [])
+
+  // Reset selected index when query changes
+  useEffect(() => setSelectedIdx(0), [query])
 
   const activeCategory = categories.find(c => c.id === activeId)
 
@@ -37,6 +43,10 @@ export function CommandPalette({ categories, activeId, onStart, onStop, onNaviga
     { id: 'nav-today', label: t('nav.today'), action: () => onNavigate('today') },
     { id: 'nav-settings', label: t('nav.settings'), action: () => onNavigate('settings') },
     { id: 'nav-tracker', label: t('nav.timer'), action: () => onNavigate('tracker') },
+    ...(onOpenNLP ? [{ id: 'action-nlp', label: 'Log time manually', action: onOpenNLP }] : []),
+    ...(onCyclePreset ? [{ id: 'action-cycle-preset', label: 'Change focus preset', action: onCyclePreset }] : []),
+    { id: 'action-weekly-digest', label: 'View weekly digest', action: () => onNavigate('stats') },
+    { id: 'action-set-goals', label: "Set today's goals", action: () => onNavigate('today') },
   ]
 
   const filtered = query.trim()
@@ -45,8 +55,10 @@ export function CommandPalette({ categories, activeId, onStart, onStop, onNaviga
 
   function handleKeyDown(e: React.KeyboardEvent) {
     if (e.key === 'Escape') onClose()
-    if (e.key === 'Enter' && filtered.length > 0) {
-      filtered[0].action()
+    if (e.key === 'ArrowDown') { e.preventDefault(); setSelectedIdx(i => Math.min(i + 1, filtered.length - 1)) }
+    if (e.key === 'ArrowUp') { e.preventDefault(); setSelectedIdx(i => Math.max(i - 1, 0)) }
+    if (e.key === 'Enter' && filtered[selectedIdx]) {
+      filtered[selectedIdx].action()
       onClose()
     }
   }
@@ -77,10 +89,10 @@ export function CommandPalette({ categories, activeId, onStart, onStop, onNaviga
           {filtered.length === 0 ? (
             <li className="px-5 py-3 text-xs text-zinc-600">{t('palette.noResults')}</li>
           ) : (
-            filtered.map(cmd => (
+            filtered.map((cmd, idx) => (
               <li key={cmd.id}>
                 <button
-                  className="w-full px-5 py-2.5 text-left text-sm text-zinc-300 hover:bg-white/[0.05] hover:text-zinc-100 transition-colors"
+                  className={`w-full px-5 py-2.5 text-left text-sm text-zinc-300 hover:bg-white/[0.05] hover:text-zinc-100 transition-colors ${idx === selectedIdx ? 'bg-white/[0.05] text-zinc-200' : ''}`}
                   onClick={() => execute(cmd)}
                 >
                   {cmd.label}

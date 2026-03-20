@@ -68,3 +68,64 @@ describe('CommandPalette', () => {
     expect(onClose).toHaveBeenCalledOnce()
   })
 })
+
+describe('CommandPalette — M73: additional commands', () => {
+  it('"Log time manually" command appears when onOpenNLP is provided', () => {
+    renderWithI18n(
+      <CommandPalette {...defaultProps} onOpenNLP={vi.fn()} />
+    )
+    expect(screen.getByText('Log time manually')).toBeTruthy()
+  })
+
+  it('"Log time manually" command is absent when onOpenNLP is not provided', () => {
+    renderWithI18n(<CommandPalette {...defaultProps} />)
+    expect(screen.queryByText('Log time manually')).toBeNull()
+  })
+
+  it('clicking "Log time manually" calls onOpenNLP and then onClose', () => {
+    const onOpenNLP = vi.fn()
+    const onClose = vi.fn()
+    renderWithI18n(
+      <CommandPalette {...defaultProps} onOpenNLP={onOpenNLP} onClose={onClose} />
+    )
+    fireEvent.click(screen.getByText('Log time manually'))
+    expect(onOpenNLP).toHaveBeenCalledOnce()
+    expect(onClose).toHaveBeenCalledOnce()
+  })
+
+  it('"View weekly digest" command is always present', () => {
+    renderWithI18n(<CommandPalette {...defaultProps} />)
+    expect(screen.getByText('View weekly digest')).toBeTruthy()
+  })
+
+  it('clicking "View weekly digest" calls onNavigate with "stats"', () => {
+    const onNavigate = vi.fn()
+    renderWithI18n(<CommandPalette {...defaultProps} onNavigate={onNavigate} />)
+    fireEvent.click(screen.getByText('View weekly digest'))
+    expect(onNavigate).toHaveBeenCalledWith('stats')
+  })
+
+  it('"Set today\'s goals" command is always present', () => {
+    renderWithI18n(<CommandPalette {...defaultProps} />)
+    expect(screen.getByText("Set today's goals")).toBeTruthy()
+  })
+
+  it('clicking "Set today\'s goals" calls onNavigate with "today"', () => {
+    const onNavigate = vi.fn()
+    renderWithI18n(<CommandPalette {...defaultProps} onNavigate={onNavigate} />)
+    fireEvent.click(screen.getByText("Set today's goals"))
+    expect(onNavigate).toHaveBeenCalledWith('today')
+  })
+
+  it('"View weekly digest" is found when filtering by "digest"', () => {
+    renderWithI18n(<CommandPalette {...defaultProps} />)
+    fireEvent.change(screen.getByRole('textbox'), { target: { value: 'digest' } })
+    expect(screen.getByText('View weekly digest')).toBeTruthy()
+  })
+
+  it('"Set today\'s goals" is found when filtering by "goals"', () => {
+    renderWithI18n(<CommandPalette {...defaultProps} />)
+    fireEvent.change(screen.getByRole('textbox'), { target: { value: 'goals' } })
+    expect(screen.getByText("Set today's goals")).toBeTruthy()
+  })
+})

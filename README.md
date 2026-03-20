@@ -235,6 +235,8 @@ See [CLAUDE.md](./CLAUDE.md) for the full pair-programming guide used to build t
 
 Development diary and milestone history: [PLAN.md](./PLAN.md)
 
+Scientific foundations for every metric and analysis: [SCIENCE.md](./SCIENCE.md)
+
 ---
 
 ## Built with Claude Code

@@ -6,19 +6,20 @@ import type { Session } from '../domain/timer'
 type Props = {
   sessions: Session[]
   breakSkipCount?: number
+  breakCompletedCount?: number
 }
 
-export function FocusDebtBanner({ sessions, breakSkipCount = 0 }: Props) {
+export function FocusDebtBanner({ sessions, breakSkipCount = 0, breakCompletedCount = 0 }: Props) {
   const { t } = useI18n()
   const debt = useMemo(() => {
-    const events = buildDebtEventsFromSessions(sessions, breakSkipCount)
+    const events = buildDebtEventsFromSessions(sessions, breakSkipCount, breakCompletedCount)
     return computeFocusDebt(events)
-  }, [sessions, breakSkipCount])
+  }, [sessions, breakSkipCount, breakCompletedCount])
 
   const level = getDebtLevel(debt)
   const color = getDebtColor(level)
   const label = t(`focusDebt.${level}` as 'focusDebt.minimal')
-  const description = getDebtDescription(level)
+  const description = t(`focusDebt.desc.${level}` as 'focusDebt.desc.minimal')
 
   if (level === 'minimal' && debt <= 0) return null
 

@@ -110,10 +110,10 @@ export function ActivityTimeline({ blocks, categories }: Props) {
                 key={`gap-${i}`}
                 className="absolute top-0 h-full bg-zinc-800/50 border-x border-zinc-700/30 flex items-center justify-center"
                 style={{ left: l, width: w }}
-                title={`Untracked — ${formatElapsed(seg.endedAt - seg.startedAt)}`}
+                title={`${t('timeline.untrackedTitle')} — ${formatElapsed(seg.endedAt - seg.startedAt)}`}
               >
                 {(seg.endedAt - seg.startedAt) > 20 * 60_000 && (
-                  <span className="text-[9px] text-zinc-600">untracked</span>
+                  <span className="text-[9px] text-zinc-600">{t('timeline.untracked')}</span>
                 )}
               </div>
             )
@@ -148,7 +148,7 @@ export function ActivityTimeline({ blocks, categories }: Props) {
       {/* Duration summary */}
       <div className="mt-1.5 flex items-center justify-between text-[10px] text-zinc-700">
         <span>{formatTimeLabel(rangeStart)}</span>
-        <span>{formatElapsed(rangeDuration)} tracked window</span>
+        <span>{formatElapsed(rangeDuration)} {t('timeline.trackedWindow')}</span>
         <span>{formatTimeLabel(rangeEnd)}</span>
       </div>
     </div>

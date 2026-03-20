@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
-import { remainingBreakMs, getBreakSuggestions } from '../domain/focusGuard'
+import { remainingBreakMs } from '../domain/focusGuard'
 import { useI18n } from '../i18n'
+import type { TKey } from '../i18n'
 import type { FocusPreset } from '../domain/focusGuard'
 
 type Props = {
@@ -21,16 +22,21 @@ function formatCountdown(ms: number): string {
   return `${String(min).padStart(2, '0')}:${String(sec).padStart(2, '0')}`
 }
 
-const suggestions = getBreakSuggestions()
+const SUGGESTION_KEYS: TKey[] = [
+  'focusGuard.suggestion0',
+  'focusGuard.suggestion1',
+  'focusGuard.suggestion2',
+  'focusGuard.suggestion3',
+  'focusGuard.suggestion4',
+]
 
 export function FocusGuard({ activeCategory, startedAt: _startedAt, preset, allowPostpone, strictMode = false, onBreakComplete, onPostpone, onBreakSkipped }: Props) {
   const { t } = useI18n()
   const [breakStartedAt] = useState(() => Date.now())
   const [remaining, setRemaining] = useState(() => preset.breakMs)
   const [skipped, setSkipped] = useState(false)
-  const [skipInput, setSkipInput] = useState('')
   const [showSkipConfirm, setShowSkipConfirm] = useState(false)
-  const [suggestionIdx] = useState(() => Math.floor(Math.random() * suggestions.length))
+  const [suggestionIdx] = useState(() => Math.floor(Math.random() * SUGGESTION_KEYS.length))
 
   useEffect(() => {
     if (skipped) return
@@ -50,13 +56,6 @@ export function FocusGuard({ activeCategory, startedAt: _startedAt, preset, allo
   function handleSkipAttempt() {
     if (strictMode) return // strict mode: no skip allowed
     setShowSkipConfirm(true)
-  }
-
-  function handleConfirmSkip() {
-    if (!allowPostpone && skipInput !== 'SKIP') return
-    setSkipped(true)
-    onBreakSkipped?.()
-    onBreakComplete()
   }
 
   const focusedMins = Math.round((Date.now() - (_startedAt ?? Date.now())) / 60_000)
@@ -83,7 +82,7 @@ export function FocusGuard({ activeCategory, startedAt: _startedAt, preset, allo
           {formatCountdown(remaining)}
         </p>
 
-        <p className="mb-8 text-sm text-zinc-400 italic">{suggestions[suggestionIdx]}</p>
+        <p className="mb-8 text-sm text-zinc-400 italic">{t(SUGGESTION_KEYS[suggestionIdx])}</p>
 
         {strictMode ? (
           <p className="text-xs text-zinc-700 italic">{t('focusGuard.strict')}</p>
@@ -110,24 +109,12 @@ export function FocusGuard({ activeCategory, startedAt: _startedAt, preset, allo
             </button>
           </div>
         ) : (
-          <div className="space-y-2">
-            <p className="text-xs text-zinc-600">{t('focusGuard.typeSkip')} <span className="font-mono text-zinc-400">SKIP</span> {t('focusGuard.toConfirm')}</p>
-            <input
-              autoFocus
-              className="w-full rounded border border-white/[0.07] bg-white/[0.03] px-3 py-1.5 text-center font-mono text-xs text-zinc-100 outline-none focus:border-white/[0.2] transition-all"
-              placeholder="SKIP"
-              value={skipInput}
-              onChange={e => setSkipInput(e.target.value.toUpperCase())}
-              onKeyDown={e => e.key === 'Enter' && handleConfirmSkip()}
-            />
-            <button
-              className="rounded-lg border border-white/[0.07] bg-white/[0.03] px-4 py-1.5 text-xs text-red-400 hover:text-red-300 transition-colors disabled:opacity-30"
-              disabled={skipInput !== 'SKIP'}
-              onClick={handleConfirmSkip}
-            >
-              {t('focusGuard.confirmSkip')}
-            </button>
-          </div>
+          <button
+            className="rounded-lg border border-white/[0.07] bg-white/[0.03] px-4 py-1.5 text-xs text-red-400 hover:text-red-300 transition-colors"
+            onClick={() => { setSkipped(true); onBreakSkipped?.(); onBreakComplete() }}
+          >
+            {t('focusGuard.skipBreak')}
+          </button>
         )}
       </div>
     </div>

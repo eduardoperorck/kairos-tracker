@@ -5,7 +5,8 @@ import { computeContextSwitches } from './contextSwitching'
 
 export type Recommendation = {
   id: string
-  text: string
+  textKey: string
+  params: Record<string, string>
   priority: 'high' | 'medium' | 'low'
   category: 'schedule' | 'focus' | 'wellbeing' | 'habits'
 }
@@ -26,10 +27,11 @@ export function generateRecommendations(input: RecommendationInput): Recommendat
   if (sessions.length >= 10) {
     const { peakHours } = computeEnergyPattern(sessions, 30)
     if (peakHours.length > 0) {
-      const peakStr = peakHours.map(h => `${h}:00`).join(' and ')
+      const peakStr = peakHours.map(h => `${h}:00`).join(', ')
       recommendations.push({
         id: 'peak-hours',
-        text: `Your peak focus hours are ${peakStr}. Consider blocking these for deep work and avoiding meetings.`,
+        textKey: 'rec.peakHours',
+        params: { hours: peakStr },
         priority: 'high',
         category: 'schedule',
       })
@@ -42,7 +44,8 @@ export function generateRecommendations(input: RecommendationInput): Recommendat
     if (metrics.status === 'fragmented') {
       recommendations.push({
         id: 'context-switching',
-        text: `You're switching apps ${Math.round(metrics.switchesPerHour)}/hour — consider closing secondary apps during focus sessions.`,
+        textKey: 'rec.contextSwitching',
+        params: { count: String(Math.round(metrics.switchesPerHour)) },
         priority: 'high',
         category: 'focus',
       })
@@ -55,7 +58,8 @@ export function generateRecommendations(input: RecommendationInput): Recommendat
     if (meetingHours > 10) {
       recommendations.push({
         id: 'meeting-overhead',
-        text: `Meetings consumed ${meetingHours.toFixed(1)}h this week — above the 10h threshold. Consider batching meetings to protect focus blocks.`,
+        textKey: 'rec.meetingOverhead',
+        params: { hours: meetingHours.toFixed(1) },
         priority: 'medium',
         category: 'schedule',
       })
@@ -66,7 +70,8 @@ export function generateRecommendations(input: RecommendationInput): Recommendat
   if (buildMinutesThisWeek > 30) {
     recommendations.push({
       id: 'build-time',
-      text: `You spent ${(buildMinutesThisWeek / 60).toFixed(1)}h waiting for builds this week. Running builds in the background could reclaim this time.`,
+      textKey: 'rec.buildTime',
+      params: { hours: (buildMinutesThisWeek / 60).toFixed(1) },
       priority: 'low',
       category: 'habits',
     })
@@ -76,7 +81,8 @@ export function generateRecommendations(input: RecommendationInput): Recommendat
   if (daysTracked > 0 && daysTracked < 5) {
     recommendations.push({
       id: 'tracking-consistency',
-      text: `You tracked ${daysTracked} days this week. Consistent tracking gives more accurate insights — try enabling the timer at the start of each work session.`,
+      textKey: 'rec.trackingConsistency',
+      params: { days: String(daysTracked) },
       priority: 'medium',
       category: 'habits',
     })
@@ -84,7 +90,6 @@ export function generateRecommendations(input: RecommendationInput): Recommendat
 
   // Best focus day of week (requires ≥14 sessions across ≥3 days)
   if (sessions.length >= 14) {
-    const DAY_NAMES = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday']
     const dayTotals = new Map<number, { totalMs: number; count: number }>()
     for (const s of sessions) {
       const day = new Date(s.date).getDay()
@@ -105,7 +110,8 @@ export function generateRecommendations(input: RecommendationInput): Recommendat
       const avgH = (data.totalMs / data.count / 3_600_000).toFixed(1)
       recommendations.push({
         id: 'best-focus-day',
-        text: `${DAY_NAMES[best]}s are your strongest focus day (avg ${avgH}h/session). Consider scheduling deep work blocks then.`,
+        textKey: 'rec.bestFocusDay',
+        params: { dayIndex: String(best), hours: avgH },
         priority: 'medium',
         category: 'schedule',
       })
@@ -121,7 +127,8 @@ export function generateRecommendations(input: RecommendationInput): Recommendat
     if (recentAvg < prevAvg * 0.75) {
       recommendations.push({
         id: 'declining-sessions',
-        text: `Your average session length dropped ${Math.round((1 - recentAvg / prevAvg) * 100)}% over the last 7 sessions — you may be fatigued or over-scheduled.`,
+        textKey: 'rec.decliningSessions',
+        params: { pct: String(Math.round((1 - recentAvg / prevAvg) * 100)) },
         priority: 'high',
         category: 'wellbeing',
       })
@@ -132,7 +139,8 @@ export function generateRecommendations(input: RecommendationInput): Recommendat
   if (sessions.length < 5) {
     recommendations.push({
       id: 'more-data',
-      text: "Keep tracking! After a few more sessions, you'll start seeing personalized patterns and recommendations.",
+      textKey: 'rec.moreData',
+      params: {},
       priority: 'low',
       category: 'habits',
     })

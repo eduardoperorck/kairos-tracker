@@ -172,6 +172,181 @@ const en = {
   'mvd.achieved': 'Achieved!',
   'mvd.max': 'Max 3 must-dos per day.',
   'mvd.add': 'Add',
+  'focus.noSessions': 'No sessions',
+  'focus.excellent': 'Excellent',
+  'focus.strong': 'Strong',
+  'focus.moderate': 'Moderate',
+  'focus.light': 'Light',
+  'focus.gettingStarted': 'Getting started',
+  'focus.todayScore': "Today's focus score",
+  'focusDebt.desc.minimal': 'Your cognitive bank is healthy.',
+  'focusDebt.desc.moderate': 'Some cognitive debt accumulating — a rest session helps.',
+  'focusDebt.desc.high': 'High cognitive debt — your next deep work session may underperform.',
+  'focusDebt.desc.critical': 'Critical debt — strongly consider a full rest period before demanding tasks.',
+  'timeline.trackedWindow': 'tracked window',
+  'github.correlationDesc': 'Show your GitHub commit activity overlaid on the heatmap.',
+  'rec.peakHours': 'Your peak focus hours are {hours}. Consider blocking these for deep work and avoiding meetings.',
+  'rec.contextSwitching': "You're switching apps {count}/hour — consider closing secondary apps during focus sessions.",
+  'rec.meetingOverhead': 'Meetings consumed {hours}h this week — above the 10h threshold. Consider batching meetings to protect focus blocks.',
+  'rec.buildTime': 'You spent {hours}h waiting for builds this week. Running builds in the background could reclaim this time.',
+  'rec.trackingConsistency': 'You tracked {days} days this week. Consistent tracking gives more accurate insights — try enabling the timer at the start of each work session.',
+  'rec.bestFocusDay': '{day}s are your strongest focus day (avg {hours}h/session). Consider scheduling deep work blocks then.',
+  'rec.decliningSessions': 'Your average session length dropped {pct}% over the last 7 sessions — you may be fatigued or over-scheduled.',
+  'rec.moreData': "Keep tracking! After a few more sessions, you'll start seeing personalized patterns and recommendations.",
+
+  // ActiveTimerBar
+  'activeTimer.stop': 'stop',
+
+  // TrackerView
+  'tracker.tagQuestion': 'Tag?',
+  'tracker.skipTag': 'skip',
+  'tracker.todaysGoals': "Today's goals",
+  'tracker.addCategory': '+ Add category',
+  'tracker.whichCategory': '— which category is this?',
+  'tracker.ignore': 'ignore',
+  'tracker.yesAlways': 'Yes, always',
+  'tracker.notNow': 'Not now',
+  'tracker.logTime': '+ log time',
+  'tracker.archived': 'archived',
+  'tracker.noGoalsHint': 'No goals set — add up to',
+  'tracker.autoStart': 'auto-start',
+  'tracker.whenever': 'whenever active?',
+
+  // CategoryItem menu
+  'category.rename': '✏ Rename',
+  'category.tagLastSession': '🏷 Tag last session',
+  'category.tagLastSessionLabel': 'Tag last session:',
+  'category.color': 'Color',
+  'category.deleteIcon': '🗑 Delete',
+
+  // CategoryGoal
+  'goal.setWeekly': 'Set weekly goal',
+  'goal.hoursPerWeek': 'h / week',
+  'goal.useSuggestion': 'Use suggestion',
+  'goal.suggested': 'Suggested:',
+  'goal.recalibrate': 'Recalibrate to',
+  'goal.today': 'today',
+
+  // Settings groups & accordion
+  'settings.tracking': 'Tracking',
+  'settings.integrations': 'Integrations',
+  'settings.data': 'Data',
+  'settings.connected': '✓ Connected',
+  'settings.setup': 'Set up →',
+  'settings.startup': 'Startup',
+  'settings.startupDesc': 'Launch Time Tracker when Windows starts',
+  'settings.startupOn': 'App will start on login.',
+  'settings.startupOff': 'Removed from startup.',
+  'settings.startupUnavail': 'Not available (Windows only).',
+  'settings.processRules': 'Process Rules',
+  'settings.processRulesEmpty': 'No custom rules — classify a process from the Tracker tab to add rules here.',
+  'settings.ignore': 'ignore',
+  'settings.syncSaved': 'Sync path saved.',
+  'settings.syncNoPath': 'No sync path configured.',
+  'settings.syncInvalid': 'Invalid sync path.',
+  'settings.workspaceRoot': 'Workspace Root',
+  'settings.workspaceRootDesc': 'Base folder for your projects. Used to auto-detect the active repo from your VSCode window title.',
+  'settings.obsidian': 'Obsidian Daily Notes',
+  'settings.obsidianDesc': 'Vault path for daily notes. A YYYY-MM-DD.md file will be written automatically each evening.',
+  'settings.retention': 'Retention:',
+  'settings.retention7': '7 days',
+  'settings.retention30': '30 days',
+  'settings.retentionNever': 'Never auto-delete',
+  'settings.screenshotDesc': 'Capture a screenshot every 5 minutes while a timer is active. Stored locally, never uploaded.',
+  'settings.screenshotOptIn': 'Opt-in only.',
+  'settings.slackStatus': 'Slack Status',
+  'settings.slackDesc': 'Auto-set Slack status on timer start. Token needs users.profile:write.',
+  'settings.notionExport': 'Notion Export',
+  'settings.notionDesc': 'Export sessions to a Notion database. Integration token + database ID required.',
+
+  // HistoryView
+  'history.importCalendar': 'Import Calendar',
+  'history.export': '⬇ Export',
+  'history.downloadCSV': 'Download CSV',
+  'history.downloadJSON': 'Download JSON',
+  'history.downloadHTML': 'Download HTML',
+  'history.exportNotion': 'Export to Notion',
+  'history.applyTag': 'Apply tag',
+  'history.tagOrClear': 'Tag (or empty to clear)',
+  'history.emptyStart': 'Start a timer on the Tracker tab — completed sessions will appear here.',
+  'history.emptyFilter': 'No sessions match the current filter.',
+
+  // App
+  'app.goodMorning': 'Good morning — what are your priorities today?',
+  'app.setIntentions': 'Set intentions →',
+
+  // IntentionsView
+  'intentions.eveningOnly': 'Evening review available after 5pm.',
+
+  // FocusGuard break suggestions
+  'focusGuard.suggestion0': 'Take a short walk',
+  'focusGuard.suggestion1': 'Stretch your neck and shoulders',
+  'focusGuard.suggestion2': 'Drink some water',
+  'focusGuard.suggestion3': 'Look at something 20 feet away for 20 seconds',
+  'focusGuard.suggestion4': 'Do a few deep breaths',
+
+  // ProductivityWrapped
+  'wrapped.notEnoughData': 'Not enough data yet.',
+  'wrapped.back': '← Back',
+  'wrapped.done': 'Done',
+  'wrapped.thisMonthTracked': 'This month you tracked',
+  'wrapped.ofFocusedTime': 'of focused time',
+  'wrapped.dominantCategory': 'Your dominant category was',
+  'wrapped.ofYourTime': 'of your time',
+  'wrapped.enteredFlow': 'You entered flow state',
+  'wrapped.times': 'times',
+  'wrapped.flowSub': 'sessions longer than 45 min',
+  'wrapped.longestStreak': 'Your longest streak was',
+  'wrapped.days': 'days',
+  'wrapped.streakSub': 'consecutive days tracked',
+  'wrapped.peakFocusHour': 'Your peak focus hour is',
+  'wrapped.peakSub': 'based on your last 30 days',
+  'wrapped.mostProductiveDay': 'Your most productive day',
+  'wrapped.avg': 'avg',
+
+  // DeadTimeRecoveryWidget
+  'deadTime.dismiss': 'Dismiss',
+
+  // ActivityTimeline
+  'timeline.untracked': 'untracked',
+  'timeline.untrackedTitle': 'Untracked',
+
+  // StatsView
+  'stats.showMorePatterns': 'Show more patterns ▾',
+  'stats.showLess': 'Show less ▴',
+
+  // FocusLock label
+  'focusLock.label': 'Focus Lock',
+
+  // HistoryView
+  'history.format': 'Format',
+  'history.flow': '⚡ flow',
+
+  // Relative time (used by formatRelativeTime domain fn)
+  'relative.justNow': 'just now',
+  'relative.minAgo': '{n} min ago',
+  'relative.hAgo': '{n}h ago',
+  'relative.yesterday': 'yesterday',
+  'relative.daysAgo': '{n} days ago',
+
+  // DigestView
+  'digest.title': 'AI Weekly Digest',
+  'digest.generate': 'Generate',
+  'digest.regenerate': 'Regenerate',
+  'digest.generating': 'Generating…',
+  'digest.saveAndGenerate': 'Save & Generate',
+  'digest.hint': 'Click Generate to get an AI-powered summary of your week.',
+
+  // DistractionPatternWidget
+  'distraction.patterns': '⚠ Distraction patterns detected',
+  'distraction.shortVisits': 'apps with mostly short visits (<5 min)',
+  'distraction.visitsAvg': '× visits · avg',
+
+  // ErrorBoundary
+  'error.title': 'Something went wrong',
+  'error.detail': 'An error occurred and could not be recovered.',
+  'error.reload': 'Reload app',
+  'error.copyDetails': 'Copy error details',
 } as const
 
 const pt: { [K in keyof typeof en]: string } = {
@@ -344,15 +519,195 @@ const pt: { [K in keyof typeof en]: string } = {
   'mvd.achieved': 'Conquistado!',
   'mvd.max': 'Máx 3 tarefas obrigatórias por dia.',
   'mvd.add': 'Adicionar',
+  'focus.noSessions': 'Sem sessões',
+  'focus.excellent': 'Excelente',
+  'focus.strong': 'Forte',
+  'focus.moderate': 'Moderado',
+  'focus.light': 'Leve',
+  'focus.gettingStarted': 'Começando',
+  'focus.todayScore': 'Score de foco do dia',
+  'focusDebt.desc.minimal': 'Seu banco cognitivo está saudável.',
+  'focusDebt.desc.moderate': 'Alguma dívida cognitiva acumulando — uma sessão de descanso ajuda.',
+  'focusDebt.desc.high': 'Alta dívida cognitiva — sua próxima sessão pode ter desempenho inferior.',
+  'focusDebt.desc.critical': 'Dívida crítica — considere um período de descanso antes de tarefas exigentes.',
+  'timeline.trackedWindow': 'janela rastreada',
+  'github.correlationDesc': 'Exibir atividade de commits do GitHub sobreposta ao heatmap.',
+  'rec.peakHours': 'Seus horários de pico são {hours}. Considere bloqueá-los para trabalho profundo e evitar reuniões.',
+  'rec.contextSwitching': 'Você está trocando de app {count}/hora — considere fechar apps secundários durante sessões de foco.',
+  'rec.meetingOverhead': 'Reuniões consumiram {hours}h esta semana — acima do limite de 10h. Considere agrupar reuniões para proteger blocos de foco.',
+  'rec.buildTime': 'Você passou {hours}h esperando builds esta semana. Executar builds em segundo plano poderia recuperar este tempo.',
+  'rec.trackingConsistency': 'Você rastreou {days} dias esta semana. Rastreamento consistente dá insights mais precisos — tente ativar o timer no início de cada sessão de trabalho.',
+  'rec.bestFocusDay': '{day}s são seu melhor dia de foco (média {hours}h/sessão). Considere agendar blocos de trabalho profundo nesse dia.',
+  'rec.decliningSessions': 'Sua sessão média caiu {pct}% nas últimas 7 sessões — você pode estar fatigado ou com agenda sobrecarregada.',
+  'rec.moreData': 'Continue rastreando! Após mais algumas sessões, você verá padrões e recomendações personalizados.',
+
+  // ActiveTimerBar
+  'activeTimer.stop': 'parar',
+
+  // TrackerView
+  'tracker.tagQuestion': 'Tag?',
+  'tracker.skipTag': 'pular',
+  'tracker.todaysGoals': 'Metas do dia',
+  'tracker.addCategory': '+ Adicionar categoria',
+  'tracker.whichCategory': '— qual categoria é essa?',
+  'tracker.ignore': 'ignorar',
+  'tracker.yesAlways': 'Sim, sempre',
+  'tracker.notNow': 'Agora não',
+  'tracker.logTime': '+ registrar tempo',
+  'tracker.archived': 'arquivadas',
+  'tracker.noGoalsHint': 'Sem metas — adicione até',
+  'tracker.autoStart': 'iniciar automaticamente',
+  'tracker.whenever': 'quando ativo?',
+
+  // CategoryItem menu
+  'category.rename': '✏ Renomear',
+  'category.tagLastSession': '🏷 Marcar última sessão',
+  'category.tagLastSessionLabel': 'Marcar última sessão:',
+  'category.color': 'Cor',
+  'category.deleteIcon': '🗑 Excluir',
+
+  // CategoryGoal
+  'goal.setWeekly': 'Definir meta semanal',
+  'goal.hoursPerWeek': 'h / semana',
+  'goal.useSuggestion': 'Usar sugestão',
+  'goal.suggested': 'Sugestão:',
+  'goal.recalibrate': 'Recalibrar para',
+  'goal.today': 'hoje',
+
+  // Settings groups & accordion
+  'settings.tracking': 'Rastreamento',
+  'settings.integrations': 'Integrações',
+  'settings.data': 'Dados',
+  'settings.connected': '✓ Conectado',
+  'settings.setup': 'Configurar →',
+  'settings.startup': 'Inicialização',
+  'settings.startupDesc': 'Iniciar Time Tracker com o Windows',
+  'settings.startupOn': 'App iniciará no login.',
+  'settings.startupOff': 'Removido da inicialização.',
+  'settings.startupUnavail': 'Não disponível (apenas Windows).',
+  'settings.processRules': 'Regras de Processo',
+  'settings.processRulesEmpty': 'Sem regras — classifique um processo na aba Rastreador para adicionar regras aqui.',
+  'settings.ignore': 'ignorar',
+  'settings.syncSaved': 'Caminho de sync salvo.',
+  'settings.syncNoPath': 'Nenhum caminho de sync configurado.',
+  'settings.syncInvalid': 'Caminho de sync inválido.',
+  'settings.workspaceRoot': 'Pasta de Projetos',
+  'settings.workspaceRootDesc': 'Pasta base dos seus projetos. Usada para detectar o repositório ativo pela janela do VSCode.',
+  'settings.obsidian': 'Notas Diárias Obsidian',
+  'settings.obsidianDesc': 'Caminho do vault para notas diárias. Um arquivo YYYY-MM-DD.md será escrito automaticamente toda tarde.',
+  'settings.retention': 'Retenção:',
+  'settings.retention7': '7 dias',
+  'settings.retention30': '30 dias',
+  'settings.retentionNever': 'Nunca apagar',
+  'settings.screenshotDesc': 'Captura uma screenshot a cada 5 minutos enquanto um timer está ativo. Armazenada localmente, nunca enviada.',
+  'settings.screenshotOptIn': 'Opt-in apenas.',
+  'settings.slackStatus': 'Status do Slack',
+  'settings.slackDesc': 'Define status do Slack ao iniciar timer. Token precisa de users.profile:write.',
+  'settings.notionExport': 'Exportar para Notion',
+  'settings.notionDesc': 'Exportar sessões para banco Notion. Token de integração + ID do banco necessários.',
+
+  // HistoryView
+  'history.importCalendar': 'Importar Calendário',
+  'history.export': '⬇ Exportar',
+  'history.downloadCSV': 'Baixar CSV',
+  'history.downloadJSON': 'Baixar JSON',
+  'history.downloadHTML': 'Baixar HTML',
+  'history.exportNotion': 'Exportar para Notion',
+  'history.applyTag': 'Aplicar tag',
+  'history.tagOrClear': 'Tag (ou vazio para limpar)',
+  'history.emptyStart': 'Inicie um timer na aba Rastreador — sessões concluídas aparecerão aqui.',
+  'history.emptyFilter': 'Nenhuma sessão corresponde ao filtro atual.',
+
+  // App
+  'app.goodMorning': 'Bom dia — quais são suas prioridades hoje?',
+  'app.setIntentions': 'Definir intenções →',
+
+  // IntentionsView
+  'intentions.eveningOnly': 'Revisão disponível após as 17h.',
+
+  // FocusGuard break suggestions
+  'focusGuard.suggestion0': 'Dê uma caminhada rápida',
+  'focusGuard.suggestion1': 'Estique o pescoço e os ombros',
+  'focusGuard.suggestion2': 'Beba um pouco de água',
+  'focusGuard.suggestion3': 'Olhe para algo a 6 metros de distância por 20 segundos',
+  'focusGuard.suggestion4': 'Respire fundo algumas vezes',
+
+  // ProductivityWrapped
+  'wrapped.notEnoughData': 'Dados insuficientes ainda.',
+  'wrapped.back': '← Voltar',
+  'wrapped.done': 'Concluído',
+  'wrapped.thisMonthTracked': 'Este mês você rastreou',
+  'wrapped.ofFocusedTime': 'de tempo focado',
+  'wrapped.dominantCategory': 'Sua categoria dominante foi',
+  'wrapped.ofYourTime': 'do seu tempo',
+  'wrapped.enteredFlow': 'Você entrou em estado de flow',
+  'wrapped.times': 'vezes',
+  'wrapped.flowSub': 'sessões com mais de 45 min',
+  'wrapped.longestStreak': 'Sua maior sequência foi',
+  'wrapped.days': 'dias',
+  'wrapped.streakSub': 'dias consecutivos rastreados',
+  'wrapped.peakFocusHour': 'Seu horário de pico de foco é',
+  'wrapped.peakSub': 'com base nos seus últimos 30 dias',
+  'wrapped.mostProductiveDay': 'Seu dia mais produtivo',
+  'wrapped.avg': 'média',
+
+  // DeadTimeRecoveryWidget
+  'deadTime.dismiss': 'Dispensar',
+
+  // ActivityTimeline
+  'timeline.untracked': 'não rastreado',
+  'timeline.untrackedTitle': 'Não rastreado',
+
+  // StatsView
+  'stats.showMorePatterns': 'Mostrar mais padrões ▾',
+  'stats.showLess': 'Mostrar menos ▴',
+
+  // FocusLock label
+  'focusLock.label': 'Focus Lock',
+
+  // HistoryView
+  'history.format': 'Formato',
+  'history.flow': '⚡ flow',
+
+  // Relative time (used by formatRelativeTime domain fn)
+  'relative.justNow': 'agora',
+  'relative.minAgo': 'há {n} min',
+  'relative.hAgo': 'há {n}h',
+  'relative.yesterday': 'ontem',
+  'relative.daysAgo': 'há {n} dias',
+
+  // DigestView
+  'digest.title': 'Resumo Semanal IA',
+  'digest.generate': 'Gerar',
+  'digest.regenerate': 'Gerar novamente',
+  'digest.generating': 'Gerando…',
+  'digest.saveAndGenerate': 'Salvar e Gerar',
+  'digest.hint': 'Clique em Gerar para obter um resumo da sua semana.',
+
+  // DistractionPatternWidget
+  'distraction.patterns': '⚠ Padrões de distração detectados',
+  'distraction.shortVisits': 'apps com visitas curtas (<5 min)',
+  'distraction.visitsAvg': '× visitas · média',
+
+  // ErrorBoundary
+  'error.title': 'Algo deu errado',
+  'error.detail': 'Ocorreu um erro e não foi possível recuperar.',
+  'error.reload': 'Recarregar app',
+  'error.copyDetails': 'Copiar detalhes do erro',
 }
 
-const translations: Record<Lang, { [K in keyof typeof en]: string }> = { en, pt }
+export const translations: Record<Lang, { [K in keyof typeof en]: string }> = { en, pt }
 
 export type TKey = keyof typeof en
 
 export const DAY_LABELS: Record<Lang, string[]> = {
   en: ['Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa', 'Su'],
   pt: ['Se', 'Te', 'Qu', 'Qu', 'Se', 'Sá', 'Do'],
+}
+
+export const DAY_NAMES: Record<Lang, string[]> = {
+  en: ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'],
+  pt: ['Domingo', 'Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado'],
 }
 
 type I18nContextType = {

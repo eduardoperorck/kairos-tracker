@@ -34,7 +34,7 @@ export function FocusLock({ categoryName, startedAt, cycleMs = DEFAULT_CYCLE_MS,
 
   return (
     <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-[#0a0a0a]">
-      <p className="mb-2 text-xs font-medium uppercase tracking-[0.2em] text-zinc-600">Focus Lock</p>
+      <p className="mb-2 text-xs font-medium uppercase tracking-[0.2em] text-zinc-600">{t('focusLock.label')}</p>
       <h1 className="mb-8 text-2xl font-semibold tracking-wide text-zinc-100">{categoryName}</h1>
       <CircularTimer elapsedMs={elapsedMs} cycleMs={cycleMs} isFlow={flow} />
       <button

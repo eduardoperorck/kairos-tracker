@@ -1,6 +1,6 @@
 import { useMemo } from 'react'
 import { generateRecommendations } from '../domain/focusRecommendations'
-import { useI18n } from '../i18n'
+import { useI18n, DAY_NAMES, type TKey } from '../i18n'
 import type { Session } from '../domain/timer'
 import type { CaptureBlock } from '../domain/passiveCapture'
 
@@ -12,8 +12,15 @@ type Props = {
   daysTracked?: number
 }
 
+function fillTemplate(template: string, params: Record<string, string>, dayNames: string[]): string {
+  return Object.entries(params).reduce((s, [k, v]) => {
+    if (k === 'dayIndex') return s.replace('{day}', dayNames[parseInt(v)] ?? v)
+    return s.replace(`{${k}}`, v)
+  }, template)
+}
+
 export function RecommendationsView({ sessions, blocks, meetingMinutesThisWeek = 0, buildMinutesThisWeek = 0, daysTracked = 0 }: Props) {
-  const { t } = useI18n()
+  const { t, lang } = useI18n()
   const recommendations = useMemo(() =>
     generateRecommendations({ sessions, blocks, meetingMinutesThisWeek, buildMinutesThisWeek, daysTracked }),
     [sessions, blocks, meetingMinutesThisWeek, buildMinutesThisWeek, daysTracked]
@@ -33,7 +40,7 @@ export function RecommendationsView({ sessions, blocks, meetingMinutesThisWeek =
       <div className="space-y-2">
         {recommendations.slice(0, 3).map(rec => (
           <div key={rec.id} className={`rounded-lg border px-4 py-3 ${priorityColors[rec.priority]}`}>
-            <p className="text-sm text-zinc-300">{rec.text}</p>
+            <p className="text-sm text-zinc-300">{fillTemplate(t(rec.textKey as TKey), rec.params, DAY_NAMES[lang])}</p>
           </div>
         ))}
       </div>

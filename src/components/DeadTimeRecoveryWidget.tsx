@@ -1,5 +1,6 @@
 import { computeDeadTime, formatIdleTime } from '../domain/deadTimeRecovery'
 import type { MicroTask } from '../domain/deadTimeRecovery'
+import { useI18n } from '../i18n'
 
 type Props = {
   idleMs: number
@@ -9,6 +10,7 @@ type Props = {
 }
 
 export function DeadTimeRecoveryWidget({ idleMs, customTasks, onSelectTask, onDismiss }: Props) {
+  const { t } = useI18n()
   const state = computeDeadTime(idleMs, undefined, customTasks)
 
   if (!state.dead) return null
@@ -16,19 +18,19 @@ export function DeadTimeRecoveryWidget({ idleMs, customTasks, onSelectTask, onDi
   return (
     <div
       role="dialog"
-      aria-label="Dead time detected"
+      aria-label={t('deadTime.title')}
       className="rounded-xl border border-white/10 bg-zinc-900/95 p-4 shadow-2xl text-sm"
     >
       <div className="mb-3 flex items-center justify-between">
         <div>
           <p className="font-medium text-zinc-200">
-            💤 Dead time — {formatIdleTime(state.idleMs)} idle
+            💤 {t('deadTime.title')} — {formatIdleTime(state.idleMs)} {t('deadTime.idle')}
           </p>
-          <p className="text-xs text-zinc-500 mt-0.5">Quick win while you're in transition?</p>
+          <p className="text-xs text-zinc-500 mt-0.5">{t('deadTime.quickWin')}</p>
         </div>
         <button
           onClick={onDismiss}
-          aria-label="Dismiss"
+          aria-label={t('deadTime.dismiss')}
           className="text-zinc-600 hover:text-zinc-400 transition-colors ml-2"
         >
           ✕

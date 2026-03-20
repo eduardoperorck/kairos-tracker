@@ -57,27 +57,30 @@ describe('SettingsView — renders', () => {
   it('renders language buttons', () => {
     const storage = makeStorage()
     renderWithI18n(<SettingsView {...makeDefaultProps(storage)} />)
-    expect(screen.getByText('English')).toBeTruthy()
-    expect(screen.getByText('Português')).toBeTruthy()
+    // Language accordion shows current language as status text — no click needed
+    expect(screen.getAllByText('English').length).toBeGreaterThanOrEqual(1)
   })
 
   it('renders focus preset buttons', () => {
     const storage = makeStorage()
     renderWithI18n(<SettingsView {...makeDefaultProps(storage)} />)
-    // At least one preset name should be visible
-    expect(screen.getByText('Pomodoro')).toBeTruthy()
+    // Focus preset accordion shows current preset name as status text — no click needed
+    expect(screen.getAllByText('Pomodoro').length).toBeGreaterThanOrEqual(1)
   })
 
   it('renders strict mode toggle', () => {
     const storage = makeStorage()
     renderWithI18n(<SettingsView {...makeDefaultProps(storage)} />)
-    // Two switches: strict mode + screenshot enable — check at least one exists
+    fireEvent.click(screen.getByText(/Focus Guard Preset/i))
+    // Strict mode switch should be visible after expanding focus section
     expect(screen.getAllByRole('switch').length).toBeGreaterThanOrEqual(1)
   })
 
   it('renders Webhooks section', () => {
     const storage = makeStorage()
     renderWithI18n(<SettingsView {...makeDefaultProps(storage)} />)
+    fireEvent.click(screen.getByText('Integrations'))
+    fireEvent.click(screen.getByText(/webhooks/i))
     expect(screen.getByPlaceholderText('https://…')).toBeTruthy()
   })
 })
@@ -87,7 +90,8 @@ describe('SettingsView — strict mode toggle', () => {
     const storage = makeStorage()
     const onFocusStrictModeChange = vi.fn()
     renderWithI18n(<SettingsView {...makeDefaultProps(storage, { onFocusStrictModeChange })} />)
-    // Strict mode toggle is the first switch in the DOM
+    fireEvent.click(screen.getByText(/Focus Guard Preset/i))
+    // Strict mode toggle is the first switch in the DOM after expanding focus section
     fireEvent.click(screen.getAllByRole('switch')[0])
     expect(onFocusStrictModeChange).toHaveBeenCalledWith(true)
   })
@@ -95,6 +99,7 @@ describe('SettingsView — strict mode toggle', () => {
   it('shows strict mode as enabled when focusStrictMode=true', () => {
     const storage = makeStorage()
     renderWithI18n(<SettingsView {...makeDefaultProps(storage, { focusStrictMode: true })} />)
+    fireEvent.click(screen.getByText(/Focus Guard Preset/i))
     const strictToggle = screen.getAllByRole('switch')[0]
     expect(strictToggle.getAttribute('aria-checked')).toBe('true')
   })
@@ -105,6 +110,7 @@ describe('SettingsView — focus preset', () => {
     const storage = makeStorage()
     const onFocusPresetChange = vi.fn()
     renderWithI18n(<SettingsView {...makeDefaultProps(storage, { onFocusPresetChange })} />)
+    fireEvent.click(screen.getByText(/Focus Guard Preset/i))
     // Click the second preset (52/17)
     const buttons = screen.getAllByText(/\d+m \/ \d+m/)
     fireEvent.click(buttons[1])
@@ -126,6 +132,7 @@ describe('SettingsView — backup', () => {
 
     const storage = makeStorage()
     renderWithI18n(<SettingsView {...makeDefaultProps(storage)} />)
+    fireEvent.click(screen.getByText(/backup & restore/i))
     fireEvent.click(screen.getByText(/download backup/i))
     expect(createObjectURL).toHaveBeenCalled()
   })
@@ -138,6 +145,7 @@ describe('SettingsView — restore backup', () => {
       { id: 's1', categoryId: 'c1', startedAt: 0, endedAt: 3600000, date: '2026-03-15' },
     ]
     renderWithI18n(<SettingsView {...makeDefaultProps(storage)} />)
+    fireEvent.click(screen.getByText(/backup & restore/i))
 
     const file = new File([JSON.stringify(sessions)], 'backup.json', { type: 'application/json' })
     const input = document.querySelector('input[type="file"]') as HTMLInputElement
@@ -152,6 +160,7 @@ describe('SettingsView — restore backup', () => {
   it('shows error message for invalid JSON backup', async () => {
     const storage = makeStorage()
     renderWithI18n(<SettingsView {...makeDefaultProps(storage)} />)
+    fireEvent.click(screen.getByText(/backup & restore/i))
 
     const file = new File(['not json at all {{{'], 'backup.json', { type: 'application/json' })
     const input = document.querySelector('input[type="file"]') as HTMLInputElement
@@ -166,6 +175,7 @@ describe('SettingsView — restore backup', () => {
   it('shows error for non-array JSON backup', async () => {
     const storage = makeStorage()
     renderWithI18n(<SettingsView {...makeDefaultProps(storage)} />)
+    fireEvent.click(screen.getByText(/backup & restore/i))
 
     const file = new File([JSON.stringify({ not: 'array' })], 'backup.json', { type: 'application/json' })
     const input = document.querySelector('input[type="file"]') as HTMLInputElement
@@ -179,18 +189,17 @@ describe('SettingsView — restore backup', () => {
 })
 
 describe('SettingsView — webhooks', () => {
-  it('calls onWebhookUrlChange when save button clicked', async () => {
+  it('calls onWebhookUrlChange when webhook input loses focus', async () => {
     const storage = makeStorage()
     const onWebhookUrlChange = vi.fn()
     storage.setSetting = vi.fn().mockResolvedValue(undefined)
     renderWithI18n(<SettingsView {...makeDefaultProps(storage, { onWebhookUrlChange })} />)
+    fireEvent.click(screen.getByText('Integrations'))
+    fireEvent.click(screen.getByText(/webhooks/i))
 
     const input = screen.getByPlaceholderText('https://…')
     fireEvent.change(input, { target: { value: 'https://example.com/hook' } })
-
-    // Find Save buttons — there's one in webhooks and one in API key section
-    const saveButtons = screen.getAllByText('Save')
-    fireEvent.click(saveButtons[saveButtons.length - 1])
+    fireEvent.blur(input)
 
     await waitFor(() => {
       expect(onWebhookUrlChange).toHaveBeenCalledWith('https://example.com/hook')
@@ -208,7 +217,8 @@ describe('SettingsView — process rules manager', () => {
   it('shows empty state when no user rules exist', () => {
     const storage = makeStorage()
     renderWithI18n(<SettingsView {...makeDefaultProps(storage, { categories: [cat] })} />)
-    expect(screen.getByText(/no custom rules/i)).toBeTruthy()
+    fireEvent.click(screen.getByText(/process rules/i))
+    expect(screen.getByText(/rules are created automatically/i)).toBeTruthy()
   })
 
   it('lists saved process rules with their category', () => {
@@ -217,6 +227,7 @@ describe('SettingsView — process rules manager', () => {
     ]))
     const storage = makeStorage()
     renderWithI18n(<SettingsView {...makeDefaultProps(storage, { categories: [cat] })} />)
+    fireEvent.click(screen.getByText(/process rules/i))
     expect(screen.getByText('chrome.exe')).toBeTruthy()
     expect(screen.getByText('Work')).toBeTruthy()
   })
@@ -227,6 +238,7 @@ describe('SettingsView — process rules manager', () => {
     ]))
     const storage = makeStorage()
     renderWithI18n(<SettingsView {...makeDefaultProps(storage, { categories: [cat] })} />)
+    fireEvent.click(screen.getByText(/process rules/i))
     expect(screen.getByText('game.exe')).toBeTruthy()
     expect(screen.getByText(/ignore/i)).toBeTruthy()
   })
@@ -237,6 +249,7 @@ describe('SettingsView — process rules manager', () => {
     ]))
     const storage = makeStorage()
     renderWithI18n(<SettingsView {...makeDefaultProps(storage, { categories: [cat] })} />)
+    fireEvent.click(screen.getByText(/process rules/i))
     fireEvent.click(screen.getByTitle('Delete rule for notepad.exe'))
     expect(screen.queryByText('notepad.exe')).toBeNull()
   })
@@ -247,6 +260,8 @@ describe('SettingsView — sync path validation', () => {
     const storage = makeStorage()
     await storage.setSetting('sync_path', '../etc/passwd')
     renderWithI18n(<SettingsView {...makeDefaultProps(storage)} />)
+
+    fireEvent.click(screen.getByText(/sync/i))
 
     await waitFor(() => {
       expect(screen.getByText(/sync now/i)).toBeTruthy()

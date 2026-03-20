@@ -1,7 +1,8 @@
 import Database from '@tauri-apps/plugin-sql'
-import type { Storage, PersistedCategory } from './storage'
+import type { Storage, PersistedCategory, DailyCaptureStatRow } from './storage'
 import type { Session } from '../domain/timer'
 import type { Intention, EveningReview } from '../domain/intentions'
+import type { WindowRule } from '../domain/passiveCapture'
 
 const DB_PATH = 'sqlite:timetracker.db'
 
@@ -43,6 +44,27 @@ const MIGRATIONS: string[] = [
     category_id TEXT NOT NULL,
     started_at  INTEGER NOT NULL
   )`,
+  // v3 — archived column: hide categories without deleting history
+  `ALTER TABLE categories ADD COLUMN archived INTEGER NOT NULL DEFAULT 0`,
+  // v4 — daily_capture_stats: persist passive window intelligence across restarts
+  `CREATE TABLE IF NOT EXISTS daily_capture_stats (
+    date        TEXT NOT NULL,
+    process     TEXT NOT NULL,
+    total_ms    INTEGER NOT NULL,
+    block_count INTEGER NOT NULL,
+    category_id TEXT,
+    PRIMARY KEY (date, process)
+  )`,
+  // v5 — window_rules: migrate user window rules from localStorage to SQLite
+  `CREATE TABLE IF NOT EXISTS window_rules (
+    id          TEXT PRIMARY KEY,
+    match_type  TEXT NOT NULL,
+    pattern     TEXT NOT NULL,
+    category_id TEXT,
+    tag         TEXT,
+    mode        TEXT NOT NULL,
+    enabled     INTEGER NOT NULL DEFAULT 1
+  )`,
 ]
 
 async function runMigrations(db: InstanceType<typeof Database>): Promise<void> {
@@ -51,6 +73,7 @@ async function runMigrations(db: InstanceType<typeof Database>): Promise<void> {
   for (let i = version; i < MIGRATIONS.length; i++) {
     await db.execute(MIGRATIONS[i])
     version = i + 1
+    // safe: version is always a small positive integer from a migration array index, never user-controlled
     await db.execute(`PRAGMA user_version = ${version}`)
   }
 }
@@ -63,8 +86,8 @@ export async function createTauriStorage(): Promise<Storage> {
     async loadCategories(): Promise<PersistedCategory[]> {
       // accumulated_ms is kept in the schema for backwards-compat but is always
       // recomputed from sessions in useInitStore — never read or written here.
-      const rows = await db.select<{ id: string; name: string; weekly_goal_ms: number | null; color: string | null }[]>(
-        'SELECT id, name, weekly_goal_ms, color FROM categories ORDER BY rowid'
+      const rows = await db.select<{ id: string; name: string; weekly_goal_ms: number | null; color: string | null; archived: number }[]>(
+        'SELECT id, name, weekly_goal_ms, color, archived FROM categories ORDER BY rowid'
       )
       return rows.map(r => ({
         id: r.id,
@@ -72,6 +95,7 @@ export async function createTauriStorage(): Promise<Storage> {
         accumulatedMs: 0, // always overridden by computeTodayMs in useInitStore
         weeklyGoalMs: r.weekly_goal_ms ?? undefined,
         color: r.color ?? undefined,
+        archived: r.archived === 1 ? true : undefined,
       }))
     },
 
@@ -155,6 +179,10 @@ export async function createTauriStorage(): Promise<Storage> {
       await db.execute('UPDATE categories SET color = ? WHERE id = ?', [color, id])
     },
 
+    async archiveCategory(id: string, archived: boolean): Promise<void> {
+      await db.execute('UPDATE categories SET archived = ? WHERE id = ?', [archived ? 1 : 0, id])
+    },
+
     async getSetting(key: string): Promise<string | null> {
       const rows = await db.select<{ value: string }[]>('SELECT value FROM settings WHERE key = ?', [key])
       return rows[0]?.value ?? null
@@ -203,6 +231,67 @@ export async function createTauriStorage(): Promise<Storage> {
           [s.id, s.categoryId, s.startedAt, s.endedAt, s.date, s.tag ?? null]
         )
       }
+    },
+
+    async updateSessionTag(id: string, tag: string | null): Promise<void> {
+      await db.execute('UPDATE sessions SET tag = ? WHERE id = ?', [tag, id])
+    },
+
+    async saveDailyCaptureStat(row: DailyCaptureStatRow): Promise<void> {
+      await db.execute(
+        `INSERT INTO daily_capture_stats (date, process, total_ms, block_count, category_id)
+         VALUES (?, ?, ?, ?, ?)
+         ON CONFLICT(date, process) DO UPDATE SET
+           total_ms    = total_ms    + excluded.total_ms,
+           block_count = block_count + excluded.block_count`,
+        [row.date, row.process, row.total_ms, row.block_count, row.category_id ?? null]
+      )
+    },
+
+    async loadDailyCaptureStatsSince(date: string): Promise<DailyCaptureStatRow[]> {
+      const rows = await db.select<{
+        date: string; process: string; total_ms: number; block_count: number; category_id: string | null
+      }[]>(
+        'SELECT date, process, total_ms, block_count, category_id FROM daily_capture_stats WHERE date >= ? ORDER BY date, process',
+        [date]
+      )
+      return rows.map(r => ({
+        date: r.date,
+        process: r.process,
+        total_ms: r.total_ms,
+        block_count: r.block_count,
+        category_id: r.category_id,
+      }))
+    },
+
+    async loadWindowRules(): Promise<WindowRule[]> {
+      const rows = await db.select<{
+        id: string; match_type: string; pattern: string; category_id: string | null;
+        tag: string | null; mode: string; enabled: number
+      }[]>(
+        'SELECT id, match_type, pattern, category_id, tag, mode, enabled FROM window_rules ORDER BY rowid'
+      )
+      return rows.map(r => ({
+        id: r.id,
+        matchType: r.match_type as 'process' | 'title',
+        pattern: r.pattern,
+        categoryId: r.category_id,
+        tag: r.tag ?? undefined,
+        mode: r.mode as 'auto' | 'suggest' | 'ignore',
+        enabled: r.enabled === 1,
+      }))
+    },
+
+    async saveWindowRule(rule: WindowRule): Promise<void> {
+      await db.execute(
+        `INSERT OR REPLACE INTO window_rules (id, match_type, pattern, category_id, tag, mode, enabled)
+         VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        [rule.id, rule.matchType, rule.pattern, rule.categoryId ?? null, rule.tag ?? null, rule.mode, rule.enabled ? 1 : 0]
+      )
+    },
+
+    async deleteWindowRule(id: string): Promise<void> {
+      await db.execute('DELETE FROM window_rules WHERE id = ?', [id])
     },
   }
 }

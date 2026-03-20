@@ -129,6 +129,23 @@ describe('useInitStore', () => {
     })
   })
 
+  it('background load merges sessions older than 7 days into historySessions', async () => {
+    const storage = createInMemoryStorage()
+    await storage.saveCategory('id-1', 'Work')
+    // Session 60 days ago — outside 7-day window, inside 91-day window
+    const sixtyDaysAgo = toDateString(Date.now() - 60 * 86_400_000)
+    await storage.saveSession({ id: 's-old-60', categoryId: 'id-1', startedAt: 0, endedAt: 5000, date: sixtyDaysAgo })
+    await storage.saveSession({ id: 's-today', categoryId: 'id-1', startedAt: 0, endedAt: 1000, date: today })
+
+    renderHook(() => useInitStore(storage))
+
+    await waitFor(() => {
+      const { historySessions } = useTimerStore.getState()
+      expect(historySessions.some(s => s.id === 's-old-60')).toBe(true)
+      expect(historySessions.some(s => s.id === 's-today')).toBe(true)
+    })
+  })
+
   it('loads historySessions even when there are no categories', async () => {
     const storage = createInMemoryStorage()
     await storage.saveSession({ id: 's-1', categoryId: 'orphan', startedAt: 0, endedAt: 1000, date: today })
@@ -139,5 +156,33 @@ describe('useInitStore', () => {
       const { historySessions } = useTimerStore.getState()
       expect(historySessions.some(s => s.id === 's-1')).toBe(true)
     })
+  })
+
+  it('does not re-run initialization when re-rendered with a new storage instance (initializedRef guard)', async () => {
+    // First storage — empty, so categories stay [].
+    const storageA = createInMemoryStorage()
+
+    // Second storage — has a category; if init ran again it would load it.
+    const storageB = createInMemoryStorage()
+    await storageB.saveCategory('id-x', 'ShouldNotAppear')
+
+    // Render with storageA first — initializedRef becomes true after first effect.
+    const { rerender } = renderHook(({ s }) => useInitStore(s), {
+      initialProps: { s: storageA as Parameters<typeof useInitStore>[0] },
+    })
+
+    // Wait for the first init to finish (store is stable with 0 categories).
+    await waitFor(() => {
+      expect(useTimerStore.getState().categories).toHaveLength(0)
+    })
+
+    // Re-render with storageB — initializedRef is already true, so storage.loadCategories
+    // on storageB must NOT be called.
+    rerender({ s: storageB as Parameters<typeof useInitStore>[0] })
+
+    // Give any potential async effect time to run.
+    await new Promise(r => setTimeout(r, 50))
+
+    expect(useTimerStore.getState().categories).toHaveLength(0)
   })
 })

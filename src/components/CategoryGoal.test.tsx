@@ -2,6 +2,11 @@ import { describe, it, expect, vi } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { CategoryGoal } from './CategoryGoal'
+import { I18nProvider } from '../i18n'
+
+function renderWithI18n(ui: React.ReactElement) {
+  return render(<I18nProvider>{ui}</I18nProvider>)
+}
 
 function renderGoal(props: Partial<Parameters<typeof CategoryGoal>[0]> = {}) {
   const defaults = {
@@ -9,7 +14,7 @@ function renderGoal(props: Partial<Parameters<typeof CategoryGoal>[0]> = {}) {
     goalMs: 0,
     onSetGoal: vi.fn(),
   }
-  return render(<CategoryGoal {...defaults} {...props} />)
+  return renderWithI18n(<CategoryGoal {...defaults} {...props} />)
 }
 
 describe('CategoryGoal', () => {
@@ -22,7 +27,7 @@ describe('CategoryGoal', () => {
     renderGoal({ suggestedMs: 7_200_000 }) // 2h
     await userEvent.click(screen.getByText(/set weekly goal/i))
     expect(screen.getByText(/suggested/i)).toBeTruthy()
-    expect(screen.getByText(/120:00/)).toBeTruthy()
+    expect(screen.getByText(/2h/)).toBeTruthy()
   })
 
   it('uses suggestion value when "Use suggestion" is clicked', async () => {

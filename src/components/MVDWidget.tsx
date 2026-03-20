@@ -9,6 +9,7 @@ import {
   MAX_MVD_ITEMS,
 } from '../domain/minimumViableDay'
 import type { MVDItem } from '../domain/minimumViableDay'
+import { useI18n } from '../i18n'
 
 type Props = {
   items: MVDItem[]
@@ -16,6 +17,7 @@ type Props = {
 }
 
 export function MVDWidget({ items, onChange }: Props) {
+  const { t } = useI18n()
   const [input, setInput] = useState('')
   const achieved = isMVDAchieved(items)
   const canAdd = canAddMVDItem(items)
@@ -103,11 +105,11 @@ export function MVDWidget({ items, onChange }: Props) {
             disabled={!input.trim()}
             className="rounded border border-white/[0.07] bg-white/3 px-2 py-1 text-xs text-zinc-500 hover:text-zinc-100 hover:border-white/15 disabled:opacity-40 transition-all"
           >
-            Add
+            {t('mvd.add')}
           </button>
         </div>
       ) : (
-        <p className="text-xs text-zinc-600">Max {MAX_MVD_ITEMS} must-dos per day.</p>
+        <p className="text-xs text-zinc-600">{t('mvd.max')}</p>
       )}
     </div>
   )

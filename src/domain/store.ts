@@ -106,3 +106,13 @@ export function setPendingTag(store: Store, id: string, tag: string): Store {
     ),
   }
 }
+
+export function archiveCategory(store: Store, id: string, archived: boolean): Store {
+  if (!store.categories.find(c => c.id === id)) throw new Error(`Category not found: ${id}`)
+  return {
+    ...store,
+    categories: store.categories.map(c =>
+      c.id === id ? { ...c, archived: archived || undefined } : c
+    ),
+  }
+}

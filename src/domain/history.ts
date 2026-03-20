@@ -49,13 +49,30 @@ export function computeHourDistribution(sessions: Session[]): HourSlot[] {
 
 // ─── exportSessionsToCSV ─────────────────────────────────────────────────────
 
-export function exportSessionsToCSV(sessions: Session[], categories: Category[]): string {
+export type CSVColumn = 'category' | 'date' | 'started_at' | 'ended_at' | 'duration_minutes' | 'tag'
+
+export const CSV_PRESETS: Record<string, CSVColumn[]> = {
+  default: ['category', 'date', 'started_at', 'ended_at', 'duration_minutes', 'tag'],
+  toggl: ['category', 'date', 'started_at', 'ended_at', 'duration_minutes', 'tag'],
+  clockify: ['category', 'started_at', 'ended_at', 'duration_minutes'],
+}
+
+export function exportSessionsToCSV(sessions: Session[], categories: Category[], columns?: CSVColumn[]): string {
   const catMap = new Map(categories.map(c => [c.id, c.name]))
-  const header = 'category,date,started_at,ended_at,duration_minutes,tag'
+  const cols = columns ?? CSV_PRESETS.default
+  const header = cols.join(',')
   const rows = sessions.map(s => {
     const catName = catMap.get(s.categoryId) ?? 'Unknown'
     const durationMin = Math.round((s.endedAt - s.startedAt) / 60000)
-    return [catName, s.date, s.startedAt, s.endedAt, durationMin, s.tag ?? ''].join(',')
+    const colMap: Record<CSVColumn, string | number> = {
+      category: catName,
+      date: s.date,
+      started_at: s.startedAt,
+      ended_at: s.endedAt,
+      duration_minutes: durationMin,
+      tag: s.tag ?? '',
+    }
+    return cols.map(c => colMap[c]).join(',')
   })
   return [header, ...rows].join('\n')
 }
@@ -141,7 +158,11 @@ export function computeDayTotals(sessions: Session[], _categories: Category[], s
 
 export type EnergySlot = { hour: number; avgMs: number; peakDays: number }
 
-export function computeEnergyPattern(sessions: Session[], _days: number): {
+export function computeEnergyPattern(
+  sessions: Session[],
+  _days: number,
+  dwsScores?: { hour: number; score: number }[]
+): {
   slots: EnergySlot[]
   peakHours: number[]
   valleyHours: number[]
@@ -168,10 +189,18 @@ export function computeEnergyPattern(sessions: Session[], _days: number): {
     return { hour, avgMs: Math.round(totalMs / days), peakDays: days }
   }).sort((a, b) => a.hour - b.hour)
 
-  const sorted = [...slots].sort((a, b) => b.avgMs - a.avgMs)
+  // When dwsScores provided, sort by quality (avgDWS); otherwise sort by volume (avgMs)
+  let sorted: EnergySlot[]
+  if (dwsScores && dwsScores.length > 0) {
+    const dwsMap = new Map(dwsScores.map(d => [d.hour, d.score]))
+    sorted = [...slots].sort((a, b) => (dwsMap.get(b.hour) ?? 0) - (dwsMap.get(a.hour) ?? 0))
+  } else {
+    sorted = [...slots].sort((a, b) => b.avgMs - a.avgMs)
+  }
+
   const topN = Math.min(3, sorted.length)
   const peakHours = sorted.slice(0, topN).map(s => s.hour).sort((a, b) => a - b)
-  const bottomN = sorted.length > 3 ? Math.min(2, sorted.length - topN) : 0
+  const bottomN = sorted.length > topN + 1 ? Math.min(2, sorted.length - topN) : 0
   const valleyHours = sorted.slice(-bottomN).map(s => s.hour).sort((a, b) => a - b)
 
   const peakStr = peakHours.length > 0
@@ -337,10 +366,11 @@ export function suggestWeeklyGoal(sessions: Session[], categoryId: string, recen
     weekMs.set(wk, (weekMs.get(wk) ?? 0) + (s.endedAt - s.startedAt))
   }
 
-  const weeks = Array.from(weekMs.values())
-  if (weeks.length < 2) return 0
+  const weeks = Array.from(weekMs.entries())
+    .sort((a, b) => a[0].localeCompare(b[0]))
+  if (weeks.length < 4) return 0
 
-  const recent = weeks.slice(-recentWeeks)
+  const recent = weeks.slice(-recentWeeks).map(([, ms]) => ms)
   const avg = recent.reduce((a, b) => a + b, 0) / recent.length
   const suggested = avg * 1.1
 

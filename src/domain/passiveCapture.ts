@@ -72,6 +72,8 @@ export function aggregateBlocks(events: RawPollEvent[], rules: WindowRule[]): Ca
       currentProcess = ev.window.process
       currentTitle = ev.window.title
       blockStart = ev.timestamp
+    } else {
+      currentTitle = ev.window.title  // keep most-recent title within same process
     }
     lastTimestamp = ev.timestamp
   }
@@ -135,6 +137,123 @@ export function getAutoStartCategory(
 
 export function pendingSuggestions(blocks: CaptureBlock[]): CaptureBlock[] {
   return blocks.filter(b => !b.confirmed && b.categoryId !== null)
+}
+
+// ─── detectDistractionApps ───────────────────────────────────────────────────
+
+export type DistractionApp = {
+  process: string
+  visitCount: number
+  avgDurationMs: number
+  totalMs: number
+}
+
+/**
+ * Identifies apps where the user frequently visits but never stays more than
+ * `shortBlockMs` continuously — a signal for context-switching / distraction.
+ * Requires at least 7 days of data (checked by caller via date span).
+ */
+export function detectDistractionApps(
+  blocks: CaptureBlock[],
+  shortBlockMs = 5 * 60_000, // 5 minutes
+  minVisits = 5,
+): DistractionApp[] {
+  const stats = new Map<string, { count: number; shortCount: number; totalMs: number }>()
+
+  for (const b of blocks) {
+    const dur = b.endedAt - b.startedAt
+    const existing = stats.get(b.process) ?? { count: 0, shortCount: 0, totalMs: 0 }
+    stats.set(b.process, {
+      count: existing.count + 1,
+      shortCount: existing.shortCount + (dur < shortBlockMs ? 1 : 0),
+      totalMs: existing.totalMs + dur,
+    })
+  }
+
+  const result: DistractionApp[] = []
+  for (const [process, s] of stats.entries()) {
+    if (s.count < minVisits) continue
+    // Distraction: >70% of visits are short
+    if (s.shortCount / s.count < 0.7) continue
+    result.push({
+      process,
+      visitCount: s.count,
+      avgDurationMs: Math.round(s.totalMs / s.count),
+      totalMs: s.totalMs,
+    })
+  }
+
+  return result.sort((a, b) => b.visitCount - a.visitCount)
+}
+
+// ─── computeCaptureRatio ─────────────────────────────────────────────────────
+
+import type { Session } from './timer'
+
+/**
+ * Returns the fraction of sessions (0–1) that overlap with at least one
+ * passive-capture block.  Used to surface a "passive capture inactive" notice.
+ */
+export function computeCaptureRatio(
+  sessions: { startedAt: number; endedAt: number }[],
+  blocks: CaptureBlock[]
+): number {
+  if (sessions.length === 0) return 0
+  const coveredCount = sessions.filter(s =>
+    blocks.some(b => b.startedAt < s.endedAt && b.endedAt > s.startedAt)
+  ).length
+  return coveredCount / sessions.length
+}
+
+// ─── computeTrackingAccuracy ─────────────────────────────────────────────────
+
+export type TrackingAccuracyScore = {
+  autoAccuracy: number    // % auto-classified blocks never overridden by user
+  coverage: number        // % of tracked time covered by auto rules
+  stabilityScore: number  // avg session duration normalised to 0–100 (60 min = 100)
+  noiseRatio: number      // sessions < 2 min / total sessions
+  weeklyTAS: number       // composite score
+}
+
+export function computeTrackingAccuracy(
+  sessions: Session[],
+  blocks: CaptureBlock[]
+): TrackingAccuracyScore {
+  const totalSessions = sessions.length
+  if (totalSessions === 0) {
+    return { autoAccuracy: 0, coverage: 0, stabilityScore: 0, noiseRatio: 0, weeklyTAS: 0 }
+  }
+
+  // autoAccuracy: confirmed blocks / total blocks
+  const confirmedBlocks = blocks.filter(b => b.confirmed).length
+  const autoAccuracy = blocks.length > 0 ? (confirmedBlocks / blocks.length) * 100 : 100
+
+  // coverage: % of session time that has overlapping capture blocks
+  const totalMs = sessions.reduce((sum, s) => sum + (s.endedAt - s.startedAt), 0)
+  const coveredMs = sessions.reduce((sum, s) => {
+    const hasBlock = blocks.some(b => b.startedAt < s.endedAt && b.endedAt > s.startedAt)
+    return sum + (hasBlock ? (s.endedAt - s.startedAt) : 0)
+  }, 0)
+  const coverage = totalMs > 0 ? (coveredMs / totalMs) * 100 : 0
+
+  // stabilityScore: avg session duration (in minutes) normalised — 60 min = 100
+  const avgDurationMs = totalMs / totalSessions
+  /** A 60-minute average session is considered fully stable (score = 100) */
+  const STABILITY_ANCHOR_MS = 60 * 60_000
+  const stabilityScore = Math.min(100, (avgDurationMs / STABILITY_ANCHOR_MS) * 100)
+
+  // noiseRatio: sessions < 2 min / total sessions
+  const noisySessions = sessions.filter(s => (s.endedAt - s.startedAt) < 2 * 60_000).length
+  const noiseRatio = noisySessions / totalSessions
+
+  const weeklyTAS = Math.round(
+    autoAccuracy * 0.4 +
+    coverage * 0.3 +
+    stabilityScore * 0.2 +
+    (1 - noiseRatio) * 100 * 0.1
+  )
+
+  return { autoAccuracy, coverage, stabilityScore, noiseRatio, weeklyTAS }
 }
 
 export const DEFAULT_DEV_RULES: WindowRule[] = [

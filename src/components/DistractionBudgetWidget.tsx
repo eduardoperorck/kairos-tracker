@@ -1,6 +1,7 @@
 import { computeDistractionBudget } from '../domain/distractionBudget'
 import type { CaptureBlock } from '../domain/passiveCapture'
 import type { DistractionRule } from '../domain/distractionBudget'
+import { useI18n } from '../i18n'
 
 type Props = {
   blocks: CaptureBlock[]
@@ -17,6 +18,7 @@ function formatMs(ms: number): string {
 }
 
 export function DistractionBudgetWidget({ blocks, budgetMs = 30 * 60_000, rules }: Props) {
+  const { t } = useI18n()
   const status = computeDistractionBudget(blocks, rules, budgetMs)
 
   const barColor = status.overBudget
@@ -28,7 +30,7 @@ export function DistractionBudgetWidget({ blocks, budgetMs = 30 * 60_000, rules 
   return (
     <div className="rounded-lg border border-white/[0.07] bg-white/2 px-4 py-3 text-sm">
       <div className="flex items-center justify-between mb-2">
-        <span className="font-medium text-zinc-300">🎯 Distraction Budget</span>
+        <span className="font-medium text-zinc-300">🎯 {t('distraction.title')}</span>
         <span className={`text-xs font-mono ${status.overBudget ? 'text-red-400' : 'text-zinc-500'}`}>
           {formatMs(status.usedMs)} / {formatMs(status.budgetMs)}
         </span>
@@ -59,12 +61,12 @@ export function DistractionBudgetWidget({ blocks, budgetMs = 30 * 60_000, rules 
 
       {status.overBudget && (
         <p className="mt-2 text-xs text-red-400">
-          Over budget by {formatMs(status.usedMs - status.budgetMs)}
+          {t('distraction.overBudget')} {formatMs(status.usedMs - status.budgetMs)}
         </p>
       )}
 
       {!status.overBudget && status.usedMs === 0 && (
-        <p className="text-xs text-zinc-600">No distraction apps detected today.</p>
+        <p className="text-xs text-zinc-600">{t('distraction.noApps')}</p>
       )}
     </div>
   )

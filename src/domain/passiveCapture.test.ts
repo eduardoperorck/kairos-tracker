@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { matchRule, aggregateBlocks, pendingSuggestions, needsClassification, getAutoStartCategory, type WindowRule, type RawPollEvent } from './passiveCapture'
+import { matchRule, aggregateBlocks, pendingSuggestions, needsClassification, getAutoStartCategory, computeCaptureRatio, computeTrackingAccuracy, type WindowRule, type RawPollEvent, type CaptureBlock } from './passiveCapture'
 
 const RULES: WindowRule[] = [
   { id: '1', matchType: 'process', pattern: 'Code.exe', categoryId: 'work', mode: 'suggest', enabled: true },
@@ -58,6 +58,18 @@ describe('aggregateBlocks', () => {
     ]
     const blocks = aggregateBlocks(events, RULES)
     expect(blocks.length).toBe(2)
+  })
+
+  it('uses the last title within the same process block, not the first', () => {
+    const now = Date.now()
+    const events: RawPollEvent[] = [
+      { window: { title: 'initial-title.ts', process: 'Code.exe', timestamp: now }, timestamp: now },
+      { window: { title: 'updated-title.ts', process: 'Code.exe', timestamp: now + 30000 }, timestamp: now + 30000 },
+      { window: { title: 'final-title.ts',   process: 'Code.exe', timestamp: now + 60000 }, timestamp: now + 60000 },
+    ]
+    const blocks = aggregateBlocks(events, RULES)
+    expect(blocks.length).toBe(1)
+    expect(blocks[0].title).toBe('final-title.ts')
   })
 })
 
@@ -137,5 +149,249 @@ describe('pendingSuggestions', () => {
     const pending = pendingSuggestions(blocks)
     expect(pending.length).toBe(1)
     expect(pending[0].process).toBe('Code.exe')
+  })
+})
+
+// ─── computeCaptureRatio (M83) ───────────────────────────────────────────────
+
+describe('computeCaptureRatio', () => {
+  const block: CaptureBlock = {
+    process: 'Code.exe', title: '', startedAt: 1000, endedAt: 5000,
+    categoryId: 'work', confirmed: true,
+  }
+
+  it('returns 0 when no sessions', () => {
+    expect(computeCaptureRatio([], [block])).toBe(0)
+  })
+
+  it('returns 0 when no blocks', () => {
+    const sessions = [{ startedAt: 1000, endedAt: 3000 }]
+    expect(computeCaptureRatio(sessions, [])).toBe(0)
+  })
+
+  it('returns 1 when all sessions are covered', () => {
+    const sessions = [{ startedAt: 2000, endedAt: 4000 }]
+    expect(computeCaptureRatio(sessions, [block])).toBe(1)
+  })
+
+  it('returns partial ratio when only some sessions are covered', () => {
+    const sessions = [
+      { startedAt: 2000, endedAt: 4000 },   // covered by block (1000–5000)
+      { startedAt: 9000, endedAt: 12000 },   // not covered
+    ]
+    expect(computeCaptureRatio(sessions, [block])).toBe(0.5)
+  })
+
+  it('treats adjacent (non-overlapping) blocks as not covering', () => {
+    const sessions = [{ startedAt: 5000, endedAt: 7000 }]
+    // block ends at 5000, session starts at 5000 → not strictly overlapping
+    expect(computeCaptureRatio(sessions, [block])).toBe(0)
+  })
+
+  it('returns 1 when every session is covered by some block (100% coverage)', () => {
+    const sessions = [
+      { startedAt: 1500, endedAt: 2000 },
+      { startedAt: 2500, endedAt: 4000 },
+    ]
+    // block spans 1000–5000, covering both sessions
+    expect(computeCaptureRatio(sessions, [block])).toBe(1)
+  })
+
+  it('returns 0 when no session overlaps any block', () => {
+    const sessions = [
+      { startedAt: 6000, endedAt: 8000 },
+      { startedAt: 9000, endedAt: 11000 },
+    ]
+    // block spans 1000–5000, none of the sessions overlap
+    expect(computeCaptureRatio(sessions, [block])).toBe(0)
+  })
+
+  it('returns partial ratio when only some sessions overlap', () => {
+    const sessions = [
+      { startedAt: 2000, endedAt: 3000 },  // overlaps block (1000–5000)
+      { startedAt: 6000, endedAt: 8000 },  // does not overlap
+      { startedAt: 10000, endedAt: 12000 }, // does not overlap
+    ]
+    expect(computeCaptureRatio(sessions, [block])).toBeCloseTo(1 / 3)
+  })
+})
+
+// ─── computeTrackingAccuracy (M90) ──────────────────────────────────────────
+
+describe('computeTrackingAccuracy', () => {
+  function makeSession(startedAt: number, endedAt: number) {
+    return { id: 's', categoryId: 'c', date: '2026-03-10', startedAt, endedAt }
+  }
+
+  it('returns zeros for empty sessions', () => {
+    const result = computeTrackingAccuracy([], [])
+    expect(result).toEqual({ autoAccuracy: 0, coverage: 0, stabilityScore: 0, noiseRatio: 0, weeklyTAS: 0 })
+  })
+
+  it('autoAccuracy is 100 when no blocks exist', () => {
+    const sessions = [makeSession(0, 60 * 60_000)]
+    const result = computeTrackingAccuracy(sessions, [])
+    expect(result.autoAccuracy).toBe(100)
+  })
+
+  it('autoAccuracy reflects confirmed/total block ratio', () => {
+    const sessions = [makeSession(0, 60 * 60_000)]
+    const blocks: CaptureBlock[] = [
+      { process: 'a', title: '', startedAt: 0, endedAt: 1000, categoryId: 'c', confirmed: true },
+      { process: 'b', title: '', startedAt: 0, endedAt: 1000, categoryId: 'c', confirmed: false },
+    ]
+    const result = computeTrackingAccuracy(sessions, blocks)
+    expect(result.autoAccuracy).toBe(50)
+  })
+
+  it('coverage is 100 when session overlaps a block', () => {
+    const sessions = [makeSession(1000, 5000)]
+    const blocks: CaptureBlock[] = [
+      { process: 'a', title: '', startedAt: 0, endedAt: 6000, categoryId: 'c', confirmed: true },
+    ]
+    const result = computeTrackingAccuracy(sessions, blocks)
+    expect(result.coverage).toBe(100)
+  })
+
+  it('noiseRatio counts sessions under 2 minutes', () => {
+    const sessions = [
+      makeSession(0, 60_000),         // 1 min — noisy
+      makeSession(0, 5 * 60_000),     // 5 min — normal
+      makeSession(0, 119_000),        // ~2 min — noisy (< 2 min in ms)
+    ]
+    const result = computeTrackingAccuracy(sessions, [])
+    expect(result.noiseRatio).toBeCloseTo(2 / 3)
+  })
+
+  it('stabilityScore caps at 100 for sessions >= 60 min', () => {
+    const sessions = [makeSession(0, 120 * 60_000)] // 2 hours
+    const result = computeTrackingAccuracy(sessions, [])
+    expect(result.stabilityScore).toBe(100)
+  })
+
+  it('weeklyTAS is a composite score between 0 and 100', () => {
+    const sessions = [makeSession(0, 30 * 60_000)]
+    const result = computeTrackingAccuracy(sessions, [])
+    expect(result.weeklyTAS).toBeGreaterThanOrEqual(0)
+    expect(result.weeklyTAS).toBeLessThanOrEqual(100)
+  })
+
+  it('autoAccuracy is 100 when all blocks are confirmed', () => {
+    const sessions = [makeSession(0, 60 * 60_000)]
+    const blocks: CaptureBlock[] = [
+      { process: 'a', title: '', startedAt: 0, endedAt: 1000, categoryId: 'c', confirmed: true },
+      { process: 'b', title: '', startedAt: 1000, endedAt: 2000, categoryId: 'c', confirmed: true },
+    ]
+    const result = computeTrackingAccuracy(sessions, blocks)
+    expect(result.autoAccuracy).toBe(100)
+  })
+
+  it('noiseRatio is 1 when all sessions are shorter than 2 minutes', () => {
+    const sessions = [
+      makeSession(0, 30_000),     // 30 seconds
+      makeSession(100, 90_000),   // 90 seconds
+      makeSession(200, 110_000),  // ~110 seconds — just under 2 min
+    ]
+    const result = computeTrackingAccuracy(sessions, [])
+    expect(result.noiseRatio).toBe(1)
+  })
+
+  it('weeklyTAS formula produces a value between 0 and 100 for all-confirmed coverage scenario', () => {
+    // Sessions with overlapping confirmed blocks → high autoAccuracy and coverage
+    const sessions = [makeSession(1000, 5000)]
+    const blocks: CaptureBlock[] = [
+      { process: 'a', title: '', startedAt: 0, endedAt: 6000, categoryId: 'c', confirmed: true },
+    ]
+    const result = computeTrackingAccuracy(sessions, blocks)
+    expect(result.autoAccuracy).toBe(100)
+    expect(result.coverage).toBe(100)
+    expect(result.weeklyTAS).toBeGreaterThanOrEqual(0)
+    expect(result.weeklyTAS).toBeLessThanOrEqual(100)
+  })
+
+  // ── weeklyTAS edge cases ─────────────────────────────────────────────────
+
+  it('weeklyTAS is 0 when sessions=[] and blocks=[]', () => {
+    const result = computeTrackingAccuracy([], [])
+    expect(result.weeklyTAS).toBe(0)
+  })
+
+  it('weeklyTAS is within [0, 100] for zero-coverage pathological input', () => {
+    // sessions exist but none overlap any block → coverage = 0
+    const sessions = [makeSession(10_000, 20_000)]
+    const blocks: CaptureBlock[] = [
+      // block ends before any session starts
+      { process: 'a', title: '', startedAt: 0, endedAt: 5000, categoryId: 'c', confirmed: false },
+    ]
+    const result = computeTrackingAccuracy(sessions, blocks)
+    expect(result.coverage).toBe(0)
+    expect(result.weeklyTAS).toBeGreaterThanOrEqual(0)
+    expect(result.weeklyTAS).toBeLessThanOrEqual(100)
+  })
+
+  it('weeklyTAS is within [0, 100] when all sessions are noisy (< 2 min) and all blocks are unconfirmed', () => {
+    // noiseRatio = 1, autoAccuracy = 0, coverage = 0, stabilityScore ≈ 0
+    const sessions = [
+      makeSession(0, 30_000),   // 30 s
+      makeSession(0, 60_000),   // 1 min
+      makeSession(0, 90_000),   // 1.5 min
+    ]
+    const blocks: CaptureBlock[] = [
+      { process: 'noise', title: '', startedAt: 0, endedAt: 5000, categoryId: null, confirmed: false },
+    ]
+    const result = computeTrackingAccuracy(sessions, blocks)
+    expect(result.noiseRatio).toBe(1)
+    expect(result.autoAccuracy).toBe(0)
+    expect(result.weeklyTAS).toBeGreaterThanOrEqual(0)
+    expect(result.weeklyTAS).toBeLessThanOrEqual(100)
+  })
+
+  // ── autoAccuracy distinguishes confirmed vs unconfirmed blocks ───────────
+
+  it('autoAccuracy is 0 when all blocks are unconfirmed', () => {
+    const sessions = [makeSession(0, 60 * 60_000)]
+    const blocks: CaptureBlock[] = [
+      { process: 'a', title: '', startedAt: 0, endedAt: 1000, categoryId: 'c', confirmed: false },
+      { process: 'b', title: '', startedAt: 1000, endedAt: 2000, categoryId: 'c', confirmed: false },
+    ]
+    const result = computeTrackingAccuracy(sessions, blocks)
+    expect(result.autoAccuracy).toBe(0)
+  })
+
+  it('autoAccuracy correctly counts only confirmed blocks in a mixed set', () => {
+    const sessions = [makeSession(0, 60 * 60_000)]
+    const blocks: CaptureBlock[] = [
+      { process: 'a', title: '', startedAt: 0, endedAt: 1000, categoryId: 'c', confirmed: true },
+      { process: 'b', title: '', startedAt: 1000, endedAt: 2000, categoryId: 'c', confirmed: true },
+      { process: 'c', title: '', startedAt: 2000, endedAt: 3000, categoryId: 'c', confirmed: false },
+      { process: 'd', title: '', startedAt: 3000, endedAt: 4000, categoryId: 'c', confirmed: false },
+    ]
+    // 2 confirmed / 4 total = 50%
+    const result = computeTrackingAccuracy(sessions, blocks)
+    expect(result.autoAccuracy).toBe(50)
+  })
+
+  it('autoAccuracy is 100 when blocks=[] (no auto-classification attempted)', () => {
+    const sessions = [makeSession(0, 30 * 60_000)]
+    const result = computeTrackingAccuracy(sessions, [])
+    expect(result.autoAccuracy).toBe(100)
+  })
+
+  it('autoAccuracy treats a single confirmed block out of many as a low percentage', () => {
+    const sessions = [makeSession(0, 60 * 60_000)]
+    const blocks: CaptureBlock[] = [
+      { process: 'ok', title: '', startedAt: 0, endedAt: 1000, categoryId: 'c', confirmed: true },
+      ...Array.from({ length: 9 }, (_, i) => ({
+        process: 'bad',
+        title: '',
+        startedAt: (i + 1) * 1000,
+        endedAt: (i + 2) * 1000,
+        categoryId: 'c' as string,
+        confirmed: false,
+      })),
+    ]
+    // 1 confirmed / 10 total = 10%
+    const result = computeTrackingAccuracy(sessions, blocks)
+    expect(result.autoAccuracy).toBe(10)
   })
 })

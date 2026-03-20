@@ -25,7 +25,8 @@ function makeBlock(overrides: Partial<CaptureBlock> & { startedAt: number; ended
   }
 }
 
-const base = new Date('2026-03-15T09:00:00Z').getTime()
+// Use local 9am to ensure formatLocalTime returns '09:' in any timezone
+const base = (() => { const d = new Date('2026-03-15'); d.setHours(9, 0, 0, 0); return d.getTime() })()
 
 describe('ActivityTimeline — empty state', () => {
   it('shows empty message when no blocks', () => {

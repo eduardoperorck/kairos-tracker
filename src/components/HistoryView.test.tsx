@@ -102,14 +102,15 @@ describe('HistoryView — with sessions', () => {
 })
 
 describe('HistoryView — export buttons', () => {
-  it('renders CSV, JSON, HTML export buttons', () => {
+  it('renders CSV, JSON, HTML export buttons inside dropdown', () => {
     renderWithI18n(<HistoryView sessions={[]} categories={[]} />)
-    expect(screen.getByText('CSV')).toBeTruthy()
-    expect(screen.getByText('JSON')).toBeTruthy()
-    expect(screen.getByText('HTML')).toBeTruthy()
+    fireEvent.click(screen.getByText(/export/i))
+    expect(screen.getByText('Download CSV')).toBeTruthy()
+    expect(screen.getByText('Download JSON')).toBeTruthy()
+    expect(screen.getByText('Download HTML')).toBeTruthy()
   })
 
-  it('clicking CSV triggers download', () => {
+  it('clicking Download CSV triggers download', () => {
     const createObjectURL = vi.fn(() => 'blob:mock')
     const revokeObjectURL = vi.fn()
     vi.stubGlobal('URL', { createObjectURL, revokeObjectURL })
@@ -122,11 +123,12 @@ describe('HistoryView — export buttons', () => {
     })
 
     renderWithI18n(<HistoryView sessions={[makeSession()]} categories={categories} />)
-    fireEvent.click(screen.getByText('CSV'))
+    fireEvent.click(screen.getByText(/export/i))
+    fireEvent.click(screen.getByText('Download CSV'))
     expect(createObjectURL).toHaveBeenCalled()
   })
 
-  it('clicking JSON triggers download', () => {
+  it('clicking Download JSON triggers download', () => {
     const createObjectURL = vi.fn(() => 'blob:mock')
     vi.stubGlobal('URL', { createObjectURL, revokeObjectURL: vi.fn() })
     const origCreate = document.createElement.bind(document)
@@ -134,8 +136,110 @@ describe('HistoryView — export buttons', () => {
       return origCreate(tag)
     })
     renderWithI18n(<HistoryView sessions={[makeSession()]} categories={categories} />)
-    fireEvent.click(screen.getByText('JSON'))
+    fireEvent.click(screen.getByText(/export/i))
+    fireEvent.click(screen.getByText('Download JSON'))
     expect(createObjectURL).toHaveBeenCalled()
+  })
+})
+
+describe('HistoryView — M72: inline tag suggestion', () => {
+  it('shows "+ tag" button for untagged sessions when onTagSession is provided', () => {
+    renderWithI18n(
+      <HistoryView
+        sessions={[makeSession()]}
+        categories={categories}
+        onTagSession={vi.fn()}
+      />
+    )
+    expect(screen.getByText('+ tag')).toBeTruthy()
+  })
+
+  it('does NOT show "+ tag" button when neither onTagSession nor onBulkTag is provided', () => {
+    renderWithI18n(
+      <HistoryView sessions={[makeSession()]} categories={categories} />
+    )
+    expect(screen.queryByText('+ tag')).toBeNull()
+  })
+
+  it('does NOT show "+ tag" button for sessions that already have a tag', () => {
+    renderWithI18n(
+      <HistoryView
+        sessions={[makeSession({ tag: 'deep work' })]}
+        categories={categories}
+        onTagSession={vi.fn()}
+      />
+    )
+    expect(screen.queryByText('+ tag')).toBeNull()
+  })
+
+  it('clicking "+ tag" reveals quick-tag chips', () => {
+    renderWithI18n(
+      <HistoryView
+        sessions={[makeSession()]}
+        categories={categories}
+        onTagSession={vi.fn()}
+      />
+    )
+    fireEvent.click(screen.getByText('+ tag'))
+    expect(screen.getByText('deep-work')).toBeTruthy()
+    expect(screen.getByText('admin')).toBeTruthy()
+    expect(screen.getByText('meeting')).toBeTruthy()
+    expect(screen.getByText('learning')).toBeTruthy()
+  })
+
+  it('selecting a quick-tag chip calls onTagSession with the correct session id and tag', async () => {
+    const onTagSession = vi.fn().mockResolvedValue(undefined)
+    renderWithI18n(
+      <HistoryView
+        sessions={[makeSession({ id: 'session-42' })]}
+        categories={categories}
+        onTagSession={onTagSession}
+      />
+    )
+    fireEvent.click(screen.getByText('+ tag'))
+    fireEvent.click(screen.getByText('deep-work'))
+    expect(onTagSession).toHaveBeenCalledWith('session-42', 'deep-work')
+  })
+
+  it('selecting a quick-tag chip calls onTagSession once', async () => {
+    const onTagSession = vi.fn().mockResolvedValue(undefined)
+    renderWithI18n(
+      <HistoryView
+        sessions={[makeSession()]}
+        categories={categories}
+        onTagSession={onTagSession}
+      />
+    )
+    fireEvent.click(screen.getByText('+ tag'))
+    fireEvent.click(screen.getByText('admin'))
+    expect(onTagSession).toHaveBeenCalledOnce()
+  })
+
+  it('shows "+ tag" via onBulkTag when onTagSession is absent', () => {
+    renderWithI18n(
+      <HistoryView
+        sessions={[makeSession()]}
+        categories={categories}
+        onBulkTag={vi.fn()}
+      />
+    )
+    // The checkbox renders when onBulkTag is provided; the + tag button also renders
+    expect(screen.getByText('+ tag')).toBeTruthy()
+  })
+
+  it('does NOT show "+ tag" button for a tagged session even when onTagSession is provided', () => {
+    const tagged = makeSession({ id: 'tagged', tag: 'meeting' })
+    const untagged = makeSession({ id: 'untagged-1' })
+    renderWithI18n(
+      <HistoryView
+        sessions={[tagged, untagged]}
+        categories={categories}
+        onTagSession={vi.fn()}
+      />
+    )
+    // Only one "+ tag" button — for the untagged session
+    const tagButtons = screen.getAllByText('+ tag')
+    expect(tagButtons).toHaveLength(1)
   })
 })
 

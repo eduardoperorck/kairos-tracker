@@ -37,3 +37,11 @@ export function getMVDProgress(items: MVDItem[]): { done: number; total: number;
 export function removeMVDItem(items: MVDItem[], id: string): MVDItem[] {
   return items.filter(item => item.id !== id)
 }
+
+export function filterToday(items: MVDItem[], today: string): MVDItem[] {
+  return items.filter(item => {
+    const d = new Date(item.createdAt)
+    const dateStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+    return dateStr === today
+  })
+}

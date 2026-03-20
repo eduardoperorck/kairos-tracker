@@ -43,6 +43,7 @@ export type Category = {
   activeEntry: TimerEntry | null
   weeklyGoalMs?: number
   color?: string
+  archived?: boolean
 }
 
 export function getWeekDates(today: string): string[] {
@@ -56,7 +57,7 @@ export function getWeekDates(today: string): string[] {
   })
 }
 
-export function computeStreak(sessionDates: string[], today: string): number {
+export function computeStreak(sessionDates: string[], today: string, allowedGapDays = 0): number {
   const unique = [...new Set(sessionDates)].sort()
   if (unique.length === 0) return 0
 
@@ -65,13 +66,14 @@ export function computeStreak(sessionDates: string[], today: string): number {
   const lastMs = new Date(last + 'T12:00:00Z').getTime()
   const diffDays = Math.round((todayMs - lastMs) / 86_400_000)
 
-  if (diffDays > 1) return 0
+  if (diffDays > allowedGapDays + 1) return 0
 
   let count = 0
   let cursor = lastMs
   for (let i = unique.length - 1; i >= 0; i--) {
     const dateMs = new Date(unique[i] + 'T12:00:00Z').getTime()
-    if (Math.round((cursor - dateMs) / 86_400_000) > 0) break
+    const gap = Math.round((cursor - dateMs) / 86_400_000)
+    if (gap > allowedGapDays) break
     count++
     cursor = dateMs - 86_400_000
   }

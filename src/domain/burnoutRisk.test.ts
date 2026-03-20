@@ -46,6 +46,29 @@ describe('computeBurnoutRisk', () => {
     expect(result.signals.some(s => s.includes('weekend'))).toBe(true)
   })
 
+  it('does NOT count a short Sunday session (5 min) as weekend work', () => {
+    // 2026-03-15 = Sunday; session is only 5 minutes (below 20-min threshold)
+    const shortSession = makeSession({
+      date: '2026-03-15',
+      startedAt: new Date('2026-03-15T10:00:00Z').getTime(),
+      endedAt: new Date('2026-03-15T10:05:00Z').getTime(),
+    })
+    const result = computeBurnoutRisk([shortSession], today)
+    expect(result.signals.some(s => s.includes('weekend'))).toBe(false)
+  })
+
+  it('counts a 30-min Sunday session as weekend work', () => {
+    // 2026-03-15 = Sunday; session is 30 minutes (above threshold)
+    const longSession = makeSession({
+      date: '2026-03-15',
+      startedAt: new Date('2026-03-15T10:00:00Z').getTime(),
+      endedAt: new Date('2026-03-15T10:30:00Z').getTime(),
+    })
+    const result = computeBurnoutRisk([longSession], today)
+    // weekendDays === 1 → score += 8 (no signal text for single day, but score > 0)
+    expect(result.score).toBeGreaterThan(0)
+  })
+
   it('critical debt increases score', () => {
     const noRisk = computeBurnoutRisk([], today, 'minimal')
     const highRisk = computeBurnoutRisk([], today, 'critical')
@@ -71,6 +94,58 @@ describe('computeBurnoutRisk', () => {
 
     const result = computeBurnoutRisk(sessions, today, 'critical')
     expect(['high', 'critical']).toContain(result.level)
+  })
+
+  it('counts a session of exactly 20 minutes as a significant weekend session (boundary)', () => {
+    // 2026-03-15 = Sunday; exactly 20 minutes = MIN_WORK_SESSION_MS boundary → counts
+    const exactBoundarySession = makeSession({
+      date: '2026-03-15',
+      startedAt: new Date('2026-03-15T10:00:00Z').getTime(),
+      endedAt: new Date('2026-03-15T10:00:00Z').getTime() + 20 * 60_000,
+    })
+    const result = computeBurnoutRisk([exactBoundarySession], today)
+    expect(result.score).toBeGreaterThan(0)
+  })
+
+  it('does NOT count a session of 19 minutes as a significant weekend session', () => {
+    // 2026-03-15 = Sunday; 19 minutes is below the 20-min threshold
+    const shortSession = makeSession({
+      date: '2026-03-15',
+      startedAt: new Date('2026-03-15T10:00:00Z').getTime(),
+      endedAt: new Date('2026-03-15T10:00:00Z').getTime() + 19 * 60_000,
+    })
+    const result = computeBurnoutRisk([shortSession], today)
+    // weekendDays === 0 → score += 0 from weekend signal
+    expect(result.signals.some(s => s.includes('weekend'))).toBe(false)
+    expect(result.score).toBe(0)
+  })
+
+  it('counts 7 days with significant sessions (>= 20 min each) as no rest days', () => {
+    const sessions: Session[] = []
+    for (let i = 0; i < 7; i++) {
+      const date = `2026-03-${String(11 + i).padStart(2, '0')}`
+      sessions.push(makeSession({
+        date,
+        startedAt: new Date(date + 'T09:00:00Z').getTime(),
+        endedAt: new Date(date + 'T09:00:00Z').getTime() + 30 * 60_000,
+      }))
+    }
+    const result = computeBurnoutRisk(sessions, today)
+    expect(result.signals.some(s => s.includes('No rest days'))).toBe(true)
+  })
+
+  it('does NOT trigger no-rest-days signal when all 7 days have only short sessions (< 20 min)', () => {
+    const sessions: Session[] = []
+    for (let i = 0; i < 7; i++) {
+      const date = `2026-03-${String(11 + i).padStart(2, '0')}`
+      sessions.push(makeSession({
+        date,
+        startedAt: new Date(date + 'T09:00:00Z').getTime(),
+        endedAt: new Date(date + 'T09:00:00Z').getTime() + 5 * 60_000, // 5 min < 20 min threshold
+      }))
+    }
+    const result = computeBurnoutRisk(sessions, today)
+    expect(result.signals.some(s => s.includes('No rest days'))).toBe(false)
   })
 
   it('score does not exceed 100', () => {

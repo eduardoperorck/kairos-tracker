@@ -19,6 +19,7 @@ import { computeStats } from '../domain/stats'
 import { exportDayAsMarkdown } from '../domain/history'
 import { toDateString, getWeekDates, computeWeekMs, computeStreak } from '../domain/timer'
 import { computeEnergyPattern, isFlowSession } from '../domain/history'
+import { ActiveTimerBar } from './ActiveTimerBar'
 import { CommandPalette } from './CommandPalette'
 import { OnboardingWizard } from './OnboardingWizard'
 import { ProductivityWrapped } from './ProductivityWrapped'
@@ -31,20 +32,27 @@ import { usePassiveCapture } from '../hooks/usePassiveCapture'
 import { useAutoBackup } from '../hooks/useAutoBackup'
 import { useLocalGitCommits } from '../hooks/useLocalGitCommits'
 import { useWindowBounds } from '../hooks/useWindowBounds'
+import { useUpdateCheck } from '../hooks/useUpdateCheck'
+import { useObsidianExport } from '../hooks/useObsidianExport'
+import { setSlackFocusStatus, clearSlackStatus } from '../services/slack'
 import { suggestSessionTag } from '../domain/sessionNaming'
 import type { Intention, EveningReview } from '../domain/intentions'
-import type { Storage } from '../persistence/storage'
+import type { Storage, DailyCaptureStatRow } from '../persistence/storage'
 import { SettingKey } from '../persistence/storage'
 import { loadCredential } from '../services/credentials'
 import type { MVDItem } from '../domain/minimumViableDay'
+import { filterToday } from '../domain/minimumViableDay'
 
 const POSTPONE_MS = 5 * 60_000 // 5 minutes
+const MIN_SESSION_MS = 30_000 // 30 seconds — micro-session gate
+const PRIMARY_VIEWS = ['tracker', 'today', 'stats'] as const
+const SECONDARY_VIEWS = ['history', 'settings'] as const
 
 type Props = { storage: Storage }
 
 export function App({ storage }: Props) {
   const { t } = useI18n()
-  const { categories, sessions, historySessions, addCategory, startTimer, stopTimer, deleteCategory, renameCategory, setWeeklyGoal, setCategoryColor, setPendingTag } = useTimerState()
+  const { categories, sessions, historySessions, addCategory, startTimer, stopTimer, deleteCategory, renameCategory, setWeeklyGoal, setCategoryColor, setPendingTag, archiveCategory } = useTimerState()
 
   // ── UI state ────────────────────────────────────────────────────────────────
   const [input, setInput] = useState('')
@@ -60,16 +68,32 @@ export function App({ storage }: Props) {
   const [claudeApiKey, setClaudeApiKey] = useState<string | null>(null)
   const [githubUsername, setGithubUsername] = useState<string | null>(null)
   const [workspaceRoot, setWorkspaceRoot] = useState<string | null>(null)
+  const [slackToken, setSlackToken] = useState<string | null>(null)
   const [screenshotsEnabled, setScreenshotsEnabled] = useState(false)
   const [wrappedOpen, setWrappedOpen] = useState(false)
+  const [navMoreOpen, setNavMoreOpen] = useState(false)
+  const navMoreRef = useRef<HTMLDivElement>(null)
+  const openNLPRef = useRef<(() => void) | null>(null)
   const [mvdItems, setMvdItems] = useState<MVDItem[]>(() => {
-    try { return JSON.parse(localStorage.getItem('mvd_items') ?? '[]') } catch { return [] }
+    try {
+      const all: MVDItem[] = JSON.parse(localStorage.getItem('mvd_items') ?? '[]')
+      return filterToday(all, toDateString(Date.now()))
+    } catch { return [] }
   })
   // Daily recap banner — shown once per day on first open
   const [dailyRecap, setDailyRecap] = useState<string | null>(null)
+  // Morning intentions prompt — shown on first launch of the day when no intentions set
+  const [showMorningPrompt, setShowMorningPrompt] = useState(() => {
+    const todayKey = toDateString(Date.now())
+    return localStorage.getItem(`morning_prompt_dismissed_${todayKey}`) !== 'true'
+  })
+  // Shortcut tooltip — shown once after onboarding completes
+  const [showShortcutTip, setShowShortcutTip] = useState(() =>
+    localStorage.getItem('shortcut_tip_shown') !== 'true'
+  )
 
-  // P1: passive window capture
-  const { blocks: captureBlocks, unclassifiedProcess, suggestedCategoryId, recentTitles, assignProcess, dismissProcess } = usePassiveCapture()
+  // Periodic tick to keep shouldShowBreak up to date (re-evaluates Date.now() every 30s)
+  const [, setTick] = useState(0)
 
   // N1: track last category switch
   const [lastSwitch, setLastSwitch] = useState<{ at: number; fromName: string } | null>(null)
@@ -84,15 +108,63 @@ export function App({ storage }: Props) {
   const [postponedUntil, setPostponedUntil] = useState<number | null>(null)
   const [postponeUsed, setPostponeUsed] = useState(false)
   const [breakSkipCount, setBreakSkipCount] = useState(0)
+  const [breakCompletedCount, setBreakCompletedCount] = useState(0)
 
   // ── Hooks ───────────────────────────────────────────────────────────────────
   useInitStore(storage)
   const webhooks = useWebhooks(webhookUrl)
   const notifications = useNotifications()
   const inputActivity = useInputActivity()
+
+  // P1: passive window capture (M89: pass inputActivity for idle detection)
+  const activeCatId = categories.find(c => c.activeEntry !== null)?.id ?? null
+  const { blocks: captureBlocks, unclassifiedProcess, suggestedCategoryId, recentTitles, elevationSuggestion, assignProcess, dismissProcess, elevateProcess, dismissElevation, resetAutoStart } = usePassiveCapture(activeCatId, inputActivity)
   useAutoBackup(storage, historySessions, categories)
   const localGitCommits = useLocalGitCommits(recentTitles, workspaceRoot)
   useWindowBounds()
+  const availableUpdate = useUpdateCheck()
+
+  // ── Flush passive capture stats to storage ──────────────────────────────────
+  const captureBlocksRef = useRef(captureBlocks)
+  captureBlocksRef.current = captureBlocks
+
+  const lastFlushedBlocksRef = useRef<Set<string>>(new Set())
+
+  const flushCaptureStats = useCallback(async (blocks: typeof captureBlocks) => {
+    const newBlocks = blocks.filter(b => {
+      const key = `${b.startedAt}-${b.process}`
+      return !lastFlushedBlocksRef.current.has(key)
+    })
+    if (newBlocks.length === 0) return
+    const byKey = new Map<string, DailyCaptureStatRow>()
+    for (const block of newBlocks) {
+      if (block.endedAt <= block.startedAt) continue
+      const date = toDateString(block.startedAt)
+      const key = `${date}|${block.process}`
+      const existing = byKey.get(key) ?? { date, process: block.process, total_ms: 0, block_count: 0, category_id: block.categoryId }
+      byKey.set(key, {
+        ...existing,
+        total_ms: existing.total_ms + (block.endedAt - block.startedAt),
+        block_count: existing.block_count + 1,
+      })
+    }
+    for (const row of byKey.values()) {
+      await storage.saveDailyCaptureStat(row).catch(() => {})
+    }
+    // Mark these blocks as flushed so subsequent calls don't double-count
+    for (const b of newBlocks) {
+      lastFlushedBlocksRef.current.add(`${b.startedAt}-${b.process}`)
+    }
+  }, [storage])
+
+  // Flush on beforeunload (best-effort)
+  useEffect(() => {
+    function onUnload() {
+      void flushCaptureStats(captureBlocksRef.current)
+    }
+    window.addEventListener('beforeunload', onUnload)
+    return () => window.removeEventListener('beforeunload', onUnload)
+  }, [flushCaptureStats])
 
   // ── Load settings on mount ──────────────────────────────────────────────────
   useEffect(() => {
@@ -104,12 +176,14 @@ export function App({ storage }: Props) {
       storage.getSetting(SettingKey.GithubUsername),
       storage.getSetting(SettingKey.ScreenshotsEnabled),
       storage.getSetting(SettingKey.WorkspaceRoot),
-    ]).then(([url, preset, strict, apiKey, ghUser, screenshots, wsRoot]) => {
+      storage.getSetting(SettingKey.SlackToken),
+    ]).then(([url, preset, strict, apiKey, ghUser, screenshots, wsRoot, slackTok]) => {
       setWebhookUrl(url)
       setClaudeApiKey(apiKey)
       setGithubUsername(ghUser)
       setScreenshotsEnabled(screenshots === 'true')
       setWorkspaceRoot(wsRoot)
+      setSlackToken(slackTok)
       if (preset) {
         const found = FOCUS_PRESETS.find(p => p.name === preset)
         if (found) setFocusPreset(found)
@@ -121,6 +195,8 @@ export function App({ storage }: Props) {
   }, [])
 
   const today = useMemo(() => toDateString(Date.now()), [])
+
+  useObsidianExport(storage, today, sessions, categories, intentions, eveningReview)
 
   useEffect(() => {
     Promise.all([
@@ -181,6 +257,13 @@ export function App({ storage }: Props) {
     return () => clearInterval(id)
   }, [activeStartedAt, activeCategory?.id])
 
+  // ── 30-second tick — ensures shouldShowBreak is re-evaluated promptly ────────
+  useEffect(() => {
+    if (!activeStartedAt) return
+    const id = setInterval(() => setTick(t => t + 1), 30_000)
+    return () => clearInterval(id)
+  }, [activeStartedAt])
+
   // ── Daily reminder if no sessions tracked by 20h ────────────────────────────
   useEffect(() => {
     const id = setInterval(() => {
@@ -210,6 +293,16 @@ export function App({ storage }: Props) {
     localStorage.setItem('mvd_items', JSON.stringify(mvdItems))
   }, [mvdItems])
 
+  // ── Nav overflow click-outside ───────────────────────────────────────────────
+  useEffect(() => {
+    if (!navMoreOpen) return
+    function onDown(e: MouseEvent) {
+      if (navMoreRef.current && !navMoreRef.current.contains(e.target as Node)) setNavMoreOpen(false)
+    }
+    document.addEventListener('mousedown', onDown)
+    return () => document.removeEventListener('mousedown', onDown)
+  }, [navMoreOpen])
+
   // ── Command palette keyboard shortcut ───────────────────────────────────────
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
@@ -238,8 +331,11 @@ export function App({ storage }: Props) {
   const handleIdle = useCallback(() => {
     const state = useTimerStore.getState()
     const active = state.categories.find(c => c.activeEntry !== null)
-    if (active) handleStop(active.id)
-  }, [])
+    if (active) {
+      handleStop(active.id)
+      resetAutoStart()
+    }
+  }, [resetAutoStart])
 
   useIdleDetection(10, handleIdle, useCallback(() => {}, []))
 
@@ -305,15 +401,26 @@ export function App({ storage }: Props) {
 
   async function handleStart(id: string) {
     const prev = categories.find(c => c.activeEntry !== null)
+    const prevStartedAt = prev?.activeEntry?.startedAt ?? null  // capture before startTimer changes state
     if (prev && prev.id !== id) {
       setLastSwitch({ at: Date.now(), fromName: prev.name })
+      void flushCaptureStats(captureBlocksRef.current)
     }
     startTimer(id)
     const cat = categories.find(c => c.id === id)
-    if (cat) webhooks.onTimerStarted(cat.name, Date.now())
+    if (cat) {
+      webhooks.onTimerStarted(cat.name, Date.now())
+      if (slackToken) void setSlackFocusStatus(slackToken, cat.name).catch(() => {})
+    }
     if (prev && prev.id !== id) {
+      const elapsed = prevStartedAt !== null ? Date.now() - prevStartedAt : 0
       const { sessions: s } = useTimerStore.getState()
-      await storage.saveSession(s[s.length - 1])
+      if (elapsed >= MIN_SESSION_MS) {
+        await storage.saveSession(s[s.length - 1])
+      } else {
+        // Remove the micro-session from memory so storage and Zustand stay in sync
+        useTimerStore.setState({ sessions: s.slice(0, -1) })
+      }
     }
     // Persist active timer so it survives crashes and is visible to CLI
     const entry = useTimerStore.getState().categories.find(c => c.id === id)?.activeEntry
@@ -332,6 +439,11 @@ export function App({ storage }: Props) {
     await storage.deleteCategory(id)
   }
 
+  async function handleArchive(id: string, archived: boolean) {
+    archiveCategory(id, archived)
+    await storage.archiveCategory(id, archived)
+  }
+
   async function handleStop(id: string, tag?: string) {
     const cat = categories.find(c => c.id === id)
     const entry = cat?.activeEntry
@@ -340,8 +452,16 @@ export function App({ storage }: Props) {
     stopTimer(id, resolvedTag)
     const { sessions: s } = useTimerStore.getState()
     const saved = s[s.length - 1]
+    const elapsed = entry ? saved.endedAt - entry.startedAt : 0
+    if (elapsed < MIN_SESSION_MS) {
+      // Remove the micro-session from store and clear active entry without persisting
+      useTimerStore.setState({ sessions: s.slice(0, -1) })
+      await storage.clearActiveEntry()
+      return
+    }
     await storage.saveSession(saved)
     await storage.clearActiveEntry()
+    if (slackToken) void clearSlackStatus(slackToken).catch(() => {})
 
     if (cat && entry) {
       const todaySessions = useTimerStore.getState().sessions.filter(s => s.date === today)
@@ -422,12 +542,24 @@ export function App({ storage }: Props) {
 
       {paletteOpen && (
         <CommandPalette
-          categories={categories}
+          categories={categories.filter(c => !c.archived)}
           activeId={activeCategory?.id ?? null}
           onStart={id => { handleStart(id); setPaletteOpen(false) }}
           onStop={() => { activeCategory && handleStop(activeCategory.id); setPaletteOpen(false) }}
           onNavigate={v => { setView(v); setPaletteOpen(false) }}
           onClose={() => setPaletteOpen(false)}
+          onOpenNLP={() => {
+            setView('tracker')
+            setPaletteOpen(false)
+            openNLPRef.current?.()
+          }}
+          onCyclePreset={() => {
+            const idx = FOCUS_PRESETS.findIndex(p => p.name === focusPreset.name)
+            const next = FOCUS_PRESETS[(idx + 1) % FOCUS_PRESETS.length]
+            setFocusPreset(next)
+            void storage.setSetting(SettingKey.FocusPreset, next.name)
+            setPaletteOpen(false)
+          }}
         />
       )}
 
@@ -447,7 +579,7 @@ export function App({ storage }: Props) {
           preset={focusPreset}
           allowPostpone={!postponeUsed}
           strictMode={focusStrictMode}
-          onBreakComplete={() => setBreakActive(true)}
+          onBreakComplete={() => { setBreakActive(true); setBreakCompletedCount(c => c + 1) }}
           onPostpone={handlePostpone}
           onBreakSkipped={() => {
             setBreakSkipCount(c => c + 1)
@@ -458,12 +590,22 @@ export function App({ storage }: Props) {
         />
       )}
 
-      {/* Header */}
-      <header className="border-b border-white/6">
+      {/* Header — tinted with active category color when timer is running */}
+      <header className="border-b border-white/6 transition-colors" style={
+        activeCategory?.color && view === 'tracker'
+          ? { borderColor: activeCategory.color + '30', backgroundColor: activeCategory.color + '08' }
+          : {}
+      }>
         <div className="mx-auto max-w-xl lg:max-w-3xl xl:max-w-5xl px-6 h-14 flex items-center justify-between">
-          <span className="text-sm font-semibold text-zinc-100">{t('app.title')}</span>
-          <nav className="flex">
-            {(['tracker', 'stats', 'history', 'today', 'settings'] as const).map(v => (
+          <div className="flex items-center gap-2">
+            <span className="text-sm font-semibold text-zinc-100">{t('app.title')}</span>
+            {dailyRecap && (
+              <span className="text-xs text-zinc-600 hidden sm:inline">· {dailyRecap}</span>
+            )}
+          </div>
+          <nav className="flex items-center">
+            {/* Primary tabs — Tracker + Stats */}
+            {PRIMARY_VIEWS.map(v => (
               <button
                 key={v}
                 onClick={() => setView(v)}
@@ -471,24 +613,162 @@ export function App({ storage }: Props) {
                   view === v ? 'text-zinc-100' : 'text-zinc-500 hover:text-zinc-300'
                 }`}
               >
-                {v === 'tracker' ? t('nav.timer') : v === 'stats' ? t('nav.stats') : v === 'history' ? t('nav.history') : v === 'today' ? t('nav.today') : t('nav.settings')}
+                {v === 'tracker' ? t('nav.timer') : v === 'today' ? t('nav.today') : t('nav.stats')}
                 {view === v && (
                   <span className="absolute bottom-0 left-0 right-0 h-px bg-zinc-100" />
                 )}
               </button>
             ))}
+
+            {/* Secondary nav — ··· overflow */}
+            <div className="relative" ref={navMoreRef}>
+              <button
+                onClick={() => setNavMoreOpen(p => !p)}
+                className={`relative px-3 h-14 text-sm transition-colors ${
+                  SECONDARY_VIEWS.includes(view as typeof SECONDARY_VIEWS[number])
+                    ? 'text-zinc-100'
+                    : 'text-zinc-500 hover:text-zinc-300'
+                }`}
+                title="More"
+              >
+                ···
+                {SECONDARY_VIEWS.includes(view as typeof SECONDARY_VIEWS[number]) && (
+                  <span className="absolute bottom-0 left-0 right-0 h-px bg-zinc-100" />
+                )}
+              </button>
+              {navMoreOpen && (
+                <div className="absolute right-0 top-14 z-30 w-36 rounded-lg border border-white/[0.1] bg-zinc-900 py-1 shadow-xl text-sm">
+                  {SECONDARY_VIEWS.map(v => (
+                    <button
+                      key={v}
+                      onClick={() => { setView(v); setNavMoreOpen(false) }}
+                      className={`flex w-full px-4 py-2 transition-colors ${
+                        view === v ? 'text-zinc-100 bg-white/[0.04]' : 'text-zinc-400 hover:text-zinc-100 hover:bg-white/[0.03]'
+                      }`}
+                    >
+                      {v === 'today' ? t('nav.today') : v === 'history' ? t('nav.history') : t('nav.settings')}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <button
+              onClick={() => setPaletteOpen(true)}
+              className="ml-1 rounded border border-white/[0.07] px-2 py-1 text-[10px] text-zinc-600 hover:text-zinc-400 hover:border-white/15 transition-all"
+              title="Open command palette (⌘K)"
+            >
+              ⌘K
+            </button>
           </nav>
         </div>
       </header>
 
+      {activeCategory && activeStartedAt && (
+        <ActiveTimerBar
+          categoryName={activeCategory.name}
+          color={activeCategory.color}
+          startedAt={activeStartedAt}
+          onStop={() => handleStop(activeCategory.id)}
+          presetName={focusPreset.name}
+        />
+      )}
+
       <main className="mx-auto max-w-xl lg:max-w-3xl xl:max-w-5xl px-6 py-8">
 
-        {dailyRecap && view === 'tracker' && (
-          <div className="mb-4 flex items-center justify-between rounded-lg border border-blue-500/20 bg-blue-500/8 px-4 py-2 text-xs text-blue-300">
-            <span>📅 {dailyRecap}</span>
-            <button onClick={() => setDailyRecap(null)} className="ml-4 text-blue-400 hover:text-blue-100 transition-colors">✕</button>
+        {availableUpdate && (
+          <div className="mb-4 flex items-center justify-between rounded-lg border border-emerald-500/20 bg-emerald-500/[0.06] px-4 py-2 text-xs text-emerald-300">
+            <span>New version {availableUpdate} available — check GitHub releases for download.</span>
           </div>
         )}
+
+        {/* Single-slot top-level banner — strict priority: morningPrompt > shortcutTip */}
+        {(() => {
+          const activeBanner: 'morning' | 'shortcut' | null =
+            showMorningPrompt && intentions.length === 0 && mvdItems.length === 0 ? 'morning' :
+            showShortcutTip && onboardingDone && categories.length > 0 ? 'shortcut' :
+            null
+
+          // M68: compute yesterday brief for morning card
+          const morningBrief = (() => {
+            if (activeBanner !== 'morning' || historySessions.length === 0) return null
+            const yesterday = toDateString(Date.now() - 86_400_000)
+            const yesterdaySessions = historySessions.filter(s => s.date === yesterday)
+            if (yesterdaySessions.length === 0) return null
+            const totalMs = yesterdaySessions.reduce((sum, s) => sum + (s.endedAt - s.startedAt), 0)
+            const byCategory = new Map<string, number>()
+            for (const s of yesterdaySessions) byCategory.set(s.categoryId, (byCategory.get(s.categoryId) ?? 0) + (s.endedAt - s.startedAt))
+            const topCatId = [...byCategory.entries()].sort((a, b) => b[1] - a[1])[0]?.[0]
+            const topCatName = categories.find(c => c.id === topCatId)?.name ?? ''
+            return { totalMs, topCatName }
+          })()
+
+          if (activeBanner === 'morning' && view === 'tracker') return (
+            <div className="mb-4 rounded-lg border border-amber-500/20 bg-amber-500/[0.06] px-4 py-3 text-xs">
+              <div className="flex items-start justify-between">
+                <div className="flex-1">
+                  <p className="text-amber-200 font-medium mb-1">{t('app.goodMorning')}</p>
+                  {morningBrief && (
+                    <p className="text-amber-400/80 mb-1">
+                      Yesterday: {formatElapsed(morningBrief.totalMs)}{morningBrief.topCatName ? ` · Top: ${morningBrief.topCatName}` : ''}
+                    </p>
+                  )}
+                  {/* M71: inline intention input */}
+                  <form
+                    onSubmit={async (e) => {
+                      e.preventDefault()
+                      const input = (e.target as HTMLFormElement).elements.namedItem('intention') as HTMLInputElement
+                      if (input.value.trim()) {
+                        await handleAddIntention(input.value.trim())
+                        input.value = ''
+                      }
+                    }}
+                    className="mt-2 flex gap-2"
+                  >
+                    <input
+                      name="intention"
+                      placeholder="Add intention..."
+                      className="flex-1 bg-amber-500/10 border border-amber-500/20 rounded px-2 py-1 text-xs text-amber-200 placeholder-amber-700 outline-none focus:border-amber-500/40"
+                    />
+                    <button type="submit" className="text-xs text-amber-400 hover:text-amber-200 transition-colors px-2">
+                      +
+                    </button>
+                  </form>
+                  <button
+                    onClick={() => setView('today')}
+                    className="mt-1 text-xs text-amber-600 hover:text-amber-300 transition-colors"
+                  >
+                    {t('app.setIntentions')} →
+                  </button>
+                </div>
+                <button
+                  onClick={() => {
+                    const todayKey = toDateString(Date.now())
+                    localStorage.setItem(`morning_prompt_dismissed_${todayKey}`, 'true')
+                    setShowMorningPrompt(false)
+                  }}
+                  className="ml-4 text-amber-600 hover:text-amber-300 transition-colors shrink-0"
+                >
+                  ✕
+                </button>
+              </div>
+            </div>
+          )
+
+          if (activeBanner === 'shortcut' && view === 'tracker') return (
+            <div className="mb-4 flex items-center justify-between rounded-lg border border-white/[0.07] bg-white/[0.02] px-4 py-2 text-xs text-zinc-500">
+              <span>Tip: press <kbd className="rounded bg-white/10 px-1 py-0.5 font-mono text-zinc-400">1</kbd>–<kbd className="rounded bg-white/10 px-1 py-0.5 font-mono text-zinc-400">9</kbd> to start a timer · <kbd className="rounded bg-white/10 px-1 py-0.5 font-mono text-zinc-400">⌘K</kbd> for everything else</span>
+              <button
+                onClick={() => { localStorage.setItem('shortcut_tip_shown', 'true'); setShowShortcutTip(false) }}
+                className="ml-4 text-zinc-700 hover:text-zinc-400 transition-colors shrink-0"
+              >
+                ✕
+              </button>
+            </div>
+          )
+
+          return null
+        })()}
 
         {view === 'tracker' ? (
           <TrackerView
@@ -502,15 +782,19 @@ export function App({ storage }: Props) {
             activeCategory={activeCategory}
             claudeApiKey={claudeApiKey}
             breakSkipCount={breakSkipCount}
+            breakCompletedCount={breakCompletedCount}
             onAdd={handleAdd}
             onStart={handleStart}
             onStop={handleStop}
             onDelete={handleDelete}
+            onArchive={handleArchive}
             onRename={handleRename}
             onSetGoal={handleSetGoal}
             onSetColor={handleSetColor}
             onSetTag={handleSetTag}
             onFocusLock={() => setFocusLockActive(true)}
+            onShortcutUsed={() => { localStorage.setItem('shortcut_tip_shown', 'true'); setShowShortcutTip(false) }}
+            onOpenNLP={fn => { openNLPRef.current = fn }}
             switchedAt={lastSwitch?.at ?? null}
             switchedFromCategory={lastSwitch?.fromName ?? ''}
             idleMs={idleMs}
@@ -533,6 +817,11 @@ export function App({ storage }: Props) {
             unclassifiedProcess={unclassifiedProcess}
             onAssignProcess={assignProcess}
             onDismissProcess={dismissProcess}
+            elevationSuggestion={elevationSuggestion}
+            onElevateProcess={elevateProcess}
+            onDismissElevation={dismissElevation}
+            mvdItems={mvdItems}
+            onMVDChange={setMvdItems}
           />
         ) : view === 'stats' ? (
           <StatsView
@@ -563,6 +852,17 @@ export function App({ storage }: Props) {
               const allSessions = await storage.loadSessionsSince(toDateString(Date.now() - 60 * 86_400_000))
               useTimerStore.setState({ historySessions: allSessions })
             }}
+            onBulkTag={async (ids, tag) => {
+              for (const id of ids) await storage.updateSessionTag(id, tag)
+              const allSessions = await storage.loadSessionsSince(toDateString(Date.now() - 60 * 86_400_000))
+              useTimerStore.setState({ historySessions: allSessions })
+            }}
+            onTagSession={async (id, tag) => {
+              await storage.updateSessionTag(id, tag)
+              const allSessions = await storage.loadSessionsSince(toDateString(Date.now() - 60 * 86_400_000))
+              useTimerStore.setState({ historySessions: allSessions })
+            }}
+            storage={storage}
           />
         ) : view === 'today' ? (
           <IntentionsView
@@ -626,6 +926,7 @@ export function App({ storage }: Props) {
             focusStrictMode={focusStrictMode}
             onFocusStrictModeChange={setFocusStrictMode}
             onScreenshotsEnabledChange={setScreenshotsEnabled}
+            captureBlocks={captureBlocks}
           />
         )}
 

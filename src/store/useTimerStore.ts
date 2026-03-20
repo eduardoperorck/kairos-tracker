@@ -8,6 +8,7 @@ import {
   setWeeklyGoal as domainSetWeeklyGoal,
   setCategoryColor as domainSetCategoryColor,
   setPendingTag as domainSetPendingTag,
+  archiveCategory as domainArchiveCategory,
   createStore as createDomainStore,
   type Store,
 } from '../domain/store'
@@ -21,6 +22,7 @@ type Actions = {
   setWeeklyGoal: (id: string, ms: number) => void
   setCategoryColor: (id: string, color: string) => void
   setPendingTag: (id: string, tag: string) => void
+  archiveCategory: (id: string, archived: boolean) => void
 }
 
 export type TimerStore = Store & Actions
@@ -58,5 +60,9 @@ export const useTimerStore = createZustandStore<TimerStore>((set, get) => ({
 
   setPendingTag(id, tag) {
     set(domainSetPendingTag(get(), id, tag))
+  },
+
+  archiveCategory(id, archived) {
+    set(domainArchiveCategory(get(), id, archived))
   },
 }))

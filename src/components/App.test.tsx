@@ -10,6 +10,18 @@ function renderApp() {
   return render(<I18nProvider><App storage={createInMemoryStorage()} /></I18nProvider>)
 }
 
+/** Open ghost card and add a category by name. */
+async function addCategory(name: string) {
+  await userEvent.click(screen.getByText('+ Add category'))
+  await userEvent.type(screen.getByPlaceholderText('Category name'), name)
+  await userEvent.click(screen.getByRole('button', { name: 'Add' }))
+}
+
+/** Open the ··· overflow menu for a category card (expects exactly one 'More options' button). */
+async function openOverflow() {
+  await userEvent.click(screen.getByRole('button', { name: 'More options' }))
+}
+
 beforeEach(() => {
   useTimerStore.setState({ categories: [], sessions: [], historySessions: [] })
 })
@@ -20,64 +32,65 @@ describe('App', () => {
     expect(screen.getAllByText('Time Tracker').length).toBeGreaterThan(0)
   })
 
-  it('renders an input and add button', () => {
+  it('renders ghost card add button', () => {
     renderApp()
+    expect(screen.getByText('+ Add category')).toBeInTheDocument()
+  })
+
+  it('clicking ghost card reveals input and add button', async () => {
+    renderApp()
+    await userEvent.click(screen.getByText('+ Add category'))
     expect(screen.getByPlaceholderText('Category name')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Add' })).toBeInTheDocument()
   })
 
   it('adding a category shows it in the list', async () => {
     renderApp()
-    await userEvent.type(screen.getByPlaceholderText('Category name'), 'Work')
-    await userEvent.click(screen.getByRole('button', { name: 'Add' }))
+    await addCategory('Work')
     expect(screen.getByText('Work')).toBeInTheDocument()
   })
 
-  it('clears the input after adding a category', async () => {
+  it('input is empty when ghost card is expanded again after adding', async () => {
     renderApp()
-    const input = screen.getByPlaceholderText('Category name')
-    await userEvent.type(input, 'Work')
-    await userEvent.click(screen.getByRole('button', { name: 'Add' }))
-    expect(input).toHaveValue('')
+    await addCategory('Work')
+    // Expand the ghost card again — the input should be empty
+    await userEvent.click(screen.getByText('+ Add category'))
+    expect(screen.getByPlaceholderText('Category name')).toHaveValue('')
   })
 
   it('does not add a category with an empty name', async () => {
     renderApp()
+    await userEvent.click(screen.getByText('+ Add category'))
     await userEvent.click(screen.getByRole('button', { name: 'Add' }))
-    expect(screen.queryAllByRole('listitem')).toHaveLength(0)
+    // No Start button should appear (no category was added)
+    expect(screen.queryByRole('button', { name: 'Start' })).not.toBeInTheDocument()
   })
 
   it('shows a Start button for each category', async () => {
     renderApp()
-    await userEvent.type(screen.getByPlaceholderText('Category name'), 'Work')
-    await userEvent.click(screen.getByRole('button', { name: 'Add' }))
+    await addCategory('Work')
     expect(screen.getByRole('button', { name: 'Start' })).toBeInTheDocument()
   })
 
   it('clicking Start changes the button to Stop', async () => {
     renderApp()
-    await userEvent.type(screen.getByPlaceholderText('Category name'), 'Work')
-    await userEvent.click(screen.getByRole('button', { name: 'Add' }))
+    await addCategory('Work')
     await userEvent.click(screen.getByRole('button', { name: 'Start' }))
     expect(screen.getByRole('button', { name: 'Stop' })).toBeInTheDocument()
   })
 
-  it('clicking Stop shows session name dialog, then returns to Start on Skip', async () => {
+  it('clicking Stop returns to Start', async () => {
     renderApp()
-    await userEvent.type(screen.getByPlaceholderText('Category name'), 'Work')
-    await userEvent.click(screen.getByRole('button', { name: 'Add' }))
+    await addCategory('Work')
     await userEvent.click(screen.getByRole('button', { name: 'Start' }))
     await userEvent.click(screen.getByRole('button', { name: 'Stop' }))
-    // SessionNameSuggestion dialog appears — skip it
-    await userEvent.click(screen.getByRole('button', { name: 'Skip' }))
     expect(screen.getByRole('button', { name: 'Start' })).toBeInTheDocument()
   })
 
   it('starting a second category stops the first', async () => {
     renderApp()
     for (const name of ['Work', 'Study']) {
-      await userEvent.type(screen.getByPlaceholderText('Category name'), name)
-      await userEvent.click(screen.getByRole('button', { name: 'Add' }))
+      await addCategory(name)
     }
     const starts = screen.getAllByRole('button', { name: 'Start' })
     await userEvent.click(starts[0])
@@ -87,44 +100,50 @@ describe('App', () => {
     expect(screen.getByRole('button', { name: 'Stop' })).toBeInTheDocument()
   })
 
-  it('shows a delete button per category', async () => {
+  it('shows overflow menu button per category', async () => {
     renderApp()
-    await userEvent.type(screen.getByPlaceholderText('Category name'), 'Work')
-    await userEvent.click(screen.getByRole('button', { name: 'Add' }))
-    expect(screen.getByRole('button', { name: 'Delete' })).toBeInTheDocument()
+    await addCategory('Work')
+    expect(screen.getByRole('button', { name: 'More options' })).toBeInTheDocument()
+  })
+
+  it('clicking overflow menu shows delete option', async () => {
+    renderApp()
+    await addCategory('Work')
+    await openOverflow()
+    expect(screen.getByRole('button', { name: /delete/i })).toBeInTheDocument()
   })
 
   it('clicking delete shows confirm and cancel buttons', async () => {
     renderApp()
-    await userEvent.type(screen.getByPlaceholderText('Category name'), 'Work')
-    await userEvent.click(screen.getByRole('button', { name: 'Add' }))
-    await userEvent.click(screen.getByRole('button', { name: 'Delete' }))
+    await addCategory('Work')
+    await openOverflow()
+    await userEvent.click(screen.getByRole('button', { name: /delete/i }))
     expect(screen.getByRole('button', { name: 'Confirm' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Cancel' })).toBeInTheDocument()
   })
 
   it('cancelling delete keeps the category', async () => {
     renderApp()
-    await userEvent.type(screen.getByPlaceholderText('Category name'), 'Work')
-    await userEvent.click(screen.getByRole('button', { name: 'Add' }))
-    await userEvent.click(screen.getByRole('button', { name: 'Delete' }))
+    await addCategory('Work')
+    await openOverflow()
+    await userEvent.click(screen.getByRole('button', { name: /delete/i }))
     await userEvent.click(screen.getByRole('button', { name: 'Cancel' }))
     expect(screen.getByText('Work')).toBeInTheDocument()
   })
 
-  it('clicking category name shows an input with current name', async () => {
+  it('clicking rename in overflow shows input with current name', async () => {
     renderApp()
-    await userEvent.type(screen.getByPlaceholderText('Category name'), 'Work')
-    await userEvent.click(screen.getByRole('button', { name: 'Add' }))
-    await userEvent.click(screen.getByText('Work'))
+    await addCategory('Work')
+    await openOverflow()
+    await userEvent.click(screen.getByText(/rename/i))
     expect(screen.getByRole('textbox', { name: /rename/i })).toHaveValue('Work')
   })
 
   it('editing and pressing Enter renames the category', async () => {
     renderApp()
-    await userEvent.type(screen.getByPlaceholderText('Category name'), 'Work')
-    await userEvent.click(screen.getByRole('button', { name: 'Add' }))
-    await userEvent.click(screen.getByText('Work'))
+    await addCategory('Work')
+    await openOverflow()
+    await userEvent.click(screen.getByText(/rename/i))
     const input = screen.getByRole('textbox', { name: /rename/i })
     await userEvent.clear(input)
     await userEvent.type(input, 'Deep Work{Enter}')
@@ -133,9 +152,9 @@ describe('App', () => {
 
   it('pressing Escape cancels the rename', async () => {
     renderApp()
-    await userEvent.type(screen.getByPlaceholderText('Category name'), 'Work')
-    await userEvent.click(screen.getByRole('button', { name: 'Add' }))
-    await userEvent.click(screen.getByText('Work'))
+    await addCategory('Work')
+    await openOverflow()
+    await userEvent.click(screen.getByText(/rename/i))
     const input = screen.getByRole('textbox', { name: /rename/i })
     await userEvent.clear(input)
     await userEvent.type(input, 'Something{Escape}')
@@ -144,10 +163,31 @@ describe('App', () => {
 
   it('confirming delete removes the category', async () => {
     renderApp()
-    await userEvent.type(screen.getByPlaceholderText('Category name'), 'Work')
-    await userEvent.click(screen.getByRole('button', { name: 'Add' }))
-    await userEvent.click(screen.getByRole('button', { name: 'Delete' }))
+    await addCategory('Work')
+    await openOverflow()
+    await userEvent.click(screen.getByRole('button', { name: /delete/i }))
     await userEvent.click(screen.getByRole('button', { name: 'Confirm' }))
     expect(screen.queryByText('Work')).not.toBeInTheDocument()
+  })
+
+  it('morning banner takes priority over shortcut tip when both conditions are true (M101 priority)', async () => {
+    // Make onboardingDone = true so shortcut tip condition is satisfied
+    localStorage.setItem('onboarding_complete', 'true')
+    // Ensure morning prompt is not dismissed (the default state)
+    const todayKey = new Date().toISOString().slice(0, 10)
+    localStorage.removeItem(`morning_prompt_dismissed_${todayKey}`)
+    // Ensure shortcut tip has not been shown
+    localStorage.removeItem('shortcut_tip_shown')
+
+    renderApp()
+
+    // Add a category so categories.length > 0 (satisfies shortcut condition)
+    await addCategory('Work')
+
+    // Morning banner must be visible (it has priority)
+    expect(screen.getByText('Good morning — what are your priorities today?')).toBeInTheDocument()
+
+    // Shortcut tip must NOT be rendered simultaneously
+    expect(screen.queryByText(/Tip: press/)).not.toBeInTheDocument()
   })
 })

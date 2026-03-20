@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, useMemo } from 'react'
 import { exportSessionsToJSON } from '../domain/history'
 import { toLocalDateString } from '../domain/format'
 import { FOCUS_PRESETS, type FocusPreset } from '../domain/focusGuard'
@@ -8,6 +8,8 @@ import type { Category, Session } from '../domain/timer'
 import type { Storage } from '../persistence/storage'
 import { SettingKey } from '../persistence/storage'
 import { saveCredential, loadCredential } from '../services/credentials'
+import { computeNaturalCycle } from '../domain/adaptiveCycles'
+import type { CaptureBlock } from '../domain/passiveCapture'
 
 type Props = {
   categories: Category[]
@@ -20,6 +22,7 @@ type Props = {
   focusStrictMode: boolean
   onFocusStrictModeChange: (strict: boolean) => void
   onScreenshotsEnabledChange?: (enabled: boolean) => void
+  captureBlocks?: CaptureBlock[]
 }
 
 function downloadBlob(content: string, filename: string, mimeType: string) {
@@ -65,28 +68,31 @@ function SyncSection({ storage, sessions, categories }: { storage: Storage; sess
   const [syncPath, setSyncPath] = useState('')
   const [syncStatus, setSyncStatus] = useState<string | null>(null)
   const [workspaceRoot, setWorkspaceRoot] = useState('')
+  const [obsidianVaultPath, setObsidianVaultPath] = useState('')
 
   useEffect(() => {
     Promise.all([
       storage.getSetting(SettingKey.SyncPath),
       storage.getSetting(SettingKey.WorkspaceRoot),
-    ]).then(([sp, wr]) => {
+      storage.getSetting(SettingKey.ObsidianVaultPath),
+    ]).then(([sp, wr, ov]) => {
       setSyncPath(sp ?? '')
       setWorkspaceRoot(wr ?? '')
+      setObsidianVaultPath(ov ?? '')
     })
   }, [])
 
   async function handleSaveSyncPath() {
     await storage.setSetting(SettingKey.SyncPath, syncPath)
-    setSyncStatus('Sync path saved.')
+    setSyncStatus(t('settings.syncSaved'))
   }
 
   async function handleManualSync() {
     const path = await storage.getSetting(SettingKey.SyncPath)
-    if (!path) { setSyncStatus('No sync path configured.'); return }
+    if (!path) { setSyncStatus(t('settings.syncNoPath')); return }
     // Block path traversal: reject paths containing '..' segments
     if (path.includes('..') || path.includes('\\\\') || (!path.startsWith('/') && !/^[A-Za-z]:[/\\]/.test(path))) {
-      setSyncStatus('Invalid sync path.')
+      setSyncStatus(t('settings.syncInvalid'))
       return
     }
     const json = exportSessionsToJSON(sessions, categories)
@@ -121,8 +127,8 @@ function SyncSection({ storage, sessions, categories }: { storage: Storage; sess
       </button>
       {syncStatus && <p className="mt-2 text-xs text-emerald-400">{syncStatus}</p>}
 
-      <h3 className="mt-5 mb-2 text-xs font-medium text-zinc-500 uppercase tracking-wider">Workspace Root</h3>
-      <p className="mb-2 text-xs text-zinc-600">Base folder for your projects. Used to auto-detect the active repo from your VSCode window title.</p>
+      <h3 className="mt-5 mb-2 text-xs font-medium text-zinc-500 uppercase tracking-wider">{t('settings.workspaceRoot')}</h3>
+      <p className="mb-2 text-xs text-zinc-600">{t('settings.workspaceRootDesc')}</p>
       <div className="flex gap-2">
         <input
           type="text"
@@ -138,7 +144,28 @@ function SyncSection({ storage, sessions, categories }: { storage: Storage; sess
           onClick={() => void storage.setSetting(SettingKey.WorkspaceRoot, workspaceRoot)}
           className="rounded-md border border-white/[0.07] bg-white/3 px-3 py-2 text-xs text-zinc-400 hover:text-zinc-100 transition-all"
         >
-          Save
+          {t('settings.save')}
+        </button>
+      </div>
+
+      <h3 className="mt-5 mb-2 text-xs font-medium text-zinc-500 uppercase tracking-wider">{t('settings.obsidian')}</h3>
+      <p className="mb-2 text-xs text-zinc-600">{t('settings.obsidianDesc')}</p>
+      <div className="flex gap-2">
+        <input
+          type="text"
+          placeholder="C:\Users\…\Obsidian\Daily Notes"
+          className="flex-1 rounded-lg border border-white/[0.07] bg-white/[0.03] px-3 py-2 text-xs text-zinc-100 placeholder-zinc-600 outline-none focus:border-white/[0.15] transition-all"
+          value={obsidianVaultPath}
+          onChange={e => setObsidianVaultPath(e.target.value)}
+          onKeyDown={e => {
+            if (e.key === 'Enter') void storage.setSetting(SettingKey.ObsidianVaultPath, obsidianVaultPath)
+          }}
+        />
+        <button
+          onClick={() => void storage.setSetting(SettingKey.ObsidianVaultPath, obsidianVaultPath)}
+          className="rounded-md border border-white/[0.07] bg-white/3 px-3 py-2 text-xs text-zinc-400 hover:text-zinc-100 transition-all"
+        >
+          {t('settings.save')}
         </button>
       </div>
     </section>
@@ -147,11 +174,9 @@ function SyncSection({ storage, sessions, categories }: { storage: Storage; sess
 
 // ─── ScreenshotSettingsSection ────────────────────────────────────────────────
 
-const RETENTION_OPTIONS = [
-  { value: '7', label: '7 days' },
-  { value: '30', label: '30 days' },
-  { value: 'never', label: 'Never auto-delete' },
-]
+const RETENTION_VALUES = ['7', '30', 'never'] as const
+type RetentionKey = 'settings.retention7' | 'settings.retention30' | 'settings.retentionNever'
+const RETENTION_I18N_KEYS: RetentionKey[] = ['settings.retention7', 'settings.retention30', 'settings.retentionNever']
 
 function ScreenshotSettingsSection({ storage, onEnabledChange }: { storage: Storage; onEnabledChange?: (enabled: boolean) => void }) {
   const { t } = useI18n()
@@ -186,8 +211,8 @@ function ScreenshotSettingsSection({ storage, onEnabledChange }: { storage: Stor
         {t('screenshot.title')}
       </h3>
       <p className="mb-3 text-xs text-zinc-600">
-        Capture a screenshot every 5 minutes while a timer is active. Stored locally, never uploaded.
-        <span className="ml-1 text-zinc-700">Opt-in only.</span>
+        {t('settings.screenshotDesc')}
+        <span className="ml-1 text-zinc-700">{t('settings.screenshotOptIn')}</span>
       </p>
       <div className="flex items-center gap-3 mb-3">
         <button
@@ -203,24 +228,24 @@ function ScreenshotSettingsSection({ storage, onEnabledChange }: { storage: Stor
           }`} />
         </button>
         <span className="text-xs text-zinc-500">
-          {t('screenshot.enable')} — {enabled ? 'on' : 'off'}
+          {t('screenshot.enable')} — {enabled ? t('settings.strictOn') : t('settings.strictOff')}
         </span>
       </div>
       {enabled && (
         <div className="flex items-center gap-3">
-          <span className="text-xs text-zinc-600">Retention:</span>
+          <span className="text-xs text-zinc-600">{t('settings.retention')}</span>
           <div className="flex gap-2">
-            {RETENTION_OPTIONS.map(opt => (
+            {RETENTION_VALUES.map((val, i) => (
               <button
-                key={opt.value}
-                onClick={() => handleRetentionChange(opt.value)}
+                key={val}
+                onClick={() => handleRetentionChange(val)}
                 className={`rounded px-3 py-1 text-xs transition-all ${
-                  retention === opt.value
+                  retention === val
                     ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/30'
                     : 'border border-white/[0.07] text-zinc-500 hover:text-zinc-200'
                 }`}
               >
-                {opt.label}
+                {t(RETENTION_I18N_KEYS[i])}
               </button>
             ))}
           </div>
@@ -248,6 +273,7 @@ function loadUserRules(): WindowRule[] {
 }
 
 function StartupSection() {
+  const { t } = useI18n()
   const [enabled, setEnabled] = useState(false)
   const [status, setStatus] = useState<string | null>(null)
 
@@ -267,17 +293,17 @@ function StartupSection() {
       const next = !enabled
       await invoke('set_startup_enabled', { enabled: next })
       setEnabled(next)
-      setStatus(next ? 'App will start on login.' : 'Removed from startup.')
+      setStatus(next ? t('settings.startupOn') : t('settings.startupOff'))
     } catch {
-      setStatus('Not available (Windows only).')
+      setStatus(t('settings.startupUnavail'))
     }
   }
 
   return (
     <section>
-      <h3 className="mb-3 text-xs font-medium text-zinc-500 uppercase tracking-wider">Startup</h3>
+      <h3 className="mb-3 text-xs font-medium text-zinc-500 uppercase tracking-wider">{t('settings.startup')}</h3>
       <div className="flex items-center justify-between">
-        <span className="text-xs text-zinc-400">Launch Time Tracker when Windows starts</span>
+        <span className="text-xs text-zinc-400">{t('settings.startupDesc')}</span>
         <button
           onClick={handleToggle}
           className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${enabled ? 'bg-emerald-500' : 'bg-zinc-700'}`}
@@ -291,7 +317,19 @@ function StartupSection() {
 }
 
 function ProcessRulesSection({ categories }: { categories: Category[] }) {
+  const { t } = useI18n()
   const [rules, setRules] = useState<WindowRule[]>(() => loadUserRules())
+
+  // Refresh when usePassiveCapture writes new rules via localStorage
+  useEffect(() => {
+    function onStorage(e: StorageEvent) {
+      if (e.key === USER_RULES_KEY) setRules(loadUserRules())
+    }
+    // Poll every 2s for same-tab updates (storage event doesn't fire for same tab)
+    const id = setInterval(() => setRules(loadUserRules()), 2_000)
+    window.addEventListener('storage', onStorage)
+    return () => { clearInterval(id); window.removeEventListener('storage', onStorage) }
+  }, [])
 
   function handleDelete(id: string) {
     const next = rules.filter(r => r.id !== id)
@@ -299,11 +337,19 @@ function ProcessRulesSection({ categories }: { categories: Category[] }) {
     setRules(next)
   }
 
+  function handleToggleMode(id: string) {
+    const next = rules.map(r => r.id !== id ? r : { ...r, mode: r.mode === 'auto' ? 'suggest' as const : 'auto' as const })
+    localStorage.setItem(USER_RULES_KEY, JSON.stringify(next))
+    setRules(next)
+  }
+
   return (
     <section>
-      <h3 className="mb-3 text-xs font-medium text-zinc-500 uppercase tracking-wider">Process Rules</h3>
+      <h3 className="mb-3 text-xs font-medium text-zinc-500 uppercase tracking-wider">{t('settings.processRules')}</h3>
       {rules.length === 0 ? (
-        <p className="text-xs text-zinc-600">No custom rules — classify a process from the Tracker tab to add rules here.</p>
+        <p className="text-xs text-zinc-600">
+          Rules are created automatically when you classify apps from the Tracker. Open the Tracker tab and wait for an unclassified app banner to appear.
+        </p>
       ) : (
         <ul className="space-y-1">
           {rules.map(rule => {
@@ -311,15 +357,28 @@ function ProcessRulesSection({ categories }: { categories: Category[] }) {
               ? (categories.find(c => c.id === rule.categoryId)?.name ?? rule.categoryId)
               : null
             return (
-              <li key={rule.id} className="flex items-center justify-between rounded-lg border border-white/[0.06] bg-white/[0.02] px-3 py-2 text-xs">
-                <span className="font-mono text-zinc-300">{rule.pattern}</span>
-                <span className="text-zinc-500">
-                  {rule.mode === 'ignore' ? 'ignore' : catName ?? '—'}
+              <li key={rule.id} className="flex items-center gap-2 rounded-lg border border-white/[0.06] bg-white/[0.02] px-3 py-2 text-xs">
+                <span className="flex-1 font-mono text-zinc-300 truncate">{rule.pattern}</span>
+                <span className="text-zinc-500 shrink-0">
+                  {rule.mode === 'ignore' ? t('settings.ignore') : catName ?? '—'}
                 </span>
+                {rule.mode !== 'ignore' && (
+                  <button
+                    title={rule.mode === 'auto' ? 'Switch to suggest (manual start)' : 'Switch to auto (automatic start)'}
+                    onClick={() => handleToggleMode(rule.id)}
+                    className={`shrink-0 rounded px-1.5 py-0.5 text-[10px] transition-colors ${
+                      rule.mode === 'auto'
+                        ? 'bg-emerald-500/15 text-emerald-400 hover:bg-emerald-500/25'
+                        : 'bg-white/[0.05] text-zinc-500 hover:text-zinc-300'
+                    }`}
+                  >
+                    {rule.mode}
+                  </button>
+                )}
                 <button
                   title={`Delete rule for ${rule.pattern}`}
                   onClick={() => handleDelete(rule.id)}
-                  className="ml-4 text-zinc-700 hover:text-red-400 transition-colors"
+                  className="shrink-0 text-zinc-700 hover:text-red-400 transition-colors"
                 >
                   ✕
                 </button>
@@ -334,23 +393,47 @@ function ProcessRulesSection({ categories }: { categories: Category[] }) {
 
 // ─── SettingsView ─────────────────────────────────────────────────────────────
 
-export function SettingsView({ categories, sessions, storage, webhookUrl, onWebhookUrlChange, focusPreset, onFocusPresetChange, focusStrictMode, onFocusStrictModeChange, onScreenshotsEnabledChange }: Props) {
+export function SettingsView({ categories, sessions, storage, webhookUrl, onWebhookUrlChange, focusPreset, onFocusPresetChange, focusStrictMode, onFocusStrictModeChange, onScreenshotsEnabledChange, captureBlocks }: Props) {
   const { t, lang, setLang } = useI18n()
   const [restoreStatus, setRestoreStatus] = useState<string | null>(null)
+
+  const naturalCycle = useMemo(() => {
+    if (!captureBlocks || captureBlocks.length === 0) return null
+    try {
+      return computeNaturalCycle(captureBlocks)
+    } catch { return null }
+  }, [captureBlocks])
   const [webhookDraft, setWebhookDraft] = useState(webhookUrl)
   const [apiKeyDraft, setApiKeyDraft] = useState('')
   const [apiKeySaved, setApiKeySaved] = useState(false)
   const [githubUsername, setGithubUsername] = useState('')
   const [githubSaved, setGithubSaved] = useState(false)
+  const [slackToken, setSlackToken] = useState('')
+  const [slackSaved, setSlackSaved] = useState(false)
+  const [notionToken, setNotionToken] = useState('')
+  const [notionDatabaseId, setNotionDatabaseId] = useState('')
+  const [notionSaved, setNotionSaved] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const [expandedIntegration, setExpandedIntegration] = useState<string | null>(null)
+  const [integrationsOpen, setIntegrationsOpen] = useState(false)
+
+  function toggleIntegration(name: string) {
+    setExpandedIntegration(p => p === name ? null : name)
+  }
 
   useEffect(() => {
     Promise.all([
       loadCredential(SettingKey.AnthropicApiKey),
       storage.getSetting(SettingKey.GithubUsername),
-    ]).then(([k, gh]) => {
+      storage.getSetting(SettingKey.SlackToken),
+      storage.getSetting(SettingKey.NotionToken),
+      storage.getSetting(SettingKey.NotionDatabaseId),
+    ]).then(([k, gh, slack, nt, ndb]) => {
       if (k) setApiKeyDraft('••••••••' + k.slice(-4))
       if (gh) setGithubUsername(gh)
+      if (slack) setSlackToken('••••••••' + slack.slice(-4))
+      if (nt) setNotionToken('••••••••' + nt.slice(-4))
+      if (ndb) setNotionDatabaseId(ndb)
     })
   }, [])
 
@@ -395,187 +478,412 @@ export function SettingsView({ categories, sessions, storage, webhookUrl, onWebh
     onWebhookUrlChange(webhookDraft)
   }
 
+  const [expandedSection, setExpandedSection] = useState<string | null>(null)
+
+  function toggleSection(name: string) {
+    setExpandedSection(p => p === name ? null : name)
+  }
+
+  function AccordionRow({ id, label, status }: { id: string; label: string; status?: string }) {
+    const open = expandedSection === id
+    return (
+      <button
+        className="flex w-full items-center justify-between px-4 py-3 text-xs text-zinc-400 hover:bg-white/[0.02] transition-colors"
+        onClick={() => toggleSection(id)}
+      >
+        <span className="font-medium">{label}</span>
+        <span className={status ? 'text-emerald-400' : 'text-zinc-600'}>
+          {status ?? (open ? '▲' : '▼')}
+        </span>
+      </button>
+    )
+  }
+
   return (
-    <div className="space-y-8">
-      <h2 className="text-sm font-semibold text-zinc-200">{t('settings.title')}</h2>
+    <div>
+      <h2 className="mb-6 text-sm font-semibold text-zinc-200">{t('settings.title')}</h2>
 
-      {/* Language */}
-      <section>
-        <h3 className="mb-3 text-xs font-medium text-zinc-500 uppercase tracking-wider">{t('settings.language')}</h3>
-        <div className="flex gap-2">
-          {(['en', 'pt'] as const).map(l => (
-            <button
-              key={l}
-              onClick={() => setLang(l)}
-              className={`rounded-lg border px-4 py-2 text-xs transition-all ${
-                lang === l
-                  ? 'border-emerald-500/40 bg-emerald-500/8 text-emerald-400'
-                  : 'border-white/[0.07] bg-white/2 text-zinc-500 hover:text-zinc-200 hover:border-white/15'
-              }`}
-            >
-              {l === 'en' ? 'English' : 'Português'}
-            </button>
-          ))}
-        </div>
-      </section>
+      <div className="space-y-1">
 
-      {/* Backup & Restore */}
-      <section>
-        <h3 className="mb-3 text-xs font-medium text-zinc-500 uppercase tracking-wider">{t('settings.backup')}</h3>
-        <div className="flex gap-2 flex-wrap">
-          <button
-            onClick={handleBackup}
-            className="rounded-md border border-white/[0.07] bg-white/3 px-4 py-2 text-xs text-zinc-400 hover:text-zinc-100 hover:border-white/15 transition-all"
-          >
-            {t('settings.downloadBackup')}
-          </button>
-          <input ref={fileInputRef} type="file" accept=".json" className="hidden" onChange={handleRestoreFile} />
-          <button
-            onClick={() => fileInputRef.current?.click()}
-            className="rounded-md border border-white/[0.07] bg-white/3 px-4 py-2 text-xs text-zinc-400 hover:text-zinc-100 hover:border-white/15 transition-all"
-          >
-            {t('settings.restoreBackup')}
-          </button>
-        </div>
-        {restoreStatus && (
-          <p className="mt-2 text-xs text-emerald-400">{restoreStatus}</p>
-        )}
-      </section>
+        {/* ── Language ── */}
+        {(() => {
+          const open = expandedSection === 'language'
+          return (
+            <div className="rounded-lg border border-white/[0.06] overflow-hidden">
+              <AccordionRow id="language" label={t('settings.language')} status={lang === 'en' ? 'English' : 'Português'} />
+              {open && (
+                <div className="px-4 pb-4 flex gap-2">
+                  {(['en', 'pt'] as const).map(l => (
+                    <button key={l} onClick={() => setLang(l)}
+                      className={`rounded-lg border px-4 py-2 text-xs transition-all ${
+                        lang === l
+                          ? 'border-emerald-500/40 bg-emerald-500/8 text-emerald-400'
+                          : 'border-white/[0.07] bg-white/2 text-zinc-500 hover:text-zinc-200 hover:border-white/15'
+                      }`}>
+                      {l === 'en' ? 'English' : 'Português'}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          )
+        })()}
 
-      {/* Focus Guard preset */}
-      <section>
-        <h3 className="mb-3 text-xs font-medium text-zinc-500 uppercase tracking-wider">{t('settings.focusPreset')}</h3>
-        <div className="flex flex-wrap gap-2">
-          {FOCUS_PRESETS.map(p => (
-            <button
-              key={p.name}
-              onClick={() => { onFocusPresetChange(p); storage.setSetting(SettingKey.FocusPreset, p.name) }}
-              className={`rounded-lg border px-3 py-2 text-xs transition-all ${
-                focusPreset.name === p.name
-                  ? 'border-emerald-500/40 bg-emerald-500/[0.08] text-emerald-400'
-                  : 'border-white/[0.07] bg-white/[0.02] text-zinc-500 hover:text-zinc-200 hover:border-white/[0.15]'
-              }`}
-            >
-              <span className="font-medium">{p.name}</span>
-              <span className="ml-1.5 text-zinc-600">
-                {Math.round(p.workMs / 60_000)}m / {Math.round(p.breakMs / 60_000)}m
-              </span>
-            </button>
-          ))}
-        </div>
-        <div className="mt-3 flex items-center gap-3">
-          <button
-            role="switch"
-            aria-checked={focusStrictMode}
-            onClick={() => {
-              const next = !focusStrictMode
-              onFocusStrictModeChange(next)
-              storage.setSetting(SettingKey.FocusStrictMode, next ? 'true' : 'false')
-            }}
-            className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${
-              focusStrictMode ? 'bg-red-500/60' : 'bg-white/[0.08]'
-            }`}
-          >
-            <span className={`inline-block h-3.5 w-3.5 rounded-full bg-white transition-transform ${
-              focusStrictMode ? 'translate-x-4' : 'translate-x-1'
-            }`} />
-          </button>
-          <span className="text-xs text-zinc-500">
-            {t('settings.strictMode')} — {focusStrictMode ? t('settings.strictOn') : t('settings.strictOff')}
-          </span>
-        </div>
-      </section>
+        {/* ── Focus Preset ── */}
+        {(() => {
+          const open = expandedSection === 'focus'
+          return (
+            <div className="rounded-lg border border-white/[0.06] overflow-hidden">
+              <AccordionRow id="focus" label={t('settings.focusPreset')} status={focusPreset.name} />
+              {open && (
+                <div className="px-4 pb-4 space-y-3">
+                  <div className="flex flex-wrap gap-2">
+                    {FOCUS_PRESETS.map(p => (
+                      <button key={p.name}
+                        onClick={() => { onFocusPresetChange(p); storage.setSetting(SettingKey.FocusPreset, p.name) }}
+                        className={`rounded-lg border px-3 py-2 text-xs transition-all ${
+                          focusPreset.name === p.name
+                            ? 'border-emerald-500/40 bg-emerald-500/[0.08] text-emerald-400'
+                            : 'border-white/[0.07] bg-white/[0.02] text-zinc-500 hover:text-zinc-200 hover:border-white/[0.15]'
+                        }`}>
+                        <span className="font-medium">{p.name}</span>
+                        <span className="ml-1.5 text-zinc-600">{Math.round(p.workMs / 60_000)}m / {Math.round(p.breakMs / 60_000)}m</span>
+                      </button>
+                    ))}
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <button role="switch" aria-checked={focusStrictMode}
+                      onClick={() => { const next = !focusStrictMode; onFocusStrictModeChange(next); storage.setSetting(SettingKey.FocusStrictMode, next ? 'true' : 'false') }}
+                      className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${focusStrictMode ? 'bg-red-500/60' : 'bg-white/[0.08]'}`}>
+                      <span className={`inline-block h-3.5 w-3.5 rounded-full bg-white transition-transform ${focusStrictMode ? 'translate-x-4' : 'translate-x-1'}`} />
+                    </button>
+                    <span className="text-xs text-zinc-500">{t('settings.strictMode')} — {focusStrictMode ? t('settings.strictOn') : t('settings.strictOff')}</span>
+                  </div>
+                  {naturalCycle && (
+                    <div className="rounded-lg border border-white/[0.07] p-4">
+                      <h4 className="text-xs font-medium text-zinc-300 mb-2">Your Focus Cycle</h4>
+                      <p className="text-xs text-zinc-500">
+                        Natural cycle: {Math.round(naturalCycle.focusMs / 60_000)}m focus / {Math.round(naturalCycle.breakMs / 60_000)}m break
+                        ({naturalCycle.sampleCount} sessions, {Math.round(naturalCycle.confidence * 100)}% confidence)
+                      </p>
+                      <button
+                        onClick={() => {
+                          const preset = {
+                            name: 'Natural',
+                            workMs: naturalCycle.focusMs,
+                            breakMs: naturalCycle.breakMs,
+                          }
+                          onFocusPresetChange(preset)
+                          void storage.setSetting(SettingKey.FocusPreset, preset.name)
+                        }}
+                        className="mt-2 text-xs text-zinc-500 hover:text-zinc-300"
+                      >
+                        [Use as preset]
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          )
+        })()}
 
-      {/* AI API Key */}
-      <section>
-        <h3 className="mb-3 text-xs font-medium text-zinc-500 uppercase tracking-wider">{t('settings.apiKey')}</h3>
-        <p className="mb-2 text-xs text-zinc-600">{t('settings.apiKeyDesc')}</p>
-        <div className="flex gap-2">
-          <input
-            type="password"
-            placeholder="sk-ant-…"
-            className="flex-1 rounded-lg border border-white/[0.07] bg-white/[0.03] px-3 py-2 text-xs text-zinc-100 placeholder-zinc-600 outline-none focus:border-white/[0.15] transition-all"
-            value={apiKeyDraft.startsWith('••') ? '' : apiKeyDraft}
-            onChange={e => { setApiKeyDraft(e.target.value); setApiKeySaved(false) }}
-            onKeyDown={e => e.key === 'Enter' && !apiKeyDraft.startsWith('••') && saveCredential(SettingKey.AnthropicApiKey, apiKeyDraft).then(() => setApiKeySaved(true))}
-          />
-          <button
-            onClick={() => {
-              if (!apiKeyDraft || apiKeyDraft.startsWith('••')) return
-              saveCredential(SettingKey.AnthropicApiKey, apiKeyDraft).then(() => {
-                setApiKeySaved(true)
-                setApiKeyDraft('••••••••' + apiKeyDraft.slice(-4))
-              })
-            }}
-            className="rounded-md border border-white/[0.07] bg-white/[0.03] px-3 py-2 text-xs text-zinc-400 hover:text-zinc-100 transition-all"
-          >
-            {apiKeySaved ? t('settings.saved') : t('settings.save')}
-          </button>
-        </div>
-      </section>
+        {/* ── Process Rules ── */}
+        {(() => {
+          const open = expandedSection === 'rules'
+          return (
+            <div className="rounded-lg border border-white/[0.06] overflow-hidden">
+              <AccordionRow id="rules" label={t('settings.processRules')} />
+              {open && (
+                <div className="px-4 pb-4">
+                  <ProcessRulesSection categories={categories} />
+                </div>
+              )}
+            </div>
+          )
+        })()}
 
-      {/* AI Backend status */}
-      <section>
-        <h3 className="mb-3 text-xs font-medium text-zinc-500 uppercase tracking-wider">{t('settings.aiBackend')}</h3>
-        <p className="mb-2 text-xs text-zinc-600">{t('settings.ollamaDesc')}</p>
-        <AIBackendStatus apiKey={apiKeyDraft} />
-      </section>
+        {/* ── Startup ── */}
+        {(() => {
+          const open = expandedSection === 'startup'
+          return (
+            <div className="rounded-lg border border-white/[0.06] overflow-hidden">
+              <AccordionRow id="startup" label={t('settings.startup')} />
+              {open && (
+                <div className="px-4 pb-4">
+                  <StartupSection />
+                </div>
+              )}
+            </div>
+          )
+        })()}
 
-      {/* GitHub Correlation */}
-      <section>
-        <h3 className="mb-3 text-xs font-medium text-zinc-500 uppercase tracking-wider">{t('github.correlation')}</h3>
-        <p className="mb-2 text-xs text-zinc-600">Show your GitHub commit activity overlaid on the heatmap.</p>
-        <div className="flex gap-2">
-          <input
-            type="text"
-            placeholder="GitHub username"
-            className="flex-1 rounded-lg border border-white/[0.07] bg-white/[0.03] px-3 py-2 text-xs text-zinc-100 placeholder-zinc-600 outline-none focus:border-white/[0.15] transition-all"
-            value={githubUsername}
-            onChange={e => setGithubUsername(e.target.value)}
-            onKeyDown={e => e.key === 'Enter' && storage.setSetting(SettingKey.GithubUsername, githubUsername).then(() => setGithubSaved(true))}
-          />
-          <button
-            onClick={() => storage.setSetting(SettingKey.GithubUsername, githubUsername).then(() => setGithubSaved(true))}
-            className="rounded-md border border-white/[0.07] bg-white/3 px-3 py-2 text-xs text-zinc-400 hover:text-zinc-100 transition-all"
-          >
-            {githubSaved ? t('settings.saved') : t('settings.save')}
-          </button>
-        </div>
-      </section>
+        {/* ── Integrations (parent accordion) ── */}
+        {(() => {
+          const connectedCount = [
+            apiKeyDraft.startsWith('••'),
+            !!githubUsername,
+            slackToken.startsWith('••'),
+            notionToken.startsWith('••'),
+            !!webhookDraft,
+          ].filter(Boolean).length
+          const subtitle = connectedCount > 0
+            ? `${connectedCount} connected`
+            : integrationsOpen ? '▲' : '▼'
+          return (
+            <div className="rounded-lg border border-white/[0.06] overflow-hidden">
+              <button
+                className="flex w-full items-center justify-between px-4 py-3 text-xs text-zinc-400 hover:bg-white/[0.02] transition-colors"
+                onClick={() => setIntegrationsOpen(p => !p)}
+              >
+                <span className="font-medium">{t('settings.integrations')}</span>
+                <span className={connectedCount > 0 ? 'text-emerald-400' : 'text-zinc-600'}>
+                  {subtitle}
+                </span>
+              </button>
+              {integrationsOpen && (
+                <div className="border-t border-white/[0.04] divide-y divide-white/[0.04]">
 
-      {/* Startup on login */}
-      <StartupSection />
+                  {/* ── AI / Claude ── */}
+                  {(() => {
+                    const connected = apiKeyDraft.startsWith('••')
+                    const open = expandedIntegration === 'ai'
+                    return (
+                      <div>
+                        <button className="flex w-full items-center justify-between px-6 py-3 text-xs text-zinc-400 hover:bg-white/[0.02] transition-colors"
+                          onClick={() => toggleIntegration('ai')}>
+                          <span className="font-medium">{t('settings.apiKey')}</span>
+                          <span className={connected ? 'text-emerald-400' : 'text-zinc-600'}>
+                            {connected ? t('settings.connected') : open ? '▲' : t('settings.setup')}
+                          </span>
+                        </button>
+                        {open && (
+                          <div className="px-6 pb-4 space-y-2">
+                            <p className="text-xs text-zinc-600">{t('settings.apiKeyDesc')}</p>
+                            <div className="flex gap-2">
+                              <input type="password" placeholder="sk-ant-…"
+                                className="flex-1 rounded-lg border border-white/[0.07] bg-white/[0.03] px-3 py-2 text-xs text-zinc-100 placeholder-zinc-600 outline-none focus:border-white/[0.15] transition-all"
+                                value={apiKeyDraft.startsWith('••') ? '' : apiKeyDraft}
+                                onChange={e => { setApiKeyDraft(e.target.value); setApiKeySaved(false) }}
+                                onKeyDown={e => e.key === 'Enter' && !apiKeyDraft.startsWith('••') && saveCredential(SettingKey.AnthropicApiKey, apiKeyDraft).then(() => setApiKeySaved(true))}
+                              />
+                              <button onClick={() => {
+                                  if (!apiKeyDraft || apiKeyDraft.startsWith('••')) return
+                                  saveCredential(SettingKey.AnthropicApiKey, apiKeyDraft).then(() => { setApiKeySaved(true); setApiKeyDraft('••••••••' + apiKeyDraft.slice(-4)) })
+                                }}
+                                className="rounded-md border border-white/[0.07] bg-white/[0.03] px-3 py-2 text-xs text-zinc-400 hover:text-zinc-100 transition-all">
+                                {apiKeySaved ? t('settings.saved') : t('settings.save')}
+                              </button>
+                            </div>
+                            <p className="text-xs text-zinc-600">{t('settings.ollamaDesc')}</p>
+                            <AIBackendStatus apiKey={apiKeyDraft} />
+                          </div>
+                        )}
+                      </div>
+                    )
+                  })()}
 
-      {/* Process Rules */}
-      <ProcessRulesSection categories={categories} />
+                  {/* ── GitHub ── */}
+                  {(() => {
+                    const connected = !!githubUsername
+                    const open = expandedIntegration === 'github'
+                    return (
+                      <div>
+                        <button className="flex w-full items-center justify-between px-6 py-3 text-xs text-zinc-400 hover:bg-white/[0.02] transition-colors"
+                          onClick={() => toggleIntegration('github')}>
+                          <span className="font-medium">{t('github.correlation')}</span>
+                          <span className={connected ? 'text-emerald-400' : 'text-zinc-600'}>
+                            {connected ? `✓ ${githubUsername}` : open ? '▲' : t('settings.setup')}
+                          </span>
+                        </button>
+                        {open && (
+                          <div className="px-6 pb-4 space-y-2">
+                            <p className="text-xs text-zinc-600">{t('github.correlationDesc')}</p>
+                            <div className="flex gap-2">
+                              <input type="text" placeholder="GitHub username"
+                                className="flex-1 rounded-lg border border-white/[0.07] bg-white/[0.03] px-3 py-2 text-xs text-zinc-100 placeholder-zinc-600 outline-none focus:border-white/[0.15] transition-all"
+                                value={githubUsername}
+                                onChange={e => setGithubUsername(e.target.value)}
+                                onBlur={() => storage.getSetting(SettingKey.GithubUsername).then(v => v !== githubUsername && storage.setSetting(SettingKey.GithubUsername, githubUsername).then(() => setGithubSaved(true)))}
+                                onKeyDown={e => e.key === 'Enter' && storage.setSetting(SettingKey.GithubUsername, githubUsername).then(() => setGithubSaved(true))}
+                              />
+                              {githubSaved && <span className="self-center text-xs text-emerald-400">Saved ✓</span>}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )
+                  })()}
 
-      {/* Screenshots */}
-      <ScreenshotSettingsSection storage={storage} onEnabledChange={onScreenshotsEnabledChange} />
+                  {/* ── Slack ── */}
+                  {(() => {
+                    const connected = slackToken.startsWith('••')
+                    const open = expandedIntegration === 'slack'
+                    return (
+                      <div>
+                        <button className="flex w-full items-center justify-between px-6 py-3 text-xs text-zinc-400 hover:bg-white/[0.02] transition-colors"
+                          onClick={() => toggleIntegration('slack')}>
+                          <span className="font-medium">{t('settings.slackStatus')}</span>
+                          <span className={connected ? 'text-emerald-400' : 'text-zinc-600'}>
+                            {connected ? t('settings.connected') : open ? '▲' : t('settings.setup')}
+                          </span>
+                        </button>
+                        {open && (
+                          <div className="px-6 pb-4 space-y-2">
+                            <p className="text-xs text-zinc-600">{t('settings.slackDesc')}</p>
+                            <div className="flex gap-2">
+                              <input type="password" placeholder="xoxp-…"
+                                className="flex-1 rounded-lg border border-white/[0.07] bg-white/[0.03] px-3 py-2 text-xs text-zinc-100 placeholder-zinc-600 outline-none focus:border-white/[0.15] transition-all"
+                                value={slackToken.startsWith('••') ? '' : slackToken}
+                                onChange={e => { setSlackToken(e.target.value); setSlackSaved(false) }}
+                                onKeyDown={e => e.key === 'Enter' && !slackToken.startsWith('••') && storage.setSetting(SettingKey.SlackToken, slackToken).then(() => { setSlackSaved(true); setSlackToken('••••••••' + slackToken.slice(-4)) })}
+                              />
+                              <button onClick={() => {
+                                  if (!slackToken || slackToken.startsWith('••')) return
+                                  storage.setSetting(SettingKey.SlackToken, slackToken).then(() => { setSlackSaved(true); setSlackToken('••••••••' + slackToken.slice(-4)) })
+                                }}
+                                className="rounded-md border border-white/[0.07] bg-white/[0.03] px-3 py-2 text-xs text-zinc-400 hover:text-zinc-100 transition-all">
+                                {slackSaved ? t('settings.saved') : t('settings.save')}
+                              </button>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )
+                  })()}
 
-      {/* OneDrive / Sync */}
-      <SyncSection storage={storage} sessions={sessions} categories={categories} />
+                  {/* ── Notion ── */}
+                  {(() => {
+                    const connected = notionToken.startsWith('••')
+                    const open = expandedIntegration === 'notion'
+                    return (
+                      <div>
+                        <button className="flex w-full items-center justify-between px-6 py-3 text-xs text-zinc-400 hover:bg-white/[0.02] transition-colors"
+                          onClick={() => toggleIntegration('notion')}>
+                          <span className="font-medium">{t('settings.notionExport')}</span>
+                          <span className={connected ? 'text-emerald-400' : 'text-zinc-600'}>
+                            {connected ? t('settings.connected') : open ? '▲' : t('settings.setup')}
+                          </span>
+                        </button>
+                        {open && (
+                          <div className="px-6 pb-4 space-y-2">
+                            <p className="text-xs text-zinc-600">{t('settings.notionDesc')}</p>
+                            <div className="flex gap-2">
+                              <input type="password" placeholder="secret_…"
+                                className="flex-1 rounded-lg border border-white/[0.07] bg-white/[0.03] px-3 py-2 text-xs text-zinc-100 placeholder-zinc-600 outline-none focus:border-white/[0.15] transition-all"
+                                value={notionToken.startsWith('••') ? '' : notionToken}
+                                onChange={e => { setNotionToken(e.target.value); setNotionSaved(false) }}
+                              />
+                              <input type="text" placeholder="Database ID"
+                                className="flex-1 rounded-lg border border-white/[0.07] bg-white/[0.03] px-3 py-2 text-xs text-zinc-100 placeholder-zinc-600 outline-none focus:border-white/[0.15] transition-all"
+                                value={notionDatabaseId}
+                                onChange={e => { setNotionDatabaseId(e.target.value); setNotionSaved(false) }}
+                              />
+                              <button onClick={async () => {
+                                  if (!notionToken || notionToken.startsWith('••')) return
+                                  await Promise.all([storage.setSetting(SettingKey.NotionToken, notionToken), storage.setSetting(SettingKey.NotionDatabaseId, notionDatabaseId)])
+                                  setNotionSaved(true); setNotionToken('••••••••' + notionToken.slice(-4))
+                                }}
+                                className="rounded-md border border-white/[0.07] bg-white/[0.03] px-3 py-2 text-xs text-zinc-400 hover:text-zinc-100 transition-all">
+                                {notionSaved ? t('settings.saved') : t('settings.save')}
+                              </button>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )
+                  })()}
 
-      {/* Webhooks */}
-      <section>
-        <h3 className="mb-3 text-xs font-medium text-zinc-500 uppercase tracking-wider">{t('settings.webhooks')}</h3>
-        <p className="mb-3 text-xs text-zinc-600">{t('settings.webhooksDesc')}</p>
-        <div className="flex gap-2">
-          <input
-            type="url"
-            placeholder="https://…"
-            className="flex-1 rounded-lg border border-white/[0.07] bg-white/[0.03] px-3 py-2 text-xs text-zinc-100 placeholder-zinc-600 outline-none focus:border-white/[0.15] transition-all"
-            value={webhookDraft}
-            onChange={e => setWebhookDraft(e.target.value)}
-            onKeyDown={e => e.key === 'Enter' && handleSaveWebhook()}
-          />
-          <button
-            onClick={handleSaveWebhook}
-            className="rounded-md border border-white/[0.07] bg-white/3 px-3 py-2 text-xs text-zinc-400 hover:text-zinc-100 transition-all"
-          >
-            {t('settings.save')}
-          </button>
-        </div>
-      </section>
+                  {/* ── Webhooks ── */}
+                  {(() => {
+                    const connected = !!webhookDraft
+                    const open = expandedIntegration === 'webhook'
+                    return (
+                      <div>
+                        <button className="flex w-full items-center justify-between px-6 py-3 text-xs text-zinc-400 hover:bg-white/[0.02] transition-colors"
+                          onClick={() => toggleIntegration('webhook')}>
+                          <span className="font-medium">{t('settings.webhooks')}</span>
+                          <span className={connected ? 'text-emerald-400' : 'text-zinc-600'}>
+                            {connected ? t('settings.connected') : open ? '▲' : t('settings.setup')}
+                          </span>
+                        </button>
+                        {open && (
+                          <div className="px-6 pb-4 space-y-2">
+                            <p className="text-xs text-zinc-600">{t('settings.webhooksDesc')}</p>
+                            <input type="url" placeholder="https://…"
+                              className="w-full rounded-lg border border-white/[0.07] bg-white/[0.03] px-3 py-2 text-xs text-zinc-100 placeholder-zinc-600 outline-none focus:border-white/[0.15] transition-all"
+                              value={webhookDraft}
+                              onChange={e => setWebhookDraft(e.target.value)}
+                              onKeyDown={e => e.key === 'Enter' && handleSaveWebhook()}
+                              onBlur={handleSaveWebhook}
+                            />
+                          </div>
+                        )}
+                      </div>
+                    )
+                  })()}
+
+                </div>
+              )}
+            </div>
+          )
+        })()}
+
+        {/* ── Sync ── */}
+        {(() => {
+          const open = expandedSection === 'sync'
+          return (
+            <div className="rounded-lg border border-white/[0.06] overflow-hidden">
+              <AccordionRow id="sync" label={t('settings.sync')} />
+              {open && (
+                <div className="px-4 pb-4">
+                  <SyncSection storage={storage} sessions={sessions} categories={categories} />
+                </div>
+              )}
+            </div>
+          )
+        })()}
+
+        {/* ── Screenshots ── */}
+        {(() => {
+          const open = expandedSection === 'screenshots'
+          return (
+            <div className="rounded-lg border border-white/[0.06] overflow-hidden">
+              <AccordionRow id="screenshots" label={t('screenshot.title')} />
+              {open && (
+                <div className="px-4 pb-4">
+                  <ScreenshotSettingsSection storage={storage} onEnabledChange={onScreenshotsEnabledChange} />
+                </div>
+              )}
+            </div>
+          )
+        })()}
+
+        {/* ── Backup & Restore ── */}
+        {(() => {
+          const open = expandedSection === 'data'
+          return (
+            <div className="rounded-lg border border-white/[0.06] overflow-hidden">
+              <AccordionRow id="data" label={t('settings.backup')} />
+              {open && (
+                <div className="px-4 pb-4 flex gap-2 flex-wrap">
+                  <button onClick={handleBackup}
+                    className="rounded-md border border-white/[0.07] bg-white/3 px-4 py-2 text-xs text-zinc-400 hover:text-zinc-100 hover:border-white/15 transition-all">
+                    {t('settings.downloadBackup')}
+                  </button>
+                  <input ref={fileInputRef} type="file" accept=".json" className="hidden" onChange={handleRestoreFile} />
+                  <button onClick={() => fileInputRef.current?.click()}
+                    className="rounded-md border border-white/[0.07] bg-white/3 px-4 py-2 text-xs text-zinc-400 hover:text-zinc-100 hover:border-white/15 transition-all">
+                    {t('settings.restoreBackup')}
+                  </button>
+                  {restoreStatus && <p className="mt-2 text-xs text-emerald-400 w-full">{restoreStatus}</p>}
+                </div>
+              )}
+            </div>
+          )
+        })()}
+
+      </div>
     </div>
   )
 }

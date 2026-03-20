@@ -23,7 +23,16 @@ function loadDone(today: string): Set<number> {
   } catch { return new Set() }
 }
 
+const MOOD_LABELS: Record<1 | 2 | 3 | 4 | 5, string> = {
+  1: 'rough',
+  2: 'okay',
+  3: 'good',
+  4: 'great',
+  5: 'peak',
+}
+
 export function IntentionsView({ intentions, review, today, onAddIntention, onSaveReview, onExportMarkdown, mvdItems = [], onMVDChange, draftNotes }: Props) {
+  const currentHour = new Date().getHours()
   const { t } = useI18n()
   const [newText, setNewText] = useState('')
   const [done, setDone] = useState<Set<number>>(() => loadDone(today))
@@ -103,7 +112,8 @@ export function IntentionsView({ intentions, review, today, onAddIntention, onSa
         )}
       </section>
 
-      {/* Evening review */}
+      {/* Evening review — only after 5pm or if already saved */}
+      {(currentHour >= 17 || !!review) && (
       <section>
         <h2 className="mb-4 text-sm font-semibold text-zinc-200">{t('intentions.eveningTitle')}</h2>
 
@@ -113,15 +123,15 @@ export function IntentionsView({ intentions, review, today, onAddIntention, onSa
             {([1, 2, 3, 4, 5] as const).map(n => (
               <button
                 key={n}
-                aria-label={`Mood ${n}`}
+                aria-label={`Mood ${n} — ${MOOD_LABELS[n]}`}
                 onClick={() => setMood(n)}
-                className={`w-10 h-10 rounded-lg border text-sm transition-all ${
+                className={`rounded-lg border px-3 py-2 text-xs transition-all ${
                   mood === n
                     ? 'border-zinc-300 bg-white/[0.08] text-zinc-100'
                     : 'border-zinc-800 text-zinc-600 hover:border-zinc-600 hover:text-zinc-400'
                 }`}
               >
-                {n}
+                {MOOD_LABELS[n]}
               </button>
             ))}
           </div>
@@ -155,6 +165,12 @@ export function IntentionsView({ intentions, review, today, onAddIntention, onSa
           </button>
         )}
       </section>
+      )}
+
+      {/* Before 5pm hint */}
+      {currentHour < 17 && !review && (
+        <p className="text-xs text-zinc-700 italic">{t('intentions.eveningOnly')}</p>
+      )}
     </div>
   )
 }

@@ -85,6 +85,51 @@ describe('computeStreak', () => {
     const dates = ['2026-03-14', '2026-03-14', '2026-03-15', '2026-03-15']
     expect(computeStreak(dates, today)).toBe(2)
   })
+
+  it('default behavior (allowedGapDays=0) is unchanged — gap breaks streak', () => {
+    // gap on 2026-03-13 → streak is only 2 (14 + 15)
+    const dates = ['2026-03-11', '2026-03-12', '2026-03-14', '2026-03-15']
+    expect(computeStreak(dates, today, 0)).toBe(2)
+  })
+
+  it('counts streak of 5 with one gap day when allowedGapDays=1', () => {
+    // 11, 12, [13 missing], 14, 15 — gap of 1 is tolerated
+    const dates = ['2026-03-11', '2026-03-12', '2026-03-14', '2026-03-15']
+    expect(computeStreak(dates, today, 1)).toBe(4)
+  })
+
+  it('returns streak across a single allowed gap spanning the whole sequence', () => {
+    // 10, 11, 12, [13 missing], 14, 15 — one gap, allowedGapDays=1
+    const dates = ['2026-03-10', '2026-03-11', '2026-03-12', '2026-03-14', '2026-03-15']
+    expect(computeStreak(dates, today, 1)).toBe(5)
+  })
+
+  it('breaks streak on two consecutive gap days when allowedGapDays=1', () => {
+    // 11, [12 missing], [13 missing], 14, 15 — two consecutive gaps, streak breaks
+    const dates = ['2026-03-11', '2026-03-14', '2026-03-15']
+    expect(computeStreak(dates, today, 1)).toBe(2)
+  })
+
+  it('respects a gap at the beginning of the sequence (gap before first date)', () => {
+    // 10, 11, [12 missing], 13, 14, 15 — gap between 11 and 13 (allowedGapDays=0)
+    // walking backwards from 15: 15, 14, 13 → gap to 11 is 2 days → streak stops at 3
+    const dates = ['2026-03-10', '2026-03-11', '2026-03-13', '2026-03-14', '2026-03-15']
+    expect(computeStreak(dates, today, 0)).toBe(3)
+  })
+
+  it('two separate gaps within the streak both break when allowedGapDays=1', () => {
+    // 9, [10 missing], 11, [12 missing], [13 missing], 14, 15
+    // allowedGapDays=1: walking back from 15: 15, 14, [gap of 2 to 11] → breaks at gap between 11 and 14
+    const dates = ['2026-03-09', '2026-03-11', '2026-03-14', '2026-03-15']
+    expect(computeStreak(dates, today, 1)).toBe(2)
+  })
+
+  it('single gap at the very start of dates array is tolerated when allowedGapDays=1', () => {
+    // [2026-03-09 missing], 10, 11, 12, 13, 14, 15 — gap between hypothetical 09 and 10
+    // The actual first date is 10, so no gap issue when walking back from 15 to 10
+    const dates = ['2026-03-10', '2026-03-11', '2026-03-12', '2026-03-13', '2026-03-14', '2026-03-15']
+    expect(computeStreak(dates, today, 1)).toBe(6)
+  })
 })
 
 describe('computeTodayMs', () => {

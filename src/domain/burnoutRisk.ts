@@ -10,6 +10,7 @@ export type BurnoutRisk = {
 
 const LATE_NIGHT_HOUR = 22 // sessions starting at or after 10pm
 const WEEKEND_DAYS = [0, 6] // Sun, Sat
+const MIN_WORK_SESSION_MS = 20 * 60_000 // 20 minutes
 
 function isLateNight(startedAt: number): boolean {
   return new Date(startedAt).getHours() >= LATE_NIGHT_HOUR
@@ -53,7 +54,9 @@ export function computeBurnoutRisk(
   }
 
   // Weekend work
-  const weekendSessions = recentSessions.filter(s => isWeekend(s.date))
+  const weekendSessions = recentSessions.filter(
+    s => isWeekend(s.date) && (s.endedAt - s.startedAt) >= MIN_WORK_SESSION_MS,
+  )
   const weekendDays = new Set(weekendSessions.map(s => s.date)).size
   if (weekendDays >= 2) {
     signals.push('Working both weekend days')
@@ -83,7 +86,8 @@ export function computeBurnoutRisk(
   }
 
   // No rest days (7 consecutive days with sessions)
-  const daysWithSessions = new Set(recentSessions.map(s => s.date)).size
+  const significantSessions = recentSessions.filter(s => (s.endedAt - s.startedAt) >= MIN_WORK_SESSION_MS)
+  const daysWithSessions = new Set(significantSessions.map(s => s.date)).size
   if (daysWithSessions === 7) {
     signals.push('No rest days in last 7 days')
     score += 20
