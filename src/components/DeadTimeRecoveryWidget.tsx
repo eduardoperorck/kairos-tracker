@@ -1,12 +1,18 @@
 import { computeDeadTime, formatIdleTime } from '../domain/deadTimeRecovery'
 import type { MicroTask } from '../domain/deadTimeRecovery'
-import { useI18n } from '../i18n'
+import { useI18n, isI18nKey } from '../i18n'
+import type { TKey } from '../i18n'
 
 type Props = {
   idleMs: number
   customTasks?: MicroTask[]
   onSelectTask: (task: MicroTask) => void
   onDismiss: () => void
+}
+
+function taskLabel(task: MicroTask, t: (key: TKey) => string): string {
+  const key = `deadTime.task.${task.id}`
+  return isI18nKey(key) ? t(key as TKey) : task.text
 }
 
 export function DeadTimeRecoveryWidget({ idleMs, customTasks, onSelectTask, onDismiss }: Props) {
@@ -44,7 +50,7 @@ export function DeadTimeRecoveryWidget({ idleMs, customTasks, onSelectTask, onDi
               className="w-full rounded border border-white/[0.06] bg-white/3 px-3 py-2 text-left text-zinc-300 hover:bg-white/6 hover:text-zinc-100 transition-colors"
             >
               <span className="flex justify-between">
-                <span>{task.text}</span>
+                <span>{taskLabel(task, t)}</span>
                 <span className="text-zinc-600 text-xs">{task.estimatedMinutes}m</span>
               </span>
             </button>

@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { suggestSessionName } from '../domain/sessionNaming'
-import { useI18n } from '../i18n'
+import { useI18n, isI18nKey } from '../i18n'
+import type { TKey } from '../i18n'
 
 type Props = {
   titles: string[]
@@ -10,7 +11,8 @@ type Props = {
 
 export function SessionNameSuggestion({ titles, onAccept, onDismiss }: Props) {
   const { t } = useI18n()
-  const suggestion = suggestSessionName(titles)
+  const raw = suggestSessionName(titles)
+  const suggestion = isI18nKey(raw) ? t(raw as TKey) : raw
   const [custom, setCustom] = useState(suggestion)
 
   return (

@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useI18n } from '../i18n'
+import type { TKey } from '../i18n'
 import { FOCUS_PRESETS } from '../domain/focusGuard'
 
 type OnCompletePayload = { categories: string[]; preset: string }
@@ -135,7 +136,7 @@ export function OnboardingWizard({ onComplete }: Props) {
                   : 'border-white/[0.07] text-zinc-400 hover:border-white/15 hover:text-zinc-200'
               }`}
             >
-              <span className="font-medium text-sm">{p.name}</span>
+              <span className="font-medium text-sm">{p.key ? t(`preset.${p.key}.label` as TKey) : p.name}</span>
               <span className="ml-2 text-xs opacity-60">
                 {Math.round(p.workMs / 60000)} min / {Math.round(p.breakMs / 60000)} min
               </span>

@@ -68,7 +68,10 @@ export function IntentionsView({ intentions, review, today, onAddIntention, onSa
 
       {/* Morning brief */}
       <section>
-        <h2 className="mb-4 text-sm font-semibold text-zinc-200">{t('intentions.title')}</h2>
+        <div className="mb-4">
+          <h2 className="text-sm font-semibold text-zinc-200">{t('intentions.title')}</h2>
+          <p className="mt-0.5 text-xs text-zinc-500">{t('intentions.subtitle')}</p>
+        </div>
 
         <div className="mb-4 flex gap-2">
           <input

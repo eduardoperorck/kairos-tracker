@@ -68,7 +68,7 @@ export function FocusGuard({ activeCategory, startedAt: _startedAt, preset, allo
       <div className="absolute inset-0 bg-black/70" />
 
       <div className="relative pointer-events-auto rounded-2xl border border-white/[0.1] bg-zinc-900 px-10 py-8 shadow-2xl text-center max-w-sm w-full mx-4">
-        <p className="mb-1 text-xs uppercase tracking-widest text-zinc-500">{preset.name} · {t('focusGuard.breakTime')}</p>
+        <p className="mb-1 text-xs uppercase tracking-widest text-zinc-500">{preset.key ? t(`preset.${preset.key}.label` as TKey) : preset.name} · {t('focusGuard.breakTime')}</p>
 
         {activeCategory && (
           <p className="mb-1 text-sm text-zinc-400">{activeCategory}</p>

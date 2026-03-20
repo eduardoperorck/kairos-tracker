@@ -43,10 +43,10 @@ export function CommandPalette({ categories, activeId, onStart, onStop, onNaviga
     { id: 'nav-today', label: t('nav.today'), action: () => onNavigate('today') },
     { id: 'nav-settings', label: t('nav.settings'), action: () => onNavigate('settings') },
     { id: 'nav-tracker', label: t('nav.timer'), action: () => onNavigate('tracker') },
-    ...(onOpenNLP ? [{ id: 'action-nlp', label: 'Log time manually', action: onOpenNLP }] : []),
-    ...(onCyclePreset ? [{ id: 'action-cycle-preset', label: 'Change focus preset', action: onCyclePreset }] : []),
-    { id: 'action-weekly-digest', label: 'View weekly digest', action: () => onNavigate('stats') },
-    { id: 'action-set-goals', label: "Set today's goals", action: () => onNavigate('today') },
+    ...(onOpenNLP ? [{ id: 'action-nlp', label: t('palette.logTime'), action: onOpenNLP }] : []),
+    ...(onCyclePreset ? [{ id: 'action-cycle-preset', label: t('palette.changePreset'), action: onCyclePreset }] : []),
+    { id: 'action-weekly-digest', label: t('palette.weeklyDigest'), action: () => onNavigate('stats') },
+    { id: 'action-set-goals', label: t('palette.setGoals'), action: () => onNavigate('today') },
   ]
 
   const filtered = query.trim()

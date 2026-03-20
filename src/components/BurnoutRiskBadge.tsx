@@ -1,5 +1,7 @@
 import { computeBurnoutRisk } from '../domain/burnoutRisk'
 import type { Session } from '../domain/timer'
+import { useI18n } from '../i18n'
+import type { TKey } from '../i18n'
 
 type Props = {
   sessions: Session[]
@@ -22,6 +24,7 @@ const LEVEL_ICONS: Record<string, string> = {
 }
 
 export function BurnoutRiskBadge({ sessions, today, focusDebtLevel = 'minimal' }: Props) {
+  const { t } = useI18n()
   const risk = computeBurnoutRisk(sessions, today, focusDebtLevel)
 
   return (
@@ -31,13 +34,13 @@ export function BurnoutRiskBadge({ sessions, today, focusDebtLevel = 'minimal' }
     >
       <div className="flex items-center gap-2 font-medium">
         <span>{LEVEL_ICONS[risk.level]}</span>
-        <span>Burnout Risk — <span className="capitalize">{risk.level}</span></span>
+        <span>{t('burnout.title')} — <span className="capitalize">{t(`burnout.${risk.level}` as TKey)}</span></span>
         <span className="ml-auto font-mono text-xs opacity-70">{risk.score}/100</span>
       </div>
       {risk.signals.length > 0 && (
         <ul className="mt-1.5 space-y-0.5 text-xs opacity-80">
           {risk.signals.map(signal => (
-            <li key={signal}>• {signal}</li>
+            <li key={signal}>• {t(signal as TKey)}</li>
           ))}
         </ul>
       )}

@@ -75,18 +75,19 @@ export function HistoryView({ sessions, categories, captureBlocks = [], onImport
       storage.getSetting(SettingKey.NotionDatabaseId),
     ])
     if (!token || !dbId) {
-      setNotionStatus('Configure Notion token and database ID in Settings first.')
+      setNotionStatus(t('notion.configRequired'))
       return
     }
     setNotionExporting(true)
-    setNotionStatus('Exporting…')
+    setNotionStatus(t('notion.exporting'))
     try {
       const { exported, errors } = await exportSessionsToNotion(sessions, categories, token, dbId, (done, total) => {
-        setNotionStatus(`Exporting… ${done}/${total}`)
+        setNotionStatus(t('notion.exportProgress').replace('{done}', String(done)).replace('{total}', String(total)))
       })
-      setNotionStatus(`Exported ${exported} sessions to Notion.${errors > 0 ? ` (${errors} errors)` : ''}`)
+      const errSuffix = errors > 0 ? t('notion.exportErrors').replace('{n}', String(errors)) : ''
+      setNotionStatus(t('notion.exportSuccess').replace('{n}', String(exported)) + errSuffix)
     } catch {
-      setNotionStatus('Export failed. Check your token and database ID.')
+      setNotionStatus(t('notion.exportFailed'))
     }
     setNotionExporting(false)
   }
@@ -100,11 +101,13 @@ export function HistoryView({ sessions, categories, captureBlocks = [], onImport
     const fallbackId = categories[0]?.id
     const { sessions: imported, unmatchedSummaries } = icsEventsToSessions(events, categories, fallbackId)
     if (imported.length === 0) {
-      setImportStatus('No importable events found.')
+      setImportStatus(t('calendar.noEvents'))
     } else {
       await onImportSessions?.(imported)
-      const unmatched = unmatchedSummaries.length > 0 ? ` (${unmatchedSummaries.length} events used fallback category)` : ''
-      setImportStatus(`Imported ${imported.length} calendar events as sessions.${unmatched}`)
+      const fallbackSuffix = unmatchedSummaries.length > 0
+        ? t('calendar.importFallback').replace('{n}', String(unmatchedSummaries.length))
+        : ''
+      setImportStatus(t('calendar.importSuccess').replace('{n}', String(imported.length)) + fallbackSuffix)
     }
     if (icsInputRef.current) icsInputRef.current.value = ''
   }

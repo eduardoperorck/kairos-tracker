@@ -2,7 +2,8 @@ import { useState } from 'react'
 import { callClaudeForParsing, type ParsedTimeEntry } from '../domain/digest'
 import { formatElapsed } from '../domain/format'
 import { toDateString } from '../domain/timer'
-import { useI18n } from '../i18n'
+import { useI18n, isI18nKey } from '../i18n'
+import type { TKey } from '../i18n'
 
 type Props = {
   categories: { id: string; name: string }[]
@@ -29,7 +30,8 @@ export function NLPTimeEntry({ categories, apiKey, onConfirm }: Props) {
       setParsed(result)
       setStatus('idle')
     } catch (e) {
-      setErrorMsg(e instanceof Error ? e.message : 'Parse failed')
+      const msg = e instanceof Error ? e.message : ''
+      setErrorMsg(isI18nKey(msg) ? t(msg as TKey) : t('llm.errorParseFailed'))
       setStatus('error')
     }
   }

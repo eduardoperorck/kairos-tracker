@@ -3,7 +3,8 @@ import { exportSessionsToJSON } from '../domain/history'
 import { toLocalDateString } from '../domain/format'
 import { FOCUS_PRESETS, type FocusPreset } from '../domain/focusGuard'
 import { getLLMStatus } from '../services/llm'
-import { useI18n } from '../i18n'
+import { useI18n, isI18nKey, translations } from '../i18n'
+import type { TKey } from '../i18n'
 import type { Category, Session } from '../domain/timer'
 import type { Storage } from '../persistence/storage'
 import { SettingKey } from '../persistence/storage'
@@ -449,13 +450,13 @@ export function SettingsView({ categories, sessions, storage, webhookUrl, onWebh
     try {
       const raw = await file.text()
       const data = JSON.parse(raw)
-      if (!Array.isArray(data)) throw new Error('Invalid format')
+      if (!Array.isArray(data)) throw new Error('backup.errorBadFormat')
       const sessions: Session[] = data.map((d: unknown) => {
-        if (typeof d !== 'object' || d === null) throw new Error('Invalid session')
+        if (typeof d !== 'object' || d === null) throw new Error('backup.errorBadSession')
         const s = d as Record<string, unknown>
         if (typeof s.id !== 'string' || typeof s.categoryId !== 'string' ||
             typeof s.startedAt !== 'number' || typeof s.endedAt !== 'number' ||
-            typeof s.date !== 'string') throw new Error('Invalid session fields')
+            typeof s.date !== 'string') throw new Error('backup.errorBadFields')
         return {
           id: s.id,
           categoryId: s.categoryId,
@@ -466,9 +467,10 @@ export function SettingsView({ categories, sessions, storage, webhookUrl, onWebh
         }
       })
       await storage.importSessions(sessions)
-      setRestoreStatus(`Restored ${sessions.length} sessions.`)
-    } catch {
-      setRestoreStatus('Error: invalid backup file.')
+      setRestoreStatus(t('backup.restoreSuccess').replace('{n}', String(sessions.length)))
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : ''
+      setRestoreStatus(isI18nKey(msg) ? t(msg as TKey) : t('backup.errorInvalid'))
     }
     if (fileInputRef.current) fileInputRef.current.value = ''
   }
@@ -510,7 +512,7 @@ export function SettingsView({ categories, sessions, storage, webhookUrl, onWebh
           const open = expandedSection === 'language'
           return (
             <div className="rounded-lg border border-white/[0.06] overflow-hidden">
-              <AccordionRow id="language" label={t('settings.language')} status={lang === 'en' ? 'English' : 'Português'} />
+              <AccordionRow id="language" label={t('settings.language')} status={t('settings.langName')} />
               {open && (
                 <div className="px-4 pb-4 flex gap-2">
                   {(['en', 'pt'] as const).map(l => (
@@ -520,7 +522,7 @@ export function SettingsView({ categories, sessions, storage, webhookUrl, onWebh
                           ? 'border-emerald-500/40 bg-emerald-500/8 text-emerald-400'
                           : 'border-white/[0.07] bg-white/2 text-zinc-500 hover:text-zinc-200 hover:border-white/15'
                       }`}>
-                      {l === 'en' ? 'English' : 'Português'}
+                      {l === 'en' ? translations.en['settings.langName'] : translations.pt['settings.langName']}
                     </button>
                   ))}
                 </div>
@@ -534,7 +536,7 @@ export function SettingsView({ categories, sessions, storage, webhookUrl, onWebh
           const open = expandedSection === 'focus'
           return (
             <div className="rounded-lg border border-white/[0.06] overflow-hidden">
-              <AccordionRow id="focus" label={t('settings.focusPreset')} status={focusPreset.name} />
+              <AccordionRow id="focus" label={t('settings.focusPreset')} status={focusPreset.key ? t(`preset.${focusPreset.key}.label` as TKey) : focusPreset.name} />
               {open && (
                 <div className="px-4 pb-4 space-y-3">
                   <div className="flex flex-wrap gap-2">
@@ -546,7 +548,7 @@ export function SettingsView({ categories, sessions, storage, webhookUrl, onWebh
                             ? 'border-emerald-500/40 bg-emerald-500/[0.08] text-emerald-400'
                             : 'border-white/[0.07] bg-white/[0.02] text-zinc-500 hover:text-zinc-200 hover:border-white/[0.15]'
                         }`}>
-                        <span className="font-medium">{p.name}</span>
+                        <span className="font-medium">{p.key ? t(`preset.${p.key}.label` as TKey) : p.name}</span>
                         <span className="ml-1.5 text-zinc-600">{Math.round(p.workMs / 60_000)}m / {Math.round(p.breakMs / 60_000)}m</span>
                       </button>
                     ))}

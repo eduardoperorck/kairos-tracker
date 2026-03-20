@@ -3,7 +3,8 @@ import { buildDigestPayload, formatDigestPrompt, callDigestAPI } from '../domain
 import type { Category, Session } from '../domain/timer'
 import { SettingKey } from '../persistence/storage'
 import { loadCredential, saveCredential } from '../services/credentials'
-import { useI18n } from '../i18n'
+import { useI18n, isI18nKey } from '../i18n'
+import type { TKey } from '../i18n'
 
 type Props = {
   categories: Category[]
@@ -59,7 +60,8 @@ export function DigestView({ categories, sessions, historySessions, today, claud
       setDigest(text)
       if (cacheKey) localStorage.setItem(cacheKey, text)
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Unknown error')
+      const msg = e instanceof Error ? e.message : ''
+      setError(isI18nKey(msg) ? t(msg as TKey) : t('llm.errorUnknown'))
     } finally {
       setLoading(false)
     }

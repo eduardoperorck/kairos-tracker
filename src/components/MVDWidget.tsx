@@ -39,13 +39,16 @@ export function MVDWidget({ items, onChange }: Props) {
   }
 
   return (
-    <div className="rounded-lg border border-white/[0.07] bg-white/2 px-4 py-3 text-sm">
+    <div className="rounded-lg border border-emerald-500/20 bg-emerald-500/3 px-4 py-3 text-sm">
       <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-2">
-          <span className="font-medium text-zinc-300">🎯 Minimum Viable Day</span>
+          <div>
+            <span className="font-medium text-zinc-300">🎯 {t('mvd.title')}</span>
+            <p className="text-xs text-zinc-600 mt-0.5">{t('mvd.subtitle')}</p>
+          </div>
           {achieved && (
             <span className="rounded-full bg-emerald-500/15 px-2 py-0.5 text-xs text-emerald-400">
-              ✓ Achieved!
+              ✓ {t('mvd.achieved')}
             </span>
           )}
         </div>

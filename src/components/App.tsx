@@ -364,7 +364,7 @@ export function App({ storage }: Props) {
     const totalH = Math.floor(totalMs / 3_600_000)
     const totalM = Math.floor((totalMs % 3_600_000) / 60_000)
     const timeStr = totalH > 0 ? `${totalH}h ${totalM}m` : `${totalM}m`
-    setDailyRecap(`Yesterday: ${timeStr} tracked across ${catCount} categor${catCount === 1 ? 'y' : 'ies'}.`)
+    setDailyRecap(`${t('app.yesterdayPrefix')} ${timeStr} tracked across ${catCount} categor${catCount === 1 ? 'y' : 'ies'}.`)
   }, [historySessions])
 
   // ── FocusGuard trigger ──────────────────────────────────────────────────────
@@ -710,7 +710,7 @@ export function App({ storage }: Props) {
                   <p className="text-amber-200 font-medium mb-1">{t('app.goodMorning')}</p>
                   {morningBrief && (
                     <p className="text-amber-400/80 mb-1">
-                      Yesterday: {formatElapsed(morningBrief.totalMs)}{morningBrief.topCatName ? ` · Top: ${morningBrief.topCatName}` : ''}
+                      {t('app.yesterdayPrefix')} {formatElapsed(morningBrief.totalMs)}{morningBrief.topCatName ? ` ${t('app.topPrefix')} ${morningBrief.topCatName}` : ''}
                     </p>
                   )}
                   {/* M71: inline intention input */}
@@ -727,7 +727,7 @@ export function App({ storage }: Props) {
                   >
                     <input
                       name="intention"
-                      placeholder="Add intention..."
+                      placeholder={t('app.addIntention')}
                       className="flex-1 bg-amber-500/10 border border-amber-500/20 rounded px-2 py-1 text-xs text-amber-200 placeholder-amber-700 outline-none focus:border-amber-500/40"
                     />
                     <button type="submit" className="text-xs text-amber-400 hover:text-amber-200 transition-colors px-2">
@@ -738,7 +738,7 @@ export function App({ storage }: Props) {
                     onClick={() => setView('today')}
                     className="mt-1 text-xs text-amber-600 hover:text-amber-300 transition-colors"
                   >
-                    {t('app.setIntentions')} →
+                    {t('app.setIntentions')}
                   </button>
                 </div>
                 <button

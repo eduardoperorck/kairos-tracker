@@ -1,5 +1,7 @@
-import { classifyDay, getMakerManagerLabel } from '../domain/makerManager'
+import { classifyDay } from '../domain/makerManager'
 import type { CaptureBlock } from '../domain/passiveCapture'
+import { useI18n } from '../i18n'
+import type { TKey } from '../i18n'
 
 type Props = {
   blocks: CaptureBlock[]
@@ -20,13 +22,14 @@ const MODE_ICONS: Record<string, string> = {
 }
 
 export function MakerManagerBadge({ blocks }: Props) {
+  const { t } = useI18n()
   const classification = classifyDay(blocks)
 
   return (
     <div className={`rounded-lg border px-4 py-3 text-sm ${MODE_STYLES[classification.mode]}`}>
       <div className="flex items-center gap-2 font-medium">
         <span>{MODE_ICONS[classification.mode]}</span>
-        <span>{getMakerManagerLabel(classification.mode)}</span>
+        <span>{t(`dayMode.${classification.mode}` as TKey)}</span>
       </div>
       {classification.totalBlocks > 0 && (
         <div className="mt-1.5 flex gap-4 text-xs opacity-70">
