@@ -140,3 +140,115 @@ describe('inMemoryStorage — WindowRuleStorage', () => {
     expect(rules).toHaveLength(1)
   })
 })
+
+describe('inMemoryStorage — DomainRuleStorage', () => {
+  let storage: Storage
+
+  beforeEach(() => {
+    storage = createInMemoryStorage()
+  })
+
+  it('starts with no domain rules', async () => {
+    expect(await storage.loadDomainRules()).toEqual([])
+  })
+
+  it('saves a domain rule and loads it back', async () => {
+    await storage.saveDomainRule({ id: 'dr-1', domain: 'github.com', categoryId: 'work' })
+    const rules = await storage.loadDomainRules()
+    expect(rules).toHaveLength(1)
+    expect(rules[0]).toEqual({ id: 'dr-1', domain: 'github.com', categoryId: 'work' })
+  })
+
+  it('overwrites a rule with the same id', async () => {
+    await storage.saveDomainRule({ id: 'dr-1', domain: 'github.com', categoryId: 'work' })
+    await storage.saveDomainRule({ id: 'dr-1', domain: 'github.com', categoryId: 'study' })
+    const rules = await storage.loadDomainRules()
+    expect(rules).toHaveLength(1)
+    expect(rules[0].categoryId).toBe('study')
+  })
+
+  it('deletes a domain rule by id', async () => {
+    await storage.saveDomainRule({ id: 'dr-1', domain: 'github.com', categoryId: 'work' })
+    await storage.deleteDomainRule('dr-1')
+    expect(await storage.loadDomainRules()).toHaveLength(0)
+  })
+
+  it('deleting a non-existent domain rule is a no-op', async () => {
+    await storage.saveDomainRule({ id: 'dr-1', domain: 'github.com', categoryId: 'work' })
+    await storage.deleteDomainRule('does-not-exist')
+    expect(await storage.loadDomainRules()).toHaveLength(1)
+  })
+})
+
+describe('inMemoryStorage — CorrectionStorage', () => {
+  let storage: Storage
+
+  beforeEach(() => {
+    storage = createInMemoryStorage()
+  })
+
+  it('starts with no corrections', async () => {
+    expect(await storage.loadCorrections()).toEqual([])
+  })
+
+  it('saves a correction and loads it back', async () => {
+    await storage.saveCorrection({ contextKey: 'code.exe::proj::', categoryId: 'work', count: 1 })
+    const records = await storage.loadCorrections()
+    expect(records).toHaveLength(1)
+    expect(records[0]).toEqual({ contextKey: 'code.exe::proj::', categoryId: 'work', count: 1 })
+  })
+
+  it('overwrites a correction with the same contextKey+categoryId', async () => {
+    await storage.saveCorrection({ contextKey: 'code.exe::proj::', categoryId: 'work', count: 1 })
+    await storage.saveCorrection({ contextKey: 'code.exe::proj::', categoryId: 'work', count: 3 })
+    const records = await storage.loadCorrections()
+    expect(records).toHaveLength(1)
+    expect(records[0].count).toBe(3)
+  })
+
+  it('stores corrections for different contextKeys independently', async () => {
+    await storage.saveCorrection({ contextKey: 'code.exe::proj-a::', categoryId: 'work', count: 2 })
+    await storage.saveCorrection({ contextKey: 'code.exe::proj-b::', categoryId: 'study', count: 1 })
+    expect(await storage.loadCorrections()).toHaveLength(2)
+  })
+})
+
+describe('inMemoryStorage — deleteSession / updateSessionTime', () => {
+  let storage: Storage
+
+  beforeEach(() => {
+    storage = createInMemoryStorage()
+  })
+
+  it('deleteSession removes a session by id', async () => {
+    await storage.saveSession({ id: 's1', categoryId: 'c1', startedAt: 0, endedAt: 3600000, date: '2026-03-26' })
+    await storage.saveSession({ id: 's2', categoryId: 'c1', startedAt: 0, endedAt: 1800000, date: '2026-03-26' })
+    await storage.deleteSession('s1')
+    const sessions = await storage.loadSessionsByDate('2026-03-26')
+    expect(sessions).toHaveLength(1)
+    expect(sessions[0].id).toBe('s2')
+  })
+
+  it('deleteSession is a no-op when id does not exist', async () => {
+    await storage.saveSession({ id: 's1', categoryId: 'c1', startedAt: 0, endedAt: 3600000, date: '2026-03-26' })
+    await storage.deleteSession('nonexistent')
+    const sessions = await storage.loadSessionsByDate('2026-03-26')
+    expect(sessions).toHaveLength(1)
+  })
+
+  it('updateSessionTime changes startedAt and endedAt', async () => {
+    await storage.saveSession({ id: 's1', categoryId: 'c1', startedAt: 0, endedAt: 3600000, date: '2026-03-26' })
+    await storage.updateSessionTime('s1', 1800000, 5400000)
+    const sessions = await storage.loadSessionsByDate('2026-03-26')
+    expect(sessions[0].startedAt).toBe(1800000)
+    expect(sessions[0].endedAt).toBe(5400000)
+  })
+
+  it('updateSessionTime preserves other session fields', async () => {
+    await storage.saveSession({ id: 's1', categoryId: 'c1', startedAt: 0, endedAt: 3600000, date: '2026-03-26', tag: 'deep work' })
+    await storage.updateSessionTime('s1', 100, 200)
+    const sessions = await storage.loadSessionsByDate('2026-03-26')
+    expect(sessions[0].tag).toBe('deep work')
+    expect(sessions[0].categoryId).toBe('c1')
+  })
+})
