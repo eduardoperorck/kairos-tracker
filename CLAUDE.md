@@ -91,6 +91,11 @@ Business rules:
 - only one timer may run at a time
 - switching categories pauses previous timer
 - timer stores accumulated duration
+- **passive capture rules auto-start the timer**: when a classified app/workspace gains focus, the timer starts automatically for the matched category — no user confirmation needed. This is the intended, correct behavior.
+- assigning a process or workspace to a category immediately starts the timer for that category
+- `mode: 'auto'` rules (created when user assigns an app to a category) trigger immediate timer start via `suggestedCategoryId` → `handleStart` in App.tsx — never show a "start timer?" banner
+- `mode: 'suggest'` rules (default rules before user classifies an app) only trigger scoring/suggestions; the user must classify the app first before auto-start activates
+- UI text must reflect this: auto = starts automatically, suggest = user decides when to start
 
 ## State Management
 

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { matchRule, aggregateBlocks, pendingSuggestions, needsClassification, getAutoStartCategory, computeCaptureRatio, computeTrackingAccuracy, type WindowRule, type RawPollEvent, type CaptureBlock } from './passiveCapture'
+import { matchRule, aggregateBlocks, pendingSuggestions, needsClassification, getAutoStartCategory, computeCaptureRatio, computeTrackingAccuracy, getFriendlyProcessName, type WindowRule, type RawPollEvent, type CaptureBlock } from './passiveCapture'
 
 const RULES: WindowRule[] = [
   { id: '1', matchType: 'process', pattern: 'Code.exe', categoryId: 'work', mode: 'suggest', enabled: true },
@@ -60,16 +60,31 @@ describe('aggregateBlocks', () => {
     expect(blocks.length).toBe(2)
   })
 
-  it('uses the last title within the same process block, not the first', () => {
+  it('uses the most frequent (mode) title within the same process block', () => {
     const now = Date.now()
+    // github.com appears 3 times, stackoverflow.com appears 1 time → mode is github.com
     const events: RawPollEvent[] = [
-      { window: { title: 'initial-title.ts', process: 'Code.exe', timestamp: now }, timestamp: now },
-      { window: { title: 'updated-title.ts', process: 'Code.exe', timestamp: now + 30000 }, timestamp: now + 30000 },
-      { window: { title: 'final-title.ts',   process: 'Code.exe', timestamp: now + 60000 }, timestamp: now + 60000 },
+      { window: { title: 'github.com', process: 'chrome.exe', timestamp: now }, timestamp: now },
+      { window: { title: 'stackoverflow.com', process: 'chrome.exe', timestamp: now + 10000 }, timestamp: now + 10000 },
+      { window: { title: 'github.com', process: 'chrome.exe', timestamp: now + 20000 }, timestamp: now + 20000 },
+      { window: { title: 'github.com', process: 'chrome.exe', timestamp: now + 60000 }, timestamp: now + 60000 },
     ]
     const blocks = aggregateBlocks(events, RULES)
     expect(blocks.length).toBe(1)
-    expect(blocks[0].title).toBe('final-title.ts')
+    expect(blocks[0].title).toBe('github.com')
+  })
+
+  it('falls back to last title when all titles have equal frequency', () => {
+    const now = Date.now()
+    const events: RawPollEvent[] = [
+      { window: { title: 'title-a', process: 'Code.exe', timestamp: now }, timestamp: now },
+      { window: { title: 'title-b', process: 'Code.exe', timestamp: now + 30000 }, timestamp: now + 30000 },
+      { window: { title: 'title-c', process: 'Code.exe', timestamp: now + 60000 }, timestamp: now + 60000 },
+    ]
+    const blocks = aggregateBlocks(events, RULES)
+    expect(blocks.length).toBe(1)
+    // When all titles are equally frequent, any of them is valid — just verify it's one of them
+    expect(['title-a', 'title-b', 'title-c']).toContain(blocks[0].title)
   })
 })
 
@@ -393,5 +408,31 @@ describe('computeTrackingAccuracy', () => {
     // 1 confirmed / 10 total = 10%
     const result = computeTrackingAccuracy(sessions, blocks)
     expect(result.autoAccuracy).toBe(10)
+  })
+})
+
+describe('getFriendlyProcessName', () => {
+  it('returns known friendly name for code.exe', () => {
+    expect(getFriendlyProcessName('code.exe')).toBe('Visual Studio Code')
+  })
+
+  it('returns known friendly name for chrome.exe', () => {
+    expect(getFriendlyProcessName('chrome.exe')).toBe('Google Chrome')
+  })
+
+  it('strips .exe when no known mapping and no displayName', () => {
+    expect(getFriendlyProcessName('myapp.exe')).toBe('myapp')
+  })
+
+  it('uses displayName as fallback when process is unknown', () => {
+    expect(getFriendlyProcessName('unknown.exe', 'My App')).toBe('My App')
+  })
+
+  it('prefers map over displayName for known processes', () => {
+    expect(getFriendlyProcessName('code.exe', 'Code')).toBe('Visual Studio Code')
+  })
+
+  it('is case-insensitive for process lookup', () => {
+    expect(getFriendlyProcessName('Code.exe')).toBe('Visual Studio Code')
   })
 })

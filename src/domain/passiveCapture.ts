@@ -1,17 +1,20 @@
 export type WindowRule = {
   id: string
-  matchType: 'process' | 'title'
+  matchType: 'process' | 'title' | 'workspace'
   pattern: string
   categoryId: string | null
   tag?: string
   mode: 'auto' | 'suggest' | 'ignore'
   enabled: boolean
+  /** Task 7: when true, this rule auto-switches the active timer on match (no confirm needed) */
+  autoSwitch?: boolean
 }
 
 export type ActiveWindow = {
   title: string
   process: string
   timestamp: number
+  vsWorkspace?: string | null
 }
 
 export type CaptureBlock = {
@@ -23,6 +26,101 @@ export type CaptureBlock = {
   categoryId: string | null
   tag?: string
   confirmed: boolean
+}
+
+/** Maps known executable names (lowercase) to their friendly product names. */
+export const PROCESS_FRIENDLY_NAMES: Record<string, string> = {
+  'code.exe': 'Visual Studio Code',
+  'code - insiders.exe': 'VS Code Insiders',
+  'cursor.exe': 'Cursor',
+  'devenv.exe': 'Visual Studio',
+  'idea64.exe': 'IntelliJ IDEA',
+  'pycharm64.exe': 'PyCharm',
+  'webstorm64.exe': 'WebStorm',
+  'datagrip64.exe': 'DataGrip',
+  'rider64.exe': 'Rider',
+  'chrome.exe': 'Google Chrome',
+  'msedge.exe': 'Microsoft Edge',
+  'firefox.exe': 'Firefox',
+  'brave.exe': 'Brave Browser',
+  'arc.exe': 'Arc',
+  'opera.exe': 'Opera',
+  'vivaldi.exe': 'Vivaldi',
+  'slack.exe': 'Slack',
+  'discord.exe': 'Discord',
+  'teams.exe': 'Microsoft Teams',
+  'zoom.exe': 'Zoom',
+  'notion.exe': 'Notion',
+  'obsidian.exe': 'Obsidian',
+  'figma.exe': 'Figma',
+  'postman.exe': 'Postman',
+  'insomnia.exe': 'Insomnia',
+  'spotify.exe': 'Spotify',
+  'windowsterminal.exe': 'Windows Terminal',
+  'wt.exe': 'Windows Terminal',
+  'powershell.exe': 'PowerShell',
+  'cmd.exe': 'Command Prompt',
+  'wezterm-gui.exe': 'WezTerm',
+  'alacritty.exe': 'Alacritty',
+  'explorer.exe': 'File Explorer',
+  'excel.exe': 'Microsoft Excel',
+  'winword.exe': 'Microsoft Word',
+  'powerpnt.exe': 'PowerPoint',
+  'outlook.exe': 'Outlook',
+  'onenote.exe': 'OneNote',
+  'notepad.exe': 'Notepad',
+  'notepad++.exe': 'Notepad++',
+  'sublimetext.exe': 'Sublime Text',
+  'gitkraken.exe': 'GitKraken',
+  'sourcetree.exe': 'Sourcetree',
+  'docker desktop.exe': 'Docker Desktop',
+  'dbeaver.exe': 'DBeaver',
+  'tableplus.exe': 'TablePlus',
+}
+
+/**
+ * Extracts the application name from a window title.
+ * Many apps put their name at the end: "file.ts — workspace — Visual Studio Code"
+ * or "Settings - My App". Returns null if nothing useful can be extracted.
+ */
+export function extractAppNameFromTitle(title: string): string | null {
+  if (!title) return null
+  // Try em-dash separator — common in VS Code, JetBrains, etc.
+  const emParts = title.split(' — ')
+  if (emParts.length >= 2) {
+    const last = emParts[emParts.length - 1].trim()
+    if (last && !/\.(ts|tsx|js|jsx|py|md|txt|json|html|css|rs|go|java)$/i.test(last)) return last
+  }
+  // Try hyphen separator " - " — common on Windows apps
+  const hyphenParts = title.split(' - ')
+  if (hyphenParts.length >= 2) {
+    const last = hyphenParts[hyphenParts.length - 1].trim()
+    if (last && !/\.(ts|tsx|js|jsx|py|md|txt|json|html|css|rs|go|java)$/i.test(last)) return last
+  }
+  // Single-word title with no separators (e.g. "Slack", "Discord")
+  if (!/[\s—\-]/.test(title) && title.length > 2) return title
+  return null
+}
+
+/** Returns the friendly display name for a process, falling back gracefully.
+ * Handles processes reported with or without the `.exe` extension.
+ * Also accepts a window title to extract the app name as a last resort. */
+export function getFriendlyProcessName(process: string, displayName?: string, title?: string): string {
+  const lower = process.toLowerCase()
+  // Try exact match, then with .exe appended, then without .exe suffix
+  const friendly = PROCESS_FRIENDLY_NAMES[lower]
+    ?? PROCESS_FRIENDLY_NAMES[lower.endsWith('.exe') ? lower : lower + '.exe']
+    ?? PROCESS_FRIENDLY_NAMES[lower.replace(/\.exe$/, '')]
+  if (friendly) return friendly
+  // Use OS display_name if it differs meaningfully from the process name
+  const exeStem = process.replace(/\.exe$/i, '')
+  if (displayName && displayName.toLowerCase() !== lower && displayName !== exeStem) return displayName
+  // Last resort: extract from window title
+  if (title) {
+    const fromTitle = extractAppNameFromTitle(title)
+    if (fromTitle && fromTitle.toLowerCase() !== lower && fromTitle !== exeStem) return fromTitle
+  }
+  return exeStem
 }
 
 export type RawPollEvent = {
@@ -38,18 +136,47 @@ export function matchRule(window: ActiveWindow, rules: WindowRule[]): WindowRule
       if (window.process.toLowerCase() === rule.pattern.toLowerCase()) return rule
     } else if (rule.matchType === 'title') {
       if (window.title.toLowerCase().includes(rule.pattern.toLowerCase())) return rule
+    } else if (rule.matchType === 'workspace') {
+      if (window.vsWorkspace && window.vsWorkspace.toLowerCase() === rule.pattern.toLowerCase()) return rule
     }
   }
   return null
 }
 
+/**
+ * Returns true when the VS Code workspace should be shown to the user for
+ * category assignment — i.e. no rule (auto, suggest, or ignore) covers it yet.
+ */
+export function needsWorkspaceClassification(workspace: string, rules: WindowRule[]): boolean {
+  for (const rule of rules) {
+    if (!rule.enabled) continue
+    if (rule.matchType !== 'workspace') continue
+    if (rule.pattern.toLowerCase() === workspace.toLowerCase()) return false
+  }
+  return true
+}
+
 const MIN_BLOCK_MS = 30_000 // 30 seconds minimum
+
+/** M84: Returns the most frequent (mode) value from a frequency map. Ties broken by insertion order. */
+function modeFromCounts(counts: Map<string, number>): string {
+  let best = ''
+  let bestCount = 0
+  for (const [value, count] of counts) {
+    if (count > bestCount) {
+      bestCount = count
+      best = value
+    }
+  }
+  return best
+}
 
 export function aggregateBlocks(events: RawPollEvent[], rules: WindowRule[]): CaptureBlock[] {
   if (events.length === 0) return []
   const blocks: CaptureBlock[] = []
   let currentProcess = events[0].window.process
-  let currentTitle = events[0].window.title
+  // M84: track title frequency within each block to use mode instead of last title
+  let titleCounts = new Map<string, number>([[events[0].window.title, 1]])
   let currentDomain = events[0].domain ?? null
   let blockStart = events[0].timestamp
   let lastTimestamp = events[0].timestamp
@@ -57,14 +184,15 @@ export function aggregateBlocks(events: RawPollEvent[], rules: WindowRule[]): Ca
   for (let i = 1; i < events.length; i++) {
     const ev = events[i]
     if (ev.window.process !== currentProcess) {
-      // End current block
+      // End current block — use mode title for classification
       const duration = lastTimestamp - blockStart
       if (duration >= MIN_BLOCK_MS) {
-        const fakeWindow = { title: currentTitle, process: currentProcess, timestamp: blockStart }
+        const modeTitle = modeFromCounts(titleCounts)
+        const fakeWindow = { title: modeTitle, process: currentProcess, timestamp: blockStart }
         const rule = matchRule(fakeWindow, rules)
         blocks.push({
           process: currentProcess,
-          title: currentTitle,
+          title: modeTitle,
           domain: currentDomain,
           startedAt: blockStart,
           endedAt: lastTimestamp,
@@ -74,23 +202,25 @@ export function aggregateBlocks(events: RawPollEvent[], rules: WindowRule[]): Ca
         })
       }
       currentProcess = ev.window.process
-      currentTitle = ev.window.title
+      titleCounts = new Map([[ev.window.title, 1]])
       currentDomain = ev.domain ?? null
       blockStart = ev.timestamp
     } else {
-      currentTitle = ev.window.title  // keep most-recent title within same process
-      if (ev.domain) currentDomain = ev.domain  // keep most-recent domain
+      // M84: increment frequency count for this title
+      titleCounts.set(ev.window.title, (titleCounts.get(ev.window.title) ?? 0) + 1)
+      if (ev.domain) currentDomain = ev.domain
     }
     lastTimestamp = ev.timestamp
   }
   // Close last block
   const duration = lastTimestamp - blockStart
   if (duration >= MIN_BLOCK_MS) {
-    const fakeWindow = { title: currentTitle, process: currentProcess, timestamp: blockStart }
+    const modeTitle = modeFromCounts(titleCounts)
+    const fakeWindow = { title: modeTitle, process: currentProcess, timestamp: blockStart }
     const rule = matchRule(fakeWindow, rules)
     blocks.push({
       process: currentProcess,
-      title: currentTitle,
+      title: modeTitle,
       domain: currentDomain,
       startedAt: blockStart,
       endedAt: lastTimestamp,
@@ -126,6 +256,8 @@ export function needsClassification(proc: string, rules: WindowRule[]): boolean 
 export type UnclassifiedApp = {
   process: string
   displayName: string
+  /** Window title — used in the classify overlay for additional context */
+  title?: string
   iconBase64?: string
 }
 

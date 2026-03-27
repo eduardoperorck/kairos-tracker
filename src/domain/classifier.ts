@@ -112,12 +112,66 @@ export function extractVsCodeWorkspace(title: string, process: string): string |
     return parts[parts.length - 1].trim() || null
   }
 
+  // Some VS Code versions (or WSL) use " - " (hyphen) instead of " — " (em-dash).
+  // e.g. "file.ts - workspace - Visual Studio Code" → stripped = "file.ts - workspace"
+  const hyphenParts = stripped.split(' - ')
+  if (hyphenParts.length >= 2) {
+    return hyphenParts[hyphenParts.length - 1].trim() || null
+  }
+
   // Single segment: workspace only if it has no file extension and is not "Untitled-N"
   const single = parts[0].trim()
   if (!single) return null
   if (/^Untitled-\d+$/.test(single)) return null
   if (/\.\w{1,6}$/.test(single)) return null  // looks like a filename
   return single
+}
+
+/**
+ * Extracts the project folder name from a full file path.
+ * Used when VS Code has no formal workspace open but a file path is available.
+ *
+ * Examples:
+ *   "C:\Projects\my-project\src\App.tsx"  → "my-project"
+ *   "/home/user/projects/my-app/index.ts" → "my-app"
+ *   "App.tsx"                              → null
+ */
+const GENERIC_FOLDERS = new Set([
+  'src', 'lib', 'dist', 'build', 'out', 'public', 'static',
+  'components', 'pages', 'app', 'test', 'tests', '__tests__',
+  'Desktop', 'Downloads', 'Documents', 'Users', 'home', 'tmp',
+])
+
+/**
+ * If a workspace string looks like "filename.ext - FolderName" (e.g. from VS Code title
+ * when no workspace is open), strips the filename prefix and returns just the folder name.
+ *
+ * Example: "ux_analysis.md - Productivity Challenge" → "Productivity Challenge"
+ */
+export function stripFileFromWorkspaceName(ws: string): string {
+  const idx = ws.indexOf(' - ')
+  if (idx === -1) return ws
+  const before = ws.slice(0, idx)
+  // Only strip if the part before " - " looks like a filename (has a file extension)
+  if (/\.\w{1,6}$/.test(before.trim())) {
+    return ws.slice(idx + 3).trim()
+  }
+  return ws
+}
+
+export function workspaceFolderFromFilePath(filePath: string): string | null {
+  if (!filePath) return null
+  // Normalise Windows and Unix separators; drop the filename (last segment)
+  const parts = filePath.replace(/\\/g, '/').split('/').filter(Boolean)
+  // Walk parent folders from closest to farthest, skipping generic names
+  // e.g. project/src/components/App.tsx → skip "components", skip "src", return "project"
+  for (let i = parts.length - 2; i >= 0; i--) {
+    const folder = parts[i]
+    // Skip volume letters like "C:" on Windows
+    if (/^\w:$/.test(folder)) break
+    if (!GENERIC_FOLDERS.has(folder)) return folder
+  }
+  return null
 }
 
 // ─── Scoring engine (M-A2 + M-A3) ───────────────────────────────────────────
@@ -202,14 +256,21 @@ export function scoreWindow(
     }
   }
 
-  // VS Code workspace — treated as a title-like signal
+  // VS Code workspace — exact workspace rules get process-level weight;
+  // title rules that happen to match the workspace name keep the lower W_WORKSPACE weight
   if (signals.vsWorkspace) {
     const wsLower = signals.vsWorkspace.toLowerCase()
     for (const rule of windowRules) {
       if (!rule.enabled || !rule.categoryId || rule.mode === 'ignore') continue
-      if (rule.matchType !== 'title') continue
-      if (!wsLower.includes(rule.pattern.toLowerCase())) continue
-      add(rule.categoryId, W_WORKSPACE)
+      if (rule.matchType === 'workspace') {
+        if (wsLower === rule.pattern.toLowerCase()) {
+          add(rule.categoryId, rule.mode === 'auto' ? W_PROCESS_AUTO : W_PROCESS_SUGGEST)
+        }
+      } else if (rule.matchType === 'title') {
+        if (wsLower.includes(rule.pattern.toLowerCase())) {
+          add(rule.categoryId, W_WORKSPACE)
+        }
+      }
     }
   }
 

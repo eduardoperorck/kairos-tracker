@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { extractDomainFromTitle, extractVsCodeWorkspace, scoreWindow, computeTimeOfDayPrior } from './classifier'
+import { extractDomainFromTitle, extractVsCodeWorkspace, workspaceFolderFromFilePath, scoreWindow, computeTimeOfDayPrior } from './classifier'
 import type { SignalSet, DomainRule } from './classifier'
 import type { WindowRule } from './passiveCapture'
 
@@ -123,6 +123,17 @@ describe('extractVsCodeWorkspace', () => {
   it('returns null for Untitled file with no workspace', () => {
     expect(extractVsCodeWorkspace('Untitled-1 — Visual Studio Code', 'Code.exe'))
       .toBeNull()
+  })
+
+  it('extracts workspace when VS Code uses hyphen separator (file - workspace - VS Code)', () => {
+    // Some VS Code versions/configs use " - " instead of " — "
+    expect(extractVsCodeWorkspace('ux_analysis_time_tracker.md - Productivity Challenge - Visual Studio Code', 'Code.exe'))
+      .toBe('Productivity Challenge')
+  })
+
+  it('extracts workspace-only with hyphen suffix', () => {
+    expect(extractVsCodeWorkspace('Productivity Challenge - Visual Studio Code', 'Code.exe'))
+      .toBe('Productivity Challenge')
   })
 })
 
@@ -310,5 +321,37 @@ describe('computeTimeOfDayPrior', () => {
     const prior = computeTimeOfDayPrior(sessions, 9)
     expect(prior.size).toBe(1)
     expect(prior.get('work')).toBeCloseTo(1.0)
+  })
+})
+
+// ─── workspaceFolderFromFilePath ──────────────────────────────────────────────
+
+describe('workspaceFolderFromFilePath', () => {
+  it('extracts project folder from Windows path', () => {
+    expect(workspaceFolderFromFilePath('C:\\Projects\\my-project\\src\\App.tsx'))
+      .toBe('my-project')
+  })
+
+  it('extracts project folder from Unix path', () => {
+    expect(workspaceFolderFromFilePath('/home/user/projects/my-app/index.ts'))
+      .toBe('my-app')
+  })
+
+  it('skips generic "src" folder and returns parent project', () => {
+    expect(workspaceFolderFromFilePath('C:\\Work\\kairos\\src\\components\\App.tsx'))
+      .toBe('kairos')
+  })
+
+  it('returns null for bare filename with no folder', () => {
+    expect(workspaceFolderFromFilePath('App.tsx')).toBeNull()
+  })
+
+  it('returns null for empty string', () => {
+    expect(workspaceFolderFromFilePath('')).toBeNull()
+  })
+
+  it('skips generic "components" folder and returns parent project', () => {
+    expect(workspaceFolderFromFilePath('/projects/my-app/components/Button.tsx'))
+      .toBe('my-app')
   })
 })
