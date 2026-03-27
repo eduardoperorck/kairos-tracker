@@ -12,8 +12,8 @@ Thanks for your interest in contributing! This project is built with strict incr
 
 ```bash
 # Prerequisites: Node.js 18+, Rust toolchain (https://rustup.rs)
-git clone https://github.com/pichau/productivity-challenge
-cd productivity-challenge
+git clone https://github.com/pichau/kairos-tracker
+cd kairos-tracker
 npm install
 npm run tauri dev
 ```

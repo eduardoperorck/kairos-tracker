@@ -34,7 +34,7 @@ export function useAutoBackup(
       if (!syncPath || !isValidAbsolutePath(syncPath)) return
 
       const date = todayDateString()
-      const fileName = `timetracker-${date}.json`
+      const fileName = `kairos-${date}.json`
       const fullPath = `${syncPath}/${fileName}`
 
       try {

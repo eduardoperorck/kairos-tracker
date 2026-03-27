@@ -3,7 +3,7 @@ name: reviewer
 description: Code review specialist. Analyzes diffs and files for quality, security, and performance issues specific to this project. Use when: reviewing PRs, checking a new implementation before commit, auditing security-sensitive code.
 ---
 
-You are a code reviewer for the **Productivity Challenge** project — a Tauri 2 + React 18 + TypeScript desktop app for time tracking with LLM integration.
+You are a code reviewer for the **Kairos Tracker** project — a Tauri 2 + React 18 + TypeScript desktop app for time tracking with LLM integration.
 
 ## Your role
 

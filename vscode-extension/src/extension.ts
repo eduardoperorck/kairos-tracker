@@ -9,9 +9,9 @@ const TRACKER_ENDPOINT = 'http://localhost:27183/editor'
 
 // Run CLI with a fixed argument array — never via a shell string to prevent injection.
 function runCli(args: string[]): string {
-  const config = vscode.workspace.getConfiguration('timeTracker')
+  const config = vscode.workspace.getConfiguration('kairosTracker')
   const timeoutMs: number = config.get('cliTimeoutMs') ?? 2000
-  const result = spawnSync('npx', ['@productivity-challenge/cli', ...args], {
+  const result = spawnSync('npx', ['@kairos-tracker/cli', ...args], {
     encoding: 'utf8',
     timeout: timeoutMs,
     shell: false,
@@ -38,13 +38,13 @@ function updateStatusBar() {
   const status = getStatus()
   if (status) {
     statusBar.text = status
-    statusBar.tooltip = 'Time Tracker — click to stop'
-    statusBar.command = 'timeTracker.stop'
+    statusBar.tooltip = 'Kairos Tracker — click to stop'
+    statusBar.command = 'kairosTracker.stop'
     statusBar.show()
   } else {
-    statusBar.text = '⏱ Time Tracker'
-    statusBar.tooltip = 'Time Tracker — no active timer'
-    statusBar.command = 'timeTracker.start'
+    statusBar.text = '⏱ Kairos Tracker'
+    statusBar.tooltip = 'Kairos Tracker — no active timer'
+    statusBar.command = 'kairosTracker.start'
     statusBar.show()
   }
 }
@@ -94,7 +94,7 @@ export function activate(context: vscode.ExtensionContext) {
   context.subscriptions.push(statusBar)
 
   context.subscriptions.push(
-    vscode.commands.registerCommand('timeTracker.start', async () => {
+    vscode.commands.registerCommand('kairosTracker.start', async () => {
       const cats = await vscode.window.showQuickPick(
         getCategoryNames(),
         { placeHolder: 'Select a category to start' }
@@ -105,21 +105,21 @@ export function activate(context: vscode.ExtensionContext) {
         updateStatusBar()
         vscode.window.setStatusBarMessage(`⏱ Started: ${cats}`, 3000)
       } catch (e) {
-        vscode.window.showErrorMessage(`Time Tracker: failed to start timer`)
+        vscode.window.showErrorMessage(`Kairos Tracker: failed to start timer`)
       }
     }),
 
-    vscode.commands.registerCommand('timeTracker.stop', () => {
+    vscode.commands.registerCommand('kairosTracker.stop', () => {
       try {
         runCli(['stop'])
         updateStatusBar()
         vscode.window.setStatusBarMessage('⏹ Timer stopped', 3000)
       } catch (e) {
-        vscode.window.showErrorMessage(`Time Tracker: failed to stop timer`)
+        vscode.window.showErrorMessage(`Kairos Tracker: failed to stop timer`)
       }
     }),
 
-    vscode.commands.registerCommand('timeTracker.status', () => {
+    vscode.commands.registerCommand('kairosTracker.status', () => {
       const status = getStatus()
       vscode.window.showInformationMessage(status ?? 'No active timer')
     }),

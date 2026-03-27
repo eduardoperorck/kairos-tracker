@@ -1,13 +1,13 @@
 #!/usr/bin/env node
 /**
- * Time Tracker CLI companion
+ * Kairos Tracker CLI companion
  * Communicates directly with the SQLite database used by the Tauri app.
  *
  * Usage:
- *   npx time-tracker start work
- *   npx time-tracker stop
- *   npx time-tracker status
- *   npx time-tracker today
+ *   npx kairos-tracker start work
+ *   npx kairos-tracker stop
+ *   npx kairos-tracker status
+ *   npx kairos-tracker today
  */
 
 import Database from 'better-sqlite3'
@@ -18,17 +18,17 @@ import fs from 'fs'
 // ─── Locate database ─────────────────────────────────────────────────────────
 
 function findDb(): string {
-  // Tauri stores app data in %APPDATA%\productivity-challenge on Windows
+  // Tauri stores app data in %APPDATA%\com.kairostacker.app on Windows
   const platform = os.platform()
   let appData: string
 
   if (platform === 'win32') {
     appData = process.env.APPDATA ?? path.join(os.homedir(), 'AppData', 'Roaming')
-    return path.join(appData, 'productivity-challenge', 'timetracker.db')
+    return path.join(appData, 'com.kairostacker.app', 'kairos.db')
   } else if (platform === 'darwin') {
-    return path.join(os.homedir(), 'Library', 'Application Support', 'productivity-challenge', 'timetracker.db')
+    return path.join(os.homedir(), 'Library', 'Application Support', 'com.kairostacker.app', 'kairos.db')
   } else {
-    return path.join(os.homedir(), '.local', 'share', 'productivity-challenge', 'timetracker.db')
+    return path.join(os.homedir(), '.local', 'share', 'com.kairostacker.app', 'kairos.db')
   }
 }
 
@@ -214,7 +214,7 @@ const dbPath = findDb()
 
 if (!fs.existsSync(dbPath)) {
   console.error(`Database not found at: ${dbPath}`)
-  console.error('Make sure the Time Tracker app has been run at least once.')
+  console.error('Make sure the Kairos Tracker app has been run at least once.')
   process.exit(1)
 }
 
@@ -242,7 +242,7 @@ switch (command) {
     cmd_status(db)
     break
   case 'start':
-    if (!args[0]) { console.error('Usage: time-tracker start <category>'); process.exit(1) }
+    if (!args[0]) { console.error('Usage: kairos-tracker start <category>'); process.exit(1) }
     cmd_start(db, args[0])
     break
   case 'stop':
@@ -258,7 +258,7 @@ switch (command) {
     cmd_categories(db)
     break
   default:
-    console.log(`Time Tracker CLI
+    console.log(`Kairos Tracker CLI
 
   Commands:
     start <category>   Start a timer for the given category
@@ -269,10 +269,10 @@ switch (command) {
     categories         List all categories with goals
 
   Examples:
-    time-tracker start work
-    time-tracker stop
-    time-tracker today
-    time-tracker week
+    kairos-tracker start work
+    kairos-tracker stop
+    kairos-tracker today
+    kairos-tracker week
 `)
 }
 

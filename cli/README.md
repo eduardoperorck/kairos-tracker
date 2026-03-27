@@ -1,4 +1,4 @@
-# Time Tracker CLI
+# Kairos Tracker CLI
 
 Command-line companion for the [Time Tracker](../) Tauri app.
 Reads and writes the same SQLite database used by the desktop app — no running server required.
@@ -7,16 +7,16 @@ Reads and writes the same SQLite database used by the desktop app — no running
 
 ```bash
 # Start tracking a category
-npx @productivity-challenge/cli start work
+npx @kairos-tracker/cli start work
 
 # Stop the active timer
-npx @productivity-challenge/cli stop
+npx @kairos-tracker/cli stop
 
 # Check what's currently running
-npx @productivity-challenge/cli status
+npx @kairos-tracker/cli status
 
 # Show today's totals by category
-npx @productivity-challenge/cli today
+npx @kairos-tracker/cli today
 ```
 
 ### Output examples
@@ -37,24 +37,24 @@ Today — 2026-03-16
 
 ```bash
 # Run without installing (recommended)
-npx @productivity-challenge/cli status
+npx @kairos-tracker/cli status
 
 # Or install globally
-npm install -g @productivity-challenge/cli
-time-tracker status
+npm install -g @kairos-tracker/cli
+kairos-tracker status
 ```
 
 ## Requirements
 
-The Time Tracker desktop app must have been run at least once to create the database.
+The Kairos Tracker desktop app must have been run at least once to create the database.
 
 ## Database locations
 
 | Platform | Path |
 |----------|------|
-| Windows | `%APPDATA%\productivity-challenge\timetracker.db` |
-| macOS | `~/Library/Application Support/productivity-challenge/timetracker.db` |
-| Linux | `~/.local/share/productivity-challenge/timetracker.db` |
+| Windows | `%APPDATA%\com.kairostacker.app\kairos.db` |
+| macOS | `~/Library/Application Support/com.kairostacker.app/kairos.db` |
+| Linux | `~/.local/share/com.kairostacker.app/kairos.db` |
 
 ## How it works
 

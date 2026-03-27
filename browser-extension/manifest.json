@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "Productivity Challenge — Time Tracker",
+  "name": "Kairos Tracker",
   "version": "1.0.0",
-  "description": "Reports the active tab URL to the local Productivity Challenge tracker for automatic category detection.",
+  "description": "Reports the active tab URL to the local Kairos Tracker for automatic category detection.",
   "background": {
     "service_worker": "background.js"
   },
@@ -10,7 +10,7 @@
   "host_permissions": ["http://localhost:27183/*"],
   "action": {
     "default_popup": "popup.html",
-    "default_title": "Productivity Challenge Time Tracker",
+    "default_title": "Kairos Tracker",
     "default_icon": {
       "16": "icons/icon16.png",
       "32": "icons/icon32.png",

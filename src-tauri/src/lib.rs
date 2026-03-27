@@ -882,7 +882,7 @@ fn set_startup_enabled(enabled: bool) -> Result<(), String> {
         use winapi::shared::minwindef::HKEY;
         let sub_key: Vec<u16> = "Software\\Microsoft\\Windows\\CurrentVersion\\Run\0"
             .encode_utf16().collect();
-        let value_name: Vec<u16> = "TimeTracker\0".encode_utf16().collect();
+        let value_name: Vec<u16> = "KairosTracker\0".encode_utf16().collect();
         unsafe {
             let mut hkey: HKEY = std::ptr::null_mut();
             let res = RegOpenKeyExW(HKEY_CURRENT_USER, sub_key.as_ptr(), 0, KEY_SET_VALUE, &mut hkey);
@@ -922,7 +922,7 @@ fn get_startup_enabled() -> bool {
         use winapi::shared::minwindef::HKEY;
         let sub_key: Vec<u16> = "Software\\Microsoft\\Windows\\CurrentVersion\\Run\0"
             .encode_utf16().collect();
-        let value_name: Vec<u16> = "TimeTracker\0".encode_utf16().collect();
+        let value_name: Vec<u16> = "KairosTracker\0".encode_utf16().collect();
         unsafe {
             let mut hkey: HKEY = std::ptr::null_mut();
             if RegOpenKeyExW(HKEY_CURRENT_USER, sub_key.as_ptr(), 0, KEY_READ, &mut hkey) != 0 {

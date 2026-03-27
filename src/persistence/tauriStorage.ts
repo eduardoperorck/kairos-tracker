@@ -5,7 +5,7 @@ import type { Intention, EveningReview } from '../domain/intentions'
 import type { WindowRule } from '../domain/passiveCapture'
 import type { DomainRule } from '../domain/classifier'
 
-const DB_PATH = 'sqlite:timetracker.db'
+const DB_PATH = 'sqlite:kairos.db'
 
 // Each entry is applied once, in order, when user_version < its index+1.
 const MIGRATIONS: string[] = [

@@ -40,7 +40,7 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
           tagName: ${{ github.ref_name }}
-          releaseName: Time Tracker ${{ github.ref_name }}
+          releaseName: Kairos Tracker ${{ github.ref_name }}
           releaseBody: |
             ## Changes
 

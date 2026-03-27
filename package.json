@@ -1,5 +1,5 @@
 {
-  "name": "productivity-challenge",
+  "name": "kairos-tracker",
   "version": "1.0.0",
   "description": "Science-backed productivity tracker with passive window capture, AI weekly digest, and deep focus metrics. Built with Tauri 2 + React + TypeScript.",
   "main": "index.js",
@@ -10,7 +10,7 @@
     "dev": "vite",
     "tauri": "tauri"
   },
-  "keywords": ["productivity", "time-tracker", "tauri", "react", "typescript", "focus", "deep-work", "ai", "claude", "ollama"],
+  "keywords": ["productivity", "kairos-tracker", "tauri", "react", "typescript", "focus", "deep-work", "ai", "claude", "ollama"],
   "author": "",
   "license": "MIT",
   "type": "module",

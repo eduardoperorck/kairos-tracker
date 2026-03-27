@@ -6,7 +6,7 @@
 
 > A science-backed productivity tracker built with Tauri + Claude AI that learns your energy patterns.
 
-![CI](https://github.com/pichau/productivity-challenge/actions/workflows/ci.yml/badge.svg)
+![CI](https://github.com/pichau/kairos-tracker/actions/workflows/ci.yml/badge.svg)
 ![TypeScript](https://img.shields.io/badge/TypeScript-5.x-3178c6?logo=typescript&logoColor=white)
 ![Tauri](https://img.shields.io/badge/Tauri-2.x-24c8d8?logo=tauri&logoColor=white)
 ![React](https://img.shields.io/badge/React-18-61dafb?logo=react&logoColor=black)
@@ -36,7 +36,7 @@
 
 Most productivity tools count hours. This one **understands them**.
 
-After 30 days of data, Time Tracker identifies your personal peak and valley hours, detects when you enter a flow state, computes your Deep Work Score, tracks your Focus Debt, and generates a Claude AI-powered weekly digest — all without your data ever leaving your machine. Supports both Claude API and local Ollama as AI backends.
+After 30 days of data, Kairos Tracker identifies your personal peak and valley hours, detects when you enter a flow state, computes your Deep Work Score, tracks your Focus Debt, and generates a Claude AI-powered weekly digest — all without your data ever leaving your machine. Supports both Claude API and local Ollama as AI backends.
 
 ---
 
@@ -101,7 +101,7 @@ After 30 days of data, Time Tracker identifies your personal peak and valley hou
 - **System tray** — live timer in the tray, control without opening the window
 - **Global shortcuts** — Ctrl+Shift+T to toggle, Ctrl+K for command palette
 - **Native notifications** — goal reached, daily reminder, long-session alert
-- **CLI companion** — `npx @productivity-challenge/cli start work` from any terminal
+- **CLI companion** — `npx @kairos-tracker/cli start work` from any terminal
 - **VS Code extension** — timer in the status bar, start/stop without leaving the editor
 - **Browser extension** — reports active tab domain for automatic site-to-category classification
 - **pt-BR / English** — full i18n support
@@ -235,10 +235,10 @@ Produces a signed `.msi` installer in `src-tauri/target/release/bundle/msi/`.
 ## CLI Companion
 
 ```bash
-npx @productivity-challenge/cli start work
-npx @productivity-challenge/cli stop
-npx @productivity-challenge/cli status
-npx @productivity-challenge/cli today
+npx @kairos-tracker/cli start work
+npx @kairos-tracker/cli stop
+npx @kairos-tracker/cli status
+npx @kairos-tracker/cli today
 ```
 
 Reads and writes the same SQLite database as the desktop app. See [cli/README.md](./cli/README.md).

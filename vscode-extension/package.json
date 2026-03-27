@@ -1,9 +1,9 @@
 {
-  "name": "time-tracker-vscode",
-  "displayName": "Time Tracker",
-  "description": "Shows your Time Tracker active timer in the VS Code status bar",
+  "name": "kairos-tracker-vscode",
+  "displayName": "Kairos Tracker",
+  "description": "Shows your Kairos Tracker active timer in the VS Code status bar",
   "version": "1.0.0-alpha",
-  "publisher": "productivity-challenge",
+  "publisher": "kairos-tracker",
   "engines": { "vscode": "^1.85.0" },
   "categories": ["Other"],
   "activationEvents": ["onStartupFinished"],
@@ -11,22 +11,22 @@
   "contributes": {
     "commands": [
       {
-        "command": "timeTracker.start",
-        "title": "Time Tracker: Start Timer"
+        "command": "kairosTracker.start",
+        "title": "Kairos Tracker: Start Timer"
       },
       {
-        "command": "timeTracker.stop",
-        "title": "Time Tracker: Stop Timer"
+        "command": "kairosTracker.stop",
+        "title": "Kairos Tracker: Stop Timer"
       },
       {
-        "command": "timeTracker.status",
-        "title": "Time Tracker: Show Status"
+        "command": "kairosTracker.status",
+        "title": "Kairos Tracker: Show Status"
       }
     ],
     "configuration": {
-      "title": "Time Tracker",
+      "title": "Kairos Tracker",
       "properties": {
-        "timeTracker.cliTimeoutMs": {
+        "kairosTracker.cliTimeoutMs": {
           "type": "number",
           "default": 2000,
           "description": "Timeout in milliseconds for CLI commands (increase on slow machines)."
@@ -47,6 +47,6 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/pichau/productivity-challenge"
+    "url": "https://github.com/pichau/kairos-tracker"
   }
 }

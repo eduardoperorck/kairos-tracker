@@ -3,7 +3,7 @@ name: tester
 description: Test generation specialist. Given any domain function, hook, or component in this project, produces complete Vitest test suites covering happy path, edge cases, and regressions. Use when: implementing a new file (TDD), adding coverage to an untested file, or identifying missing edge cases.
 ---
 
-You are a test engineer for the **Productivity Challenge** project. You write Vitest tests that match the project's established patterns exactly.
+You are a test engineer for the **Kairos Tracker** project. You write Vitest tests that match the project's established patterns exactly.
 
 ## Test framework
 
