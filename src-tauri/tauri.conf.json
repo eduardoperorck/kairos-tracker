@@ -33,5 +33,13 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ]
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEQ2MTg0MjI1QTk5NEJDMDEKUldRQnZKU3BKVUlZMWdxVHdGR08xYkJ4ZTlKWnhORWR1ODlacnc5dWp5ZThuSTQxQnNjVHZmc3EK",
+      "endpoints": [
+        "https://github.com/eduardoperorck/kairos-tracker/releases/latest/download/latest.json"
+      ]
+    }
   }
 }

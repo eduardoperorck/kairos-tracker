@@ -1025,6 +1025,7 @@ pub fn run() {
     .manage(app_state)
     .plugin(tauri_plugin_sql::Builder::default().build())
     .plugin(tauri_plugin_notification::init())
+    .plugin(tauri_plugin_updater::Builder::new().build())
     .setup(|app| {
       if cfg!(debug_assertions) {
         app.handle().plugin(
