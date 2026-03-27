@@ -163,7 +163,7 @@ export function TrackerView({
   }
   const [showArchived, setShowArchived] = useState(false)
   const activeCount = categories.filter(c => !c.archived).length
-  const effectiveCompact = activeCount >= 5
+  const effectiveCompact = activeCount >= 7
   const [showNLP, setShowNLP] = useState(false)
   const [logMode, setLogMode] = useState<'ai' | 'manual'>('ai')
   const [addingCategory, setAddingCategory] = useState(false)
@@ -472,7 +472,7 @@ export function TrackerView({
       )}
 
       {/* Category list */}
-      <ul className={effectiveCompact ? 'space-y-1' : 'space-y-2'}>
+      <ul className={effectiveCompact ? 'space-y-1.5' : 'space-y-3'}>
         {sortedActive.map((category, idx) => (
           <CategoryItem
             key={category.id}
