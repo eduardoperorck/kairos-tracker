@@ -60,6 +60,31 @@ impl Default for InputAccumulator {
     }
 }
 
+/// Sliding-window rate limiter state for the local HTTP server.
+/// Tracks request count within the current 1-second window.
+struct RateLimiter {
+    count: u32,
+    window_start: std::time::Instant,
+}
+
+impl RateLimiter {
+    fn new() -> Self {
+        Self { count: 0, window_start: std::time::Instant::now() }
+    }
+
+    /// Returns true if the request is allowed, false if the limit is exceeded.
+    /// Resets the window automatically when more than 1 second has elapsed.
+    fn check(&mut self, max_per_sec: u32) -> bool {
+        let now = std::time::Instant::now();
+        if now.duration_since(self.window_start).as_secs() >= 1 {
+            self.count = 0;
+            self.window_start = now;
+        }
+        self.count += 1;
+        self.count <= max_per_sec
+    }
+}
+
 /// Tauri application state — icon cache + input accumulator + context receivers.
 pub struct AppState {
     icon_cache: Mutex<HashMap<String, Option<String>>>,
@@ -68,6 +93,7 @@ pub struct AppState {
     editor_ctx: Mutex<Option<EditorContext>>,      // M-C2: latest workspace from VS Code extension
     window_rules_json: Mutex<String>,             // M-BG2: user rules synced from frontend (JSON)
     capture_buffer: Mutex<Vec<CaptureTickPayload>>, // M-BG3: ring buffer for webview wake-up recovery
+    http_rate_limiter: Mutex<RateLimiter>,        // Security: max 30 req/s on local HTTP endpoints
 }
 
 #[derive(serde::Serialize, Clone)]
@@ -176,6 +202,22 @@ fn handle_http_connection(stream: std::net::TcpStream, handle: tauri::AppHandle)
         _ => return,
     };
     let request = String::from_utf8_lossy(&buf[..n]);
+
+    // Rate limit: max 30 requests per second across all endpoints.
+    // Protects against runaway extensions or browser-based flooding.
+    {
+        let state = handle.state::<AppState>();
+        let mut rl = state.http_rate_limiter.lock().unwrap();
+        if !rl.check(30) {
+            let _ = stream.write_all(
+                b"HTTP/1.1 429 Too Many Requests\r\n\
+                  Content-Type: text/plain\r\n\
+                  Retry-After: 1\r\n\
+                  Content-Length: 17\r\n\r\nToo Many Requests"
+            );
+            return;
+        }
+    }
 
     let first_line = request.lines().next().unwrap_or("");
     let mut parts = first_line.split_whitespace();
@@ -1028,6 +1070,7 @@ pub fn run() {
     editor_ctx: Mutex::new(None),
     window_rules_json: Mutex::new("[]".to_string()),
     capture_buffer: Mutex::new(Vec::new()),
+    http_rate_limiter: Mutex::new(RateLimiter::new()),
   };
 
   tauri::Builder::default()
