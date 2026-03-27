@@ -1,0 +1,112 @@
+name: Security
+
+on:
+  push:
+    branches: [main, dev]
+  pull_request:
+    branches: [main, dev]
+  schedule:
+    # Run every Monday at 08:00 UTC — catches new CVEs on existing deps
+    - cron: '0 8 * * 1'
+
+jobs:
+  # ── 1. Secrets detection (git history + working tree) ───────────────────────
+  gitleaks:
+    name: Secrets Detection (gitleaks)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # full history required for gitleaks
+
+      - name: Run gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # ── 2. npm dependency vulnerability scan ────────────────────────────────────
+  npm-audit:
+    name: npm Audit (high+)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: npm audit — fail on high/critical
+        run: npm audit --audit-level=high --omit=dev
+
+      - name: npm audit — CLI companion
+        working-directory: cli
+        run: |
+          npm ci
+          npm audit --audit-level=high
+
+  # ── 3. Rust crate vulnerability scan ────────────────────────────────────────
+  cargo-audit:
+    name: Cargo Audit (Rust CVEs)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Cargo registry
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+          key: ${{ runner.os }}-cargo-audit-${{ hashFiles('src-tauri/Cargo.lock') }}
+
+      - name: Install cargo-audit
+        run: cargo install cargo-audit --quiet
+
+      - name: Run cargo audit
+        working-directory: src-tauri
+        run: cargo audit
+
+  # ── 4. OSV supply-chain scan (npm + Rust) ───────────────────────────────────
+  osv-scan:
+    name: OSV Scanner (supply chain)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run OSV Scanner
+        uses: google/osv-scanner-action@v1
+        with:
+          scan-args: |-
+            --lockfile=package-lock.json
+            --lockfile=src-tauri/Cargo.lock
+            --lockfile=cli/package-lock.json
+
+  # ── 5. Semgrep SAST (TypeScript + Rust patterns) ────────────────────────────
+  semgrep:
+    name: SAST (semgrep)
+    runs-on: ubuntu-latest
+    container:
+      image: semgrep/semgrep
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Semgrep scan
+        run: >
+          semgrep scan
+          --config=auto
+          --config=p/typescript
+          --config=p/react
+          --config=p/secrets
+          --config=p/owasp-top-ten
+          --error
+          --severity=ERROR
+          src/
+          cli/src/
+          browser-extension/
+          vscode-extension/src/

@@ -60,3 +60,10 @@ jobs:
       - name: cargo check
         working-directory: src-tauri
         run: cargo check --release
+
+      - name: Install cargo-audit
+        run: cargo install cargo-audit --quiet
+
+      - name: Rust dependency audit (cargo audit)
+        working-directory: src-tauri
+        run: cargo audit

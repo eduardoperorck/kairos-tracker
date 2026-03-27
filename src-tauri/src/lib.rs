@@ -182,11 +182,20 @@ fn handle_http_connection(stream: std::net::TcpStream, handle: tauri::AppHandle)
     let method = parts.next().unwrap_or("");
     let path   = parts.next().unwrap_or("");
 
-    // CORS preflight — respond before origin check so the browser can send the real request
+    // CORS preflight — validate origin before responding, so web pages cannot
+    // trigger the real POST even if they somehow pass the second check.
     if method == "OPTIONS" {
+        if !is_trusted_origin(&request) {
+            let _ = stream.write_all(
+                b"HTTP/1.1 403 Forbidden\r\n\
+                  Content-Type: text/plain\r\n\
+                  Content-Length: 9\r\n\r\nForbidden"
+            );
+            return;
+        }
         let _ = stream.write_all(
             b"HTTP/1.1 204 No Content\r\n\
-              Access-Control-Allow-Origin: *\r\n\
+              Access-Control-Allow-Origin: null\r\n\
               Access-Control-Allow-Methods: POST, OPTIONS\r\n\
               Access-Control-Allow-Headers: Content-Type\r\n\
               Content-Length: 0\r\n\r\n"
