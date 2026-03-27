@@ -29,7 +29,7 @@ beforeEach(() => {
 describe('App', () => {
   it('renders the app title', () => {
     renderApp()
-    expect(screen.getAllByText('Time Tracker').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('Kairos Tracker').length).toBeGreaterThan(0)
   })
 
   it('renders ghost card add button', () => {
