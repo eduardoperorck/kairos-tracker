@@ -1,10 +1,10 @@
 {
-  "name": "@productivity-challenge/cli",
+  "name": "@kairos-tracker/cli",
   "version": "1.0.0-alpha",
-  "description": "CLI companion for Time Tracker",
+  "description": "CLI companion for Kairos Tracker",
   "type": "module",
   "bin": {
-    "time-tracker": "./dist/index.js"
+    "kairos-tracker": "./dist/index.js"
   },
   "scripts": {
     "build": "tsc",

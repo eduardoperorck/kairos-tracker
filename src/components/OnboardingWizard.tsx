@@ -56,7 +56,7 @@ export function OnboardingWizard({ onComplete }: Props) {
   if (step === 0) {
     return (
       <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-[#0f0f0f] px-6 text-center">
-        <p className="mb-3 text-xs font-medium uppercase tracking-[0.2em] text-zinc-600">Time Tracker</p>
+        <p className="mb-3 text-xs font-medium uppercase tracking-[0.2em] text-zinc-600">Kairos Tracker</p>
         <h1 className="mb-4 text-2xl font-semibold text-zinc-100 max-w-sm leading-snug">
           {t('onboarding.step1Title')}
         </h1>

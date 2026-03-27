@@ -1,5 +1,5 @@
 /**
- * Productivity Challenge — Time Tracker Browser Extension
+ * Kairos Tracker Browser Extension
  * Background Service Worker (Manifest V3)
  *
  * Reports the active tab URL and title to the local Tauri app via HTTP POST

@@ -5,7 +5,7 @@ import type { Storage } from './persistence/storage'
 export type Lang = 'en' | 'pt'
 
 const en = {
-  'app.title': 'Time Tracker',
+  'app.title': 'Kairos Tracker',
   'nav.timer': 'Timer',
   'nav.stats': 'Stats',
   'nav.history': 'History',
@@ -293,7 +293,7 @@ const en = {
   'settings.connected': '✓ Connected',
   'settings.setup': 'Set up →',
   'settings.startup': 'Startup',
-  'settings.startupDesc': 'Launch Time Tracker when Windows starts',
+  'settings.startupDesc': 'Launch Kairos Tracker when Windows starts',
   'settings.startupOn': 'App will start on login.',
   'settings.startupOff': 'Removed from startup.',
   'settings.startupUnavail': 'Not available (Windows only).',
@@ -563,7 +563,7 @@ const en = {
 } as const
 
 const pt: { [K in keyof typeof en]: string } = {
-  'app.title': 'Time Tracker',
+  'app.title': 'Kairos Tracker',
   'nav.timer': 'Tempo',
   'nav.stats': 'Dados',
   'nav.history': 'Histórico',
@@ -851,7 +851,7 @@ const pt: { [K in keyof typeof en]: string } = {
   'settings.connected': '✓ Conectado',
   'settings.setup': 'Configurar →',
   'settings.startup': 'Inicialização',
-  'settings.startupDesc': 'Iniciar Time Tracker com o Windows',
+  'settings.startupDesc': 'Iniciar Kairos Tracker com o Windows',
   'settings.startupOn': 'App iniciará no login.',
   'settings.startupOff': 'Removido da inicialização.',
   'settings.startupUnavail': 'Não disponível (apenas Windows).',

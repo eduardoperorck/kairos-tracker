@@ -56,7 +56,7 @@ function buildSvg(weekLabel: string, stats: CategoryStat[], totalMs: number, top
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">
   <rect width="${W}" height="${H}" rx="12" fill="#0a0a0a"/>
   <rect width="${W}" height="${H}" rx="12" fill="none" stroke="#ffffff" stroke-opacity="0.08" stroke-width="1"/>
-  <text x="24" y="32" fill="#e4e4e7" font-size="14" font-weight="600" font-family="system-ui, sans-serif">⚡ Time Tracker</text>
+  <text x="24" y="32" fill="#e4e4e7" font-size="14" font-weight="600" font-family="system-ui, sans-serif">⚡ Kairos Tracker</text>
   <text x="24" y="52" fill="#52525b" font-size="11" font-family="system-ui, sans-serif">Week of ${escapeXml(weekLabel)}</text>
   ${rows}
   <text x="24" y="${footerY}" fill="#52525b" font-size="11" font-family="monospace">${formatElapsed(totalMs)} total${topStreak > 0 ? ' · ' + topStreak + 'd streak' : ''}${flowCount > 0 ? ' · ' + flowCount + ' flows' : ''}</text>

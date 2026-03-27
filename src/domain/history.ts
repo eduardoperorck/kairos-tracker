@@ -113,10 +113,10 @@ export function exportSessionsToHTML(sessions: Session[], categories: Category[]
 
   return `<!DOCTYPE html>
 <html lang="en">
-<head><meta charset="UTF-8"><title>Time Tracker Export</title>
+<head><meta charset="UTF-8"><title>Kairos Tracker Export</title>
 <style>body{font-family:sans-serif;max-width:800px;margin:2rem auto}table{width:100%;border-collapse:collapse}th,td{padding:.5rem;border:1px solid #ccc;text-align:left}th{background:#f0f0f0}</style>
 </head>
-<body><h1>Time Tracker Report</h1>${rows}</body>
+<body><h1>Kairos Tracker Report</h1>${rows}</body>
 </html>`
 }
 

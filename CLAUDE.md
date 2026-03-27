@@ -77,7 +77,7 @@ src/
   hooks/        # side-effects and Tauri bridges
   store/        # Zustand store
   persistence/  # Storage interface + implementations
-cli/            # CLI companion (@productivity-challenge/cli)
+cli/            # CLI companion (@kairos-tracker/cli)
 vscode-extension/
 ```
 

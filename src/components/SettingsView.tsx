@@ -376,7 +376,7 @@ export function SettingsView({ categories, sessions, storage, focusPreset, onFoc
   function handleBackup() {
     const json = exportSessionsToJSON(sessions, categories)
     const date = toLocalDateString(Date.now())
-    downloadBlob(json, `timetracker-backup-${date}.json`, 'application/json')
+    downloadBlob(json, `kairos-backup-${date}.json`, 'application/json')
     onToast?.(t('toast.backupExported'))
   }
 
