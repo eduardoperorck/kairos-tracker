@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="assets/logo-full.png" alt="Kairos Tracker" width="180" />
+  <img src="assets/logo-wbg.png" alt="Kairos Tracker" width="180" />
 </p>
 
 # Kairos Tracker
