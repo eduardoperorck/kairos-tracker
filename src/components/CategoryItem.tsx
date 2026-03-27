@@ -111,21 +111,21 @@ export function CategoryItem({
   }
 
   return (
-    <li className={`group/cat relative rounded-md border transition-all ${
+    <li className={`group/cat relative rounded-lg border transition-all ${
       isRunning
         ? 'border-emerald-500/25 bg-emerald-500/[0.06]'
         : 'border-white/[0.06] hover:border-white/[0.1] hover:bg-white/[0.02]'
     }`}>
       {/* Main row */}
-      <div className="flex items-center gap-2.5 px-3 py-2">
+      <div className="flex items-center gap-3 px-4 py-3">
 
         {shortcutKey && (
-          <span className="text-[10px] text-zinc-500 font-mono w-3 shrink-0">{shortcutKey}</span>
+          <span className="text-[11px] text-zinc-500 font-mono w-3.5 shrink-0">{shortcutKey}</span>
         )}
 
         {/* Color dot — tooltip with stats on hover */}
         <div
-          className="w-1.5 h-1.5 rounded-full shrink-0 mt-px"
+          className="w-2.5 h-2.5 rounded-full shrink-0 mt-px"
           style={{ backgroundColor: dotColor }}
           title={!isRunning ? ([
             lastTracked ? `${t('category.lastTracked')} ${formatRelativeTime(lastTracked, Date.now(), lang)}` : null,
@@ -152,14 +152,14 @@ export function CategoryItem({
             />
           ) : (
             <span
-              className={`text-sm truncate transition-colors ${isRunning ? 'text-zinc-100' : 'text-zinc-300'}`}
+              className={`text-base truncate transition-colors ${isRunning ? 'text-zinc-100' : 'text-zinc-300'}`}
               onDoubleClick={() => setEditing(true)}
             >
               {category.name}
             </span>
           )}
           {!isRunning && insights && insights.streak > 1 && (
-            <span className="shrink-0 text-[10px] text-zinc-600 font-mono">{insights.streak}d</span>
+            <span className="shrink-0 text-xs text-zinc-600 font-mono">{insights.streak}d</span>
           )}
         </div>
 
@@ -195,7 +195,7 @@ export function CategoryItem({
         )}
 
         {/* Elapsed */}
-        <span className={`font-mono text-xs tabular-nums shrink-0 transition-colors ${
+        <span className={`font-mono text-sm tabular-nums shrink-0 transition-colors ${
           isRunning ? 'text-emerald-400' : 'text-zinc-500'
         }`}>
           {formatElapsed(totalMs)}
@@ -206,7 +206,7 @@ export function CategoryItem({
           <button
             aria-label="Stop"
             onClick={() => { onStop(selectedTag); setSelectedTag(undefined) }}
-            className="shrink-0 rounded px-2 py-0.5 text-xs text-red-400/80 hover:text-red-300 border border-red-500/15 hover:border-red-500/30 transition-all"
+            className="shrink-0 rounded-md px-3 py-1 text-sm text-red-400/80 hover:text-red-300 border border-red-500/15 hover:border-red-500/30 transition-all"
           >
             {t('category.stop')}
           </button>
@@ -214,7 +214,7 @@ export function CategoryItem({
           <button
             aria-label="Start"
             onClick={onStart}
-            className="shrink-0 rounded px-2 py-0.5 text-xs text-zinc-400 hover:text-zinc-100 border border-white/[0.07] hover:border-white/[0.15] transition-all"
+            className="shrink-0 rounded-md px-3 py-1 text-sm text-zinc-400 hover:text-zinc-100 border border-white/[0.07] hover:border-white/[0.15] transition-all"
           >
             {t('category.start')}
           </button>

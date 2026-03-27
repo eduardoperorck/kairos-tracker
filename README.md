@@ -1,4 +1,8 @@
-# Time Tracker
+<p align="center">
+  <img src="assets/logo-wbg.png" alt="Kairos Tracker" width="180" />
+</p>
+
+# Kairos Tracker
 
 > A science-backed productivity tracker built with Tauri + Claude AI that learns your energy patterns.
 
