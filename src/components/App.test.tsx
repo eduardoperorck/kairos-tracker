@@ -106,27 +106,27 @@ describe('App', () => {
     expect(screen.getByRole('button', { name: 'More options' })).toBeInTheDocument()
   })
 
-  it('clicking overflow menu shows delete option', async () => {
+  it('clicking overflow menu shows archive option', async () => {
     renderApp()
     await addCategory('Work')
     await openOverflow()
-    expect(screen.getByRole('button', { name: /delete/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Archive' })).toBeInTheDocument()
   })
 
-  it('clicking delete shows confirm and cancel buttons', async () => {
+  it('clicking archive shows confirm and cancel buttons', async () => {
     renderApp()
     await addCategory('Work')
     await openOverflow()
-    await userEvent.click(screen.getByRole('button', { name: /delete/i }))
+    await userEvent.click(screen.getByRole('button', { name: 'Archive' }))
     expect(screen.getByRole('button', { name: 'Confirm' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Cancel' })).toBeInTheDocument()
   })
 
-  it('cancelling delete keeps the category', async () => {
+  it('cancelling archive keeps the category', async () => {
     renderApp()
     await addCategory('Work')
     await openOverflow()
-    await userEvent.click(screen.getByRole('button', { name: /delete/i }))
+    await userEvent.click(screen.getByRole('button', { name: 'Archive' }))
     await userEvent.click(screen.getByRole('button', { name: 'Cancel' }))
     expect(screen.getByText('Work')).toBeInTheDocument()
   })
@@ -161,33 +161,22 @@ describe('App', () => {
     expect(screen.getByText('Work')).toBeInTheDocument()
   })
 
-  it('confirming delete removes the category', async () => {
+  it('confirming archive removes the category from the active list', async () => {
     renderApp()
     await addCategory('Work')
     await openOverflow()
-    await userEvent.click(screen.getByRole('button', { name: /delete/i }))
+    await userEvent.click(screen.getByRole('button', { name: 'Archive' }))
     await userEvent.click(screen.getByRole('button', { name: 'Confirm' }))
     expect(screen.queryByText('Work')).not.toBeInTheDocument()
   })
 
-  it('morning banner takes priority over shortcut tip when both conditions are true (M101 priority)', async () => {
-    // Make onboardingDone = true so shortcut tip condition is satisfied
+  it('shortcut tip shows after onboarding when categories exist', async () => {
     localStorage.setItem('onboarding_complete', 'true')
-    // Ensure morning prompt is not dismissed (the default state)
-    const todayKey = new Date().toISOString().slice(0, 10)
-    localStorage.removeItem(`morning_prompt_dismissed_${todayKey}`)
-    // Ensure shortcut tip has not been shown
     localStorage.removeItem('shortcut_tip_shown')
 
     renderApp()
-
-    // Add a category so categories.length > 0 (satisfies shortcut condition)
     await addCategory('Work')
 
-    // Morning banner must be visible (it has priority)
-    expect(screen.getByText('Good morning — what are your priorities today?')).toBeInTheDocument()
-
-    // Shortcut tip must NOT be rendered simultaneously
-    expect(screen.queryByText(/Tip: press/)).not.toBeInTheDocument()
+    expect(screen.getByText(/Tip: press/)).toBeInTheDocument()
   })
 })

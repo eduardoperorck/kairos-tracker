@@ -1,5 +1,33 @@
 import { useState, useEffect, useRef } from 'react'
 import { useI18n } from '../i18n'
+import type { ContextBookmark } from '../persistence/storage'
+
+function fuzzyScore(label: string, query: string): number {
+  if (!query) return 1
+  const l = label.toLowerCase()
+  const q = query.toLowerCase()
+  if (l === q) return 100
+  if (l.includes(q)) return 50
+
+  let score = 0
+  let li = 0
+  let qi = 0
+  let consecutive = 0
+  while (li < l.length && qi < q.length) {
+    if (l[li] === q[qi]) {
+      consecutive++
+      // start-of-word bonus
+      if (li === 0 || l[li - 1] === ' ' || l[li - 1] === '-' || l[li - 1] === '_') score += 10
+      score += consecutive * 2
+      qi++
+    } else {
+      consecutive = 0
+    }
+    li++
+  }
+  if (qi < q.length) return 0 // not all chars matched
+  return score
+}
 
 type View = 'tracker' | 'stats' | 'history' | 'today' | 'settings'
 
@@ -18,9 +46,14 @@ type Props = {
   onClose: () => void
   onOpenNLP?: () => void
   onCyclePreset?: () => void
+  // M91: Context bookmarks
+  bookmarks?: ContextBookmark[]
+  onSaveBookmark?: (name: string) => void
+  onRestoreBookmark?: (bookmark: ContextBookmark) => void
+  onDeleteBookmark?: (id: string) => void
 }
 
-export function CommandPalette({ categories, activeId, onStart, onStop, onNavigate, onClose, onOpenNLP, onCyclePreset }: Props) {
+export function CommandPalette({ categories, activeId, onStart, onStop, onNavigate, onClose, onOpenNLP, onCyclePreset, bookmarks = [], onSaveBookmark, onRestoreBookmark }: Props) {
   const { t } = useI18n()
   const [query, setQuery] = useState('')
   const [selectedIdx, setSelectedIdx] = useState(0)
@@ -47,11 +80,43 @@ export function CommandPalette({ categories, activeId, onStart, onStop, onNaviga
     ...(onCyclePreset ? [{ id: 'action-cycle-preset', label: t('palette.changePreset'), action: onCyclePreset }] : []),
     { id: 'action-weekly-digest', label: t('palette.weeklyDigest'), action: () => onNavigate('stats') },
     { id: 'action-set-goals', label: t('palette.setGoals'), action: () => onNavigate('today') },
+    // M91: Save bookmark for current active context
+    ...(onSaveBookmark && activeId ? [{
+      id: 'action-save-bookmark',
+      label: t('palette.saveBookmark'),
+      action: () => {
+        const catName = categories.find(c => c.id === activeId)?.name ?? 'Bookmark'
+        onSaveBookmark(`${catName} — ${new Date().toLocaleTimeString()}`)
+      },
+    }] : []),
+    // M91: Restore bookmarks
+    ...bookmarks.map(bm => ({
+      id: `restore-bm-${bm.id}`,
+      label: `${t('palette.restoreBookmark')}: ${bm.name}`,
+      action: () => { onRestoreBookmark?.(bm) },
+    })),
   ]
 
-  const filtered = query.trim()
-    ? commands.filter(c => c.label.toLowerCase().includes(query.toLowerCase()))
-    : commands
+  const filtered = (() => {
+    const q = query.trim()
+    if (!q) return commands
+    const isStartPrefix = q.toLowerCase().startsWith('start ')
+    const remainder = isStartPrefix ? q.slice(6) : ''
+    return commands
+      .map(c => {
+        let score = fuzzyScore(c.label, q)
+        if (score === 0) return null
+        // Boost start commands when query begins with "start "
+        if (isStartPrefix && c.id.startsWith('start-')) {
+          const catNameScore = fuzzyScore(c.label.replace(/^start\s+/i, ''), remainder)
+          if (catNameScore > 0) score += 1000 + catNameScore
+        }
+        return { cmd: c, score }
+      })
+      .filter((x): x is { cmd: Command; score: number } => x !== null)
+      .sort((a, b) => b.score - a.score)
+      .map(({ cmd }) => cmd)
+  })()
 
   function handleKeyDown(e: React.KeyboardEvent) {
     if (e.key === 'Escape') onClose()

@@ -25,7 +25,7 @@ const defaultProps = {
   lastTracked: null,
   onStart: vi.fn(),
   onStop: vi.fn(),
-  onDelete: vi.fn(),
+  onArchive: vi.fn(),
   onRename: vi.fn(),
   onSetGoal: vi.fn(),
 }
@@ -62,27 +62,27 @@ describe('CategoryItem', () => {
     expect(onStop).toHaveBeenCalledOnce()
   })
 
-  it('shows delete confirm flow', () => {
+  it('shows archive confirm flow', () => {
     renderWithI18n(<CategoryItem category={makeCategory()} {...defaultProps} />)
     fireEvent.click(screen.getByRole('button', { name: 'More options' }))
-    fireEvent.click(screen.getByRole('button', { name: /delete/i }))
+    fireEvent.click(screen.getByRole('button', { name: /archive/i }))
     expect(screen.getByText('Confirm')).toBeInTheDocument()
     expect(screen.getByText('Cancel')).toBeInTheDocument()
   })
 
-  it('calls onDelete after confirming delete', () => {
-    const onDelete = vi.fn()
-    renderWithI18n(<CategoryItem category={makeCategory()} {...defaultProps} onDelete={onDelete} />)
+  it('calls onArchive after confirming archive', () => {
+    const onArchive = vi.fn()
+    renderWithI18n(<CategoryItem category={makeCategory()} {...defaultProps} onArchive={onArchive} />)
     fireEvent.click(screen.getByRole('button', { name: 'More options' }))
-    fireEvent.click(screen.getByRole('button', { name: /delete/i }))
+    fireEvent.click(screen.getByRole('button', { name: /archive/i }))
     fireEvent.click(screen.getByText('Confirm'))
-    expect(onDelete).toHaveBeenCalledOnce()
+    expect(onArchive).toHaveBeenCalledOnce()
   })
 
-  it('cancels delete when Cancel is clicked', () => {
+  it('cancels archive when Cancel is clicked', () => {
     renderWithI18n(<CategoryItem category={makeCategory()} {...defaultProps} />)
     fireEvent.click(screen.getByRole('button', { name: 'More options' }))
-    fireEvent.click(screen.getByRole('button', { name: /delete/i }))
+    fireEvent.click(screen.getByRole('button', { name: /archive/i }))
     fireEvent.click(screen.getByText('Cancel'))
     expect(screen.getByRole('button', { name: 'Start' })).toBeInTheDocument()
   })
@@ -114,38 +114,38 @@ describe('CategoryItem', () => {
   it('shows last tracked text when lastTracked is provided and timer is stopped', () => {
     const twoHoursAgo = Date.now() - 2 * 3_600_000
     renderWithI18n(<CategoryItem category={makeCategory()} {...defaultProps} lastTracked={twoHoursAgo} />)
-    expect(screen.getByText(/last tracked 2h ago/i)).toBeInTheDocument()
+    expect(screen.getByTitle(/last tracked 2h ago/i)).toBeInTheDocument()
   })
 
   it('hides last tracked text when timer is running', () => {
     const twoHoursAgo = Date.now() - 2 * 3_600_000
     const category = makeCategory({ activeEntry: { startedAt: Date.now(), endedAt: null } })
     renderWithI18n(<CategoryItem category={category} {...defaultProps} lastTracked={twoHoursAgo} />)
-    expect(screen.queryByText(/last tracked/i)).not.toBeInTheDocument()
+    expect(screen.queryByTitle(/last tracked/i)).not.toBeInTheDocument()
   })
 
   it('hides last tracked text when lastTracked is null', () => {
     renderWithI18n(<CategoryItem category={makeCategory()} {...defaultProps} lastTracked={null} />)
-    expect(screen.queryByText(/last tracked/i)).not.toBeInTheDocument()
+    expect(screen.queryByTitle(/last tracked/i)).not.toBeInTheDocument()
   })
 
   it('shows streak when insights provided', () => {
     renderWithI18n(<CategoryItem category={makeCategory()} {...defaultProps} insights={{ streak: 5, flowCount: 0, peakHour: null }} />)
-    expect(screen.getByText(/5d streak/)).toBeInTheDocument()
+    expect(screen.getByTitle(/5d streak/)).toBeInTheDocument()
   })
 
   it('shows flow count when greater than zero', () => {
     renderWithI18n(<CategoryItem category={makeCategory()} {...defaultProps} insights={{ streak: 0, flowCount: 3, peakHour: null }} />)
-    expect(screen.getByText(/3 flow/)).toBeInTheDocument()
+    expect(screen.getByTitle(/3 flow/)).toBeInTheDocument()
   })
 
   it('shows peak hour when provided', () => {
     renderWithI18n(<CategoryItem category={makeCategory()} {...defaultProps} insights={{ streak: 0, flowCount: 0, peakHour: 10 }} />)
-    expect(screen.getByText(/peak: 10h/)).toBeInTheDocument()
+    expect(screen.getByTitle(/peak:.*10h/)).toBeInTheDocument()
   })
 
   it('hides insights row when not provided', () => {
     renderWithI18n(<CategoryItem category={makeCategory()} {...defaultProps} />)
-    expect(screen.queryByText(/streak/)).not.toBeInTheDocument()
+    expect(screen.queryByTitle(/streak/)).not.toBeInTheDocument()
   })
 })

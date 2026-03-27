@@ -3,7 +3,7 @@ import { describe, it, expect, vi } from 'vitest'
 import { TrackerView } from './TrackerView'
 import { I18nProvider } from '../i18n'
 import { createInMemoryStorage } from '../persistence/inMemoryStorage'
-import type { StoreCategory } from './TrackerView'
+import type { StoreCategory, TimerContext, CaptureContext } from './TrackerView'
 import type { Session } from '../domain/timer'
 
 function renderWithI18n(ui: React.ReactElement) {
@@ -20,71 +20,76 @@ function makeCategory(overrides: Partial<StoreCategory> = {}): StoreCategory {
   }
 }
 
+function makeTimerContext(overrides: Partial<TimerContext> = {}): TimerContext {
+  return {
+    input: '',
+    setInput: vi.fn(),
+    categories: [],
+    sessions: [] as Session[],
+    historySessions: [] as Session[],
+    weekDates: [],
+    categoryInsights: {},
+    activeCategory: undefined,
+    claudeApiKey: null,
+    breakSkipCount: 0,
+    onAdd: vi.fn(),
+    onStart: vi.fn(),
+    onStop: vi.fn(),
+    onArchive: vi.fn(),
+    onRename: vi.fn(),
+    onSetGoal: vi.fn(),
+    onSetColor: vi.fn(),
+    onSetTag: vi.fn(),
+    onNLPConfirm: vi.fn(),
+    ...overrides,
+  }
+}
+
+function makeCaptureContext(overrides: Partial<CaptureContext> = {}): CaptureContext {
+  return { ...overrides }
+}
+
 const baseProps = {
-  input: '',
-  setInput: vi.fn(),
-  categories: [],
-  sessions: [] as Session[],
-  historySessions: [] as Session[],
-  weekDates: [],
-  categoryInsights: {},
-  activeCategory: undefined,
-  claudeApiKey: null,
-  breakSkipCount: 0,
-  onAdd: vi.fn(),
-  onStart: vi.fn(),
-  onStop: vi.fn(),
-  onDelete: vi.fn(),
-  onArchive: vi.fn(),
-  onRename: vi.fn(),
-  onSetGoal: vi.fn(),
-  onSetColor: vi.fn(),
-  onSetTag: vi.fn(),
+  timer: makeTimerContext(),
+  capture: makeCaptureContext(),
   onFocusLock: vi.fn(),
-  onNLPConfirm: vi.fn(),
   storage: createInMemoryStorage(),
 }
 
 describe('TrackerView — M70: NLP log time button', () => {
-  it('renders the log time button when claudeApiKey is null', () => {
-    renderWithI18n(<TrackerView {...baseProps} claudeApiKey={null} />)
-    expect(screen.getByRole('button', { name: /log time/i })).toBeTruthy()
+  it('renders the log session button when claudeApiKey is null', () => {
+    renderWithI18n(<TrackerView {...baseProps} timer={makeTimerContext({ claudeApiKey: null })} />)
+    expect(screen.getByTitle(/AI entry requires/i)).toBeInTheDocument()
   })
 
-  it('does NOT show "(AI)" in the button label when claudeApiKey is null', () => {
-    renderWithI18n(<TrackerView {...baseProps} claudeApiKey={null} />)
-    const btn = screen.getByRole('button', { name: /log time/i })
-    expect(btn.textContent).not.toContain('(AI)')
+  it('shows "manual" indicator when claudeApiKey is null', () => {
+    renderWithI18n(<TrackerView {...baseProps} timer={makeTimerContext({ claudeApiKey: null })} />)
+    expect(screen.getByTitle(/AI entry requires/i)).toBeInTheDocument()
   })
 
-  it('shows "(AI)" indicator in the button label when claudeApiKey is provided', () => {
-    renderWithI18n(<TrackerView {...baseProps} claudeApiKey="sk-test-key" />)
-    const btn = screen.getByRole('button', { name: /log time/i })
-    expect(btn.textContent).toContain('(AI)')
-  })
-
-  it('button is still visible with an API key set', () => {
-    renderWithI18n(<TrackerView {...baseProps} claudeApiKey="sk-test-key" />)
-    expect(screen.getByRole('button', { name: /log time/i })).toBeTruthy()
+  it('log session button is still visible with an API key set', () => {
+    renderWithI18n(<TrackerView {...baseProps} timer={makeTimerContext({ claudeApiKey: 'sk-test-key' })} />)
+    // button shows without the "manual" info note
+    expect(screen.queryByTitle(/AI entry requires/i)).not.toBeInTheDocument()
   })
 })
 
 describe('TrackerView — M103: no MVD input field', () => {
-  it('does not render an MVD text input field', () => {
+  it('does not render an expanded MVD text input field', () => {
     const mvdItems = [{ id: 'm1', text: 'Write tests', done: false, createdAt: Date.now() }]
     renderWithI18n(
       <TrackerView
         {...baseProps}
-        mvdItems={mvdItems}
-        onMVDChange={vi.fn()}
+        mvd={{ items: mvdItems, onChange: vi.fn() }}
       />
     )
-    // MVD chips should display but no input for adding new items
+    // MVD chips should display
     expect(screen.getByText('Write tests')).toBeTruthy()
-    // There should be no dedicated MVD add-item input
+    // There should be no expanded MVD add-item input (only the log bar input)
     const inputs = screen.queryAllByRole('textbox')
-    // The only textbox allowed is the ghost category input (not yet expanded)
-    expect(inputs).toHaveLength(0)
+    // No MVD input should be expanded — only the persistent log bar input is present
+    const mvdInput = inputs.find(i => i.getAttribute('placeholder')?.includes('priority'))
+    expect(mvdInput).toBeUndefined()
   })
 
   it('renders MVD items as chips, not as form inputs', () => {
@@ -95,15 +100,14 @@ describe('TrackerView — M103: no MVD input field', () => {
     renderWithI18n(
       <TrackerView
         {...baseProps}
-        mvdItems={mvdItems}
-        onMVDChange={vi.fn()}
+        mvd={{ items: mvdItems, onChange: vi.fn() }}
       />
     )
     expect(screen.getByText('Deep focus')).toBeTruthy()
     expect(screen.getByText('Review PR')).toBeTruthy()
   })
 
-  it('does not render MVD section at all when onMVDChange is not provided', () => {
+  it('does not render MVD section at all when mvd is not provided', () => {
     renderWithI18n(<TrackerView {...baseProps} />)
     expect(screen.queryByText("Today's goals")).toBeNull()
   })
@@ -119,7 +123,7 @@ describe('TrackerView — M104: no compact toggle button', () => {
     const cats = Array.from({ length: 6 }, (_, i) =>
       makeCategory({ id: `cat-${i}`, name: `Cat ${i}` })
     )
-    renderWithI18n(<TrackerView {...baseProps} categories={cats} />)
+    renderWithI18n(<TrackerView {...baseProps} timer={makeTimerContext({ categories: cats })} />)
     expect(screen.queryByRole('button', { name: /compact/i })).toBeNull()
   })
 })
@@ -132,9 +136,7 @@ describe('TrackerView — M107: FocusDebtBanner suppressed when timer is running
     renderWithI18n(
       <TrackerView
         {...baseProps}
-        categories={[active]}
-        activeCategory={active}
-        breakSkipCount={10}
+        timer={makeTimerContext({ categories: [active], activeCategory: active, breakSkipCount: 10 })}
       />
     )
     expect(screen.queryByText('Focus Debt')).toBeNull()
@@ -146,9 +148,7 @@ describe('TrackerView — M107: FocusDebtBanner suppressed when timer is running
     renderWithI18n(
       <TrackerView
         {...baseProps}
-        categories={[makeCategory()]}
-        activeCategory={undefined}
-        breakSkipCount={10}
+        timer={makeTimerContext({ categories: [makeCategory()], activeCategory: undefined, breakSkipCount: 10 })}
       />
     )
     // FocusDebtBanner may or may not render depending on debt level,
@@ -157,5 +157,96 @@ describe('TrackerView — M107: FocusDebtBanner suppressed when timer is running
     // We assert the banner container is not blocked by the isRunning guard.
     // Since breakSkipCount=10 produces debt, the title should appear.
     expect(screen.getByText('Focus Debt')).toBeTruthy()
+  })
+})
+
+describe('TrackerView — M-UX1: Banner reasoning context', () => {
+  it('workspace banner shows "VS Code opened" context text', () => {
+    renderWithI18n(
+      <TrackerView
+        {...baseProps}
+        capture={makeCaptureContext({
+          unclassifiedWorkspace: 'productivity-challenge',
+          onAssignWorkspace: vi.fn(),
+          onDismissWorkspace: vi.fn(),
+        })}
+      />
+    )
+    expect(screen.getByText(/VS Code opened/i)).toBeInTheDocument()
+  })
+
+  it('workspace banner dismiss button says "Always ignore"', () => {
+    renderWithI18n(
+      <TrackerView
+        {...baseProps}
+        capture={makeCaptureContext({
+          unclassifiedWorkspace: 'my-project',
+          onAssignWorkspace: vi.fn(),
+          onDismissWorkspace: vi.fn(),
+        })}
+      />
+    )
+    expect(screen.getByRole('button', { name: /Always ignore/i })).toBeInTheDocument()
+  })
+
+  it('elevation banner shows "is active while tracking" context', () => {
+    const workCat = makeCategory({ id: 'cat-1', name: 'Work', activeEntry: { startedAt: Date.now(), endedAt: null } })
+    renderWithI18n(
+      <TrackerView
+        {...baseProps}
+        timer={makeTimerContext({ categories: [workCat], activeCategory: workCat })}
+        capture={makeCaptureContext({
+          elevationSuggestion: { process: 'cursor.exe', displayName: 'Cursor', categoryId: 'cat-1' },
+          onElevateProcess: vi.fn(),
+          onDismissElevation: vi.fn(),
+        })}
+      />
+    )
+    expect(screen.getByText(/is active while tracking/i)).toBeInTheDocument()
+  })
+
+  it('workspace banner shows "just now" when workspace first detected', () => {
+    renderWithI18n(
+      <TrackerView
+        {...baseProps}
+        capture={makeCaptureContext({
+          unclassifiedWorkspace: 'productivity-challenge',
+          onAssignWorkspace: vi.fn(),
+          onDismissWorkspace: vi.fn(),
+        })}
+      />
+    )
+    expect(screen.getByText(/just now/i)).toBeInTheDocument()
+  })
+
+  it('elevation banner shows "active just now" when elevation first appears', () => {
+    const workCat = makeCategory({ id: 'cat-1', name: 'Work', activeEntry: { startedAt: Date.now(), endedAt: null } })
+    renderWithI18n(
+      <TrackerView
+        {...baseProps}
+        timer={makeTimerContext({ categories: [workCat], activeCategory: workCat })}
+        capture={makeCaptureContext({
+          elevationSuggestion: { process: 'cursor.exe', displayName: 'Cursor', categoryId: 'cat-1' },
+          onElevateProcess: vi.fn(),
+          onDismissElevation: vi.fn(),
+        })}
+      />
+    )
+    expect(screen.getByText(/active just now/i)).toBeInTheDocument()
+  })
+
+  it('dead time banner shows the current window process as context', () => {
+    const workCat = makeCategory({ id: 'cat-1', name: 'Work', activeEntry: { startedAt: Date.now() - 60_000, endedAt: null } })
+    renderWithI18n(
+      <TrackerView
+        {...baseProps}
+        timer={makeTimerContext({ categories: [workCat], activeCategory: workCat })}
+        capture={makeCaptureContext({
+          idleMs: 15 * 60_000,
+          currentWindow: { process: 'chrome.exe', workspace: null, domain: null },
+        })}
+      />
+    )
+    expect(screen.getByText(/idle in chrome\.exe/i)).toBeInTheDocument()
   })
 })

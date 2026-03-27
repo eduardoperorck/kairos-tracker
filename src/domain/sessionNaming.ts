@@ -1,3 +1,5 @@
+import type { Session } from './timer'
+
 // Heuristic session naming from window titles.
 // If a Claude API key is present, callers may use the Claude API externally.
 // This module provides the pure heuristic fallback — no network calls.
@@ -87,6 +89,19 @@ export function suggestSessionTag(titles: string[]): string | null {
     }
   }
   return null
+}
+
+export function deriveQuickTags(sessions: Session[], fallback: string[]): string[] {
+  const thirtyDaysAgo = Date.now() - 30 * 24 * 60 * 60 * 1000
+  const freq = new Map<string, number>()
+  for (const s of sessions) {
+    if (s.startedAt < thirtyDaysAgo) continue
+    if (!s.tag) continue
+    freq.set(s.tag, (freq.get(s.tag) ?? 0) + 1)
+  }
+  const sorted = [...freq.entries()].sort((a, b) => b[1] - a[1]).map(([tag]) => tag)
+  if (sorted.length < 2) return fallback
+  return sorted.slice(0, 4)
 }
 
 export function buildNamingPrompt(titles: string[], categoryName: string, lang: 'en' | 'pt' = 'en'): string {

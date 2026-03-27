@@ -7,8 +7,6 @@ import { ActivityTimeline } from './ActivityTimeline'
 import type { Session, Category } from '../domain/timer'
 import type { CaptureBlock } from '../domain/passiveCapture'
 import type { Storage } from '../persistence/storage'
-import { SettingKey } from '../persistence/storage'
-import { exportSessionsToNotion } from '../services/notion'
 import { parseICS, icsEventsToSessions } from '../domain/calendarImport'
 
 type Props = {
@@ -41,8 +39,6 @@ export function HistoryView({ sessions, categories, captureBlocks = [], onImport
   const [csvPreset, setCsvPreset] = useState<keyof typeof CSV_PRESETS>('default')
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [bulkTagDraft, setBulkTagDraft] = useState('')
-  const [notionStatus, setNotionStatus] = useState<string | null>(null)
-  const [notionExporting, setNotionExporting] = useState(false)
   const [exportOpen, setExportOpen] = useState(false)
   // M72: inline tag suggestion state
   const [taggingSessionId, setTaggingSessionId] = useState<string | null>(null)
@@ -68,29 +64,6 @@ export function HistoryView({ sessions, categories, captureBlocks = [], onImport
     return () => document.removeEventListener('mousedown', onClick)
   }, [exportOpen])
 
-  async function handleExportNotion() {
-    if (!storage) return
-    const [token, dbId] = await Promise.all([
-      storage.getSetting(SettingKey.NotionToken),
-      storage.getSetting(SettingKey.NotionDatabaseId),
-    ])
-    if (!token || !dbId) {
-      setNotionStatus(t('notion.configRequired'))
-      return
-    }
-    setNotionExporting(true)
-    setNotionStatus(t('notion.exporting'))
-    try {
-      const { exported, errors } = await exportSessionsToNotion(sessions, categories, token, dbId, (done, total) => {
-        setNotionStatus(t('notion.exportProgress').replace('{done}', String(done)).replace('{total}', String(total)))
-      })
-      const errSuffix = errors > 0 ? t('notion.exportErrors').replace('{n}', String(errors)) : ''
-      setNotionStatus(t('notion.exportSuccess').replace('{n}', String(exported)) + errSuffix)
-    } catch {
-      setNotionStatus(t('notion.exportFailed'))
-    }
-    setNotionExporting(false)
-  }
   const groups = groupSessionsByDate(sessions, categories)
 
   async function handleImportICS(e: React.ChangeEvent<HTMLInputElement>) {
@@ -204,23 +177,11 @@ export function HistoryView({ sessions, categories, captureBlocks = [], onImport
                   onClick={() => { handleExportHTML(); setExportOpen(false) }}>
                   {t('history.downloadHTML')}
                 </button>
-                {storage && (
-                  <button
-                    className="flex w-full px-3 py-1.5 text-zinc-400 hover:text-zinc-100 transition-colors disabled:opacity-40"
-                    onClick={() => { handleExportNotion(); setExportOpen(false) }}
-                    disabled={notionExporting}>
-                    {t('history.exportNotion')}
-                  </button>
-                )}
               </div>
             )}
           </div>
         </div>
       </div>
-
-      {notionStatus && (
-        <p className="mb-4 text-xs text-zinc-400">{notionStatus}</p>
-      )}
 
       {importStatus && (
         <p className="mb-4 text-xs text-emerald-400">{importStatus}</p>

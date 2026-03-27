@@ -1,5 +1,4 @@
 import { useState, useRef, useEffect } from 'react'
-import { btnPrimary } from './buttonVariants'
 import { useElapsed } from '../hooks/useElapsed'
 import { formatElapsed, formatRelativeTime } from '../domain/format'
 import { CategoryGoal } from './CategoryGoal'
@@ -24,7 +23,7 @@ type Props = {
   insights?: CategoryInsights
   onStart: () => void
   onStop: (tag?: string) => void
-  onDelete: () => void
+  onArchive: () => void
   onRename: (newName: string) => void
   onSetGoal: (ms: number) => void
   onSetColor?: (color: string) => void
@@ -35,6 +34,7 @@ type Props = {
   suggestedMs?: number
   compact?: boolean
   shortcutKey?: number
+  quickTags?: string[]
 }
 
 export function CategoryItem({
@@ -45,7 +45,7 @@ export function CategoryItem({
   insights,
   onStart,
   onStop,
-  onDelete,
+  onArchive,
   onRename,
   onSetGoal,
   onSetColor,
@@ -54,6 +54,7 @@ export function CategoryItem({
   suggestedMs,
   compact,
   shortcutKey,
+  quickTags,
 }: Props) {
   const { t, lang } = useI18n()
   const [overflowOpen, setOverflowOpen] = useState(false)
@@ -71,7 +72,6 @@ export function CategoryItem({
   const goalMs = category.weeklyGoalMs ?? 0
   const dotColor = category.color ?? '#52525b'
 
-  // Close overflow when clicking outside
   useEffect(() => {
     if (!overflowOpen) return
     function handleClick(e: MouseEvent) {
@@ -86,23 +86,23 @@ export function CategoryItem({
 
   if (compact) {
     return (
-      <li className={`flex items-center gap-3 rounded-md border px-3 py-2 transition-all ${
-        isRunning ? 'border-emerald-500/20 bg-emerald-500/[0.04]' : 'border-white/[0.06] bg-white/[0.01] hover:border-white/[0.1]'
+      <li className={`flex items-center gap-2.5 rounded px-2.5 py-1.5 transition-all ${
+        isRunning ? 'bg-emerald-500/[0.07]' : 'hover:bg-white/[0.03]'
       }`}>
         {shortcutKey && (
-          <span className="text-[9px] text-zinc-700 font-mono w-3 shrink-0">{shortcutKey}</span>
+          <span className="text-[10px] text-zinc-500 font-mono w-3 shrink-0">{shortcutKey}</span>
         )}
-        <div className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: dotColor }} />
-        <span className="flex-1 text-sm text-zinc-200 truncate">{category.name}</span>
-        <span className="font-mono text-xs text-zinc-500 tabular-nums">{formatElapsed(totalMs)}</span>
+        <div className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: dotColor }} />
+        <span className="flex-1 text-xs text-zinc-300 truncate">{category.name}</span>
+        <span className={`font-mono text-[11px] tabular-nums ${isRunning ? 'text-emerald-400' : 'text-zinc-500'}`}>{formatElapsed(totalMs)}</span>
         {isRunning ? (
           <button onClick={() => onStop(selectedTag)}
-            className="rounded px-2 py-0.5 text-xs text-emerald-400 hover:text-emerald-200 transition-colors">
+            className="text-[11px] text-red-400/80 hover:text-red-300 transition-colors px-1">
             {t('category.stop')}
           </button>
         ) : (
           <button onClick={onStart}
-            className="rounded px-2 py-0.5 text-xs text-zinc-500 hover:text-zinc-200 transition-colors">
+            className="text-[11px] text-zinc-500 hover:text-zinc-200 transition-colors px-1">
             {t('category.start')}
           </button>
         )}
@@ -111,29 +111,37 @@ export function CategoryItem({
   }
 
   return (
-    <li className={`group rounded-lg border px-5 py-4 transition-all ${
+    <li className={`group/cat relative rounded-md border transition-all ${
       isRunning
-        ? 'border-emerald-500/20 bg-emerald-500/[0.04]'
-        : 'border-white/[0.07] bg-white/[0.02] hover:border-white/[0.11] hover:bg-white/[0.04]'
+        ? 'border-emerald-500/25 bg-emerald-500/[0.06]'
+        : 'border-white/[0.06] hover:border-white/[0.1] hover:bg-white/[0.02]'
     }`}>
-      {/* Main row — resting: just name + elapsed + start/stop */}
-      <div className="flex items-center gap-4">
+      {/* Main row */}
+      <div className="flex items-center gap-2.5 px-3 py-2">
 
-        {/* Shortcut key badge */}
         {shortcutKey && (
-          <span className="text-[9px] text-zinc-700 font-mono w-3 shrink-0">{shortcutKey}</span>
+          <span className="text-[10px] text-zinc-500 font-mono w-3 shrink-0">{shortcutKey}</span>
         )}
 
-        {/* Color dot */}
-        <div className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: dotColor }} />
+        {/* Color dot — tooltip with stats on hover */}
+        <div
+          className="w-1.5 h-1.5 rounded-full shrink-0 mt-px"
+          style={{ backgroundColor: dotColor }}
+          title={!isRunning ? ([
+            lastTracked ? `${t('category.lastTracked')} ${formatRelativeTime(lastTracked, Date.now(), lang)}` : null,
+            insights?.streak && insights.streak > 0 ? `${insights.streak}${t('stats.streak')}` : null,
+            insights?.flowCount && insights.flowCount > 0 ? `${insights.flowCount} ${t('stats.flow')}` : null,
+            insights?.peakHour !== null && insights?.peakHour !== undefined ? `${t('category.peak')} ${insights.peakHour}h` : null,
+          ].filter(Boolean).join(' · ') || undefined) : undefined}
+        />
 
         {/* Name */}
-        <div className="flex-1 min-w-0">
+        <div className="flex-1 min-w-0 flex items-center gap-1.5 min-w-0">
           {editing ? (
             <input
               autoFocus
               aria-label="Rename category"
-              className="w-full bg-transparent text-sm text-zinc-100 outline-none border-b border-white/20 pb-0.5"
+              className="flex-1 bg-transparent text-sm text-zinc-100 outline-none border-b border-white/20"
               value={renameValue}
               onChange={e => setRenameValue(e.target.value)}
               onKeyDown={e => {
@@ -143,43 +151,39 @@ export function CategoryItem({
               onBlur={() => { onRename(renameValue); setEditing(false); setOverflowOpen(false) }}
             />
           ) : (
-            <span className="text-sm text-zinc-200">{category.name}</span>
+            <span
+              className={`text-sm truncate transition-colors ${isRunning ? 'text-zinc-100' : 'text-zinc-300'}`}
+              onDoubleClick={() => setEditing(true)}
+            >
+              {category.name}
+            </span>
           )}
-          {/* Insights — progressive disclosure on hover */}
-          {insights && (insights.streak > 0 || insights.flowCount > 0 || insights.peakHour !== null) && (
-            <p className="mt-0.5 text-xs text-zinc-700 flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-              {insights.streak > 0 && <span>{insights.streak}{t('stats.streak')}</span>}
-              {insights.peakHour !== null && <span>{t('category.peak')} {insights.peakHour}h</span>}
-              {insights.flowCount > 0 && <span>⚡ {insights.flowCount} {t('stats.flow')}</span>}
-            </p>
-          )}
-          {/* Last tracked — shown when stopped and lastTracked is known */}
-          {lastTracked && !isRunning && (
-            <span className="text-xs text-zinc-700">{t('category.lastTracked')} {formatRelativeTime(lastTracked, Date.now(), lang)}</span>
+          {!isRunning && insights && insights.streak > 1 && (
+            <span className="shrink-0 text-[10px] text-zinc-600 font-mono">{insights.streak}d</span>
           )}
         </div>
 
-        {/* Active tag chip — only when running */}
+        {/* Active tag — when running */}
         {isRunning && (
           <div className="relative shrink-0">
             {selectedTag ? (
-              <span className="flex items-center gap-1 rounded-full border border-white/[0.1] bg-white/[0.04] px-2 py-0.5 text-xs text-zinc-400">
+              <span className="flex items-center gap-1 rounded border border-white/[0.08] px-1.5 py-0.5 text-[10px] text-zinc-500">
                 {selectedTag}
                 <button onClick={() => setSelectedTag(undefined)}
-                  className="text-zinc-600 hover:text-zinc-300 transition-colors">×</button>
+                  className="text-zinc-700 hover:text-zinc-400 transition-colors leading-none">×</button>
               </span>
             ) : (
               <button onClick={() => setShowTagPicker(p => !p)}
-                className="text-xs text-zinc-700 hover:text-zinc-400 transition-colors">
+                className="text-[10px] text-zinc-700 hover:text-zinc-400 transition-colors">
                 + tag
               </button>
             )}
             {showTagPicker && (
-              <div className="absolute right-0 top-6 z-10 w-36 rounded-lg border border-white/[0.1] bg-zinc-900 py-1 shadow-lg">
-                {PRESET_TAGS.map(tag => (
+              <div className="absolute right-0 top-5 z-10 w-32 rounded border border-white/[0.08] bg-zinc-950 py-1 shadow-xl">
+                {(quickTags ?? PRESET_TAGS).map(tag => (
                   <button key={tag}
-                    className={`block w-full px-3 py-1.5 text-left text-xs transition-colors ${
-                      selectedTag === tag ? 'text-emerald-400' : 'text-zinc-400 hover:text-zinc-100'
+                    className={`block w-full px-3 py-1 text-left text-[11px] transition-colors ${
+                      selectedTag === tag ? 'text-emerald-400' : 'text-zinc-500 hover:text-zinc-200'
                     }`}
                     onClick={() => { setSelectedTag(tag); setShowTagPicker(false) }}>
                     {tag}
@@ -190,45 +194,45 @@ export function CategoryItem({
           </div>
         )}
 
-        {/* Elapsed time */}
-        <span className={`font-mono text-sm tabular-nums shrink-0 w-16 text-right transition-colors ${
+        {/* Elapsed */}
+        <span className={`font-mono text-xs tabular-nums shrink-0 transition-colors ${
           isRunning ? 'text-emerald-400' : 'text-zinc-500'
         }`}>
           {formatElapsed(totalMs)}
         </span>
 
-        {/* Start/Stop button */}
+        {/* Start / Stop */}
         {isRunning ? (
           <button
             aria-label="Stop"
-            className="rounded-md border border-red-500/20 bg-red-500/[0.06] px-3 py-1.5 text-xs font-medium text-red-400 hover:bg-red-500/[0.12] hover:border-red-500/30 transition-all shrink-0"
             onClick={() => { onStop(selectedTag); setSelectedTag(undefined) }}
+            className="shrink-0 rounded px-2 py-0.5 text-xs text-red-400/80 hover:text-red-300 border border-red-500/15 hover:border-red-500/30 transition-all"
           >
             {t('category.stop')}
           </button>
         ) : (
           <button
             aria-label="Start"
-            className={`${btnPrimary} shrink-0`}
             onClick={onStart}
+            className="shrink-0 rounded px-2 py-0.5 text-xs text-zinc-400 hover:text-zinc-100 border border-white/[0.07] hover:border-white/[0.15] transition-all"
           >
             {t('category.start')}
           </button>
         )}
 
-        {/* Overflow ··· menu */}
+        {/* Overflow ··· */}
         <div className="relative shrink-0" ref={overflowRef}>
           <button
             aria-label="More options"
             onClick={() => setOverflowOpen(p => !p)}
-            className="text-zinc-700 hover:text-zinc-400 transition-colors opacity-0 group-hover:opacity-100 px-1"
+            className="text-zinc-600 hover:text-zinc-300 transition-colors px-0.5 text-sm leading-none"
           >
             ···
           </button>
           {overflowOpen && (
-            <div className="absolute right-0 top-6 z-20 w-44 rounded-lg border border-white/[0.1] bg-zinc-900 py-1 shadow-xl text-xs">
+            <div className="absolute right-0 top-5 z-20 w-40 rounded border border-white/[0.08] bg-zinc-950 py-1 shadow-xl text-xs">
               <button
-                className="flex w-full items-center gap-2 px-3 py-2 text-zinc-300 hover:bg-white/[0.04] transition-colors"
+                className="flex w-full items-center px-3 py-1.5 text-zinc-400 hover:text-zinc-100 hover:bg-white/[0.03] transition-colors"
                 onClick={() => { setEditing(true); setOverflowOpen(false) }}
               >
                 {t('category.rename')}
@@ -237,17 +241,17 @@ export function CategoryItem({
                 <>
                   {!showTagRecovery ? (
                     <button
-                      className="flex w-full items-center gap-2 px-3 py-2 text-zinc-400 hover:bg-white/[0.04] transition-colors"
+                      className="flex w-full items-center px-3 py-1.5 text-zinc-500 hover:text-zinc-100 hover:bg-white/[0.03] transition-colors"
                       onClick={() => setShowTagRecovery(true)}
                     >
                       {t('category.tagLastSession')}
                     </button>
                   ) : (
-                    <div className="px-3 py-2">
-                      <p className="mb-1.5 text-zinc-600">{t('category.tagLastSessionLabel')}</p>
-                      {PRESET_TAGS.map(tag => (
+                    <div className="px-3 py-1.5">
+                      <p className="mb-1 text-zinc-700 text-[10px]">{t('category.tagLastSessionLabel')}</p>
+                      {(quickTags ?? PRESET_TAGS).map(tag => (
                         <button key={tag}
-                          className="block w-full text-left px-1 py-0.5 text-zinc-400 hover:text-zinc-100 transition-colors"
+                          className="block w-full text-left py-0.5 text-zinc-500 hover:text-zinc-100 transition-colors"
                           onClick={() => { onTagLastSession(tag); setShowTagRecovery(false); setOverflowOpen(false) }}
                         >
                           {tag}
@@ -257,34 +261,34 @@ export function CategoryItem({
                   )}
                 </>
               )}
-              <div className="px-3 py-2">
-                <p className="mb-1.5 text-zinc-600">{t('category.color')}</p>
-                <div className="flex gap-1.5 flex-wrap">
+              <div className="px-3 py-1.5">
+                <p className="mb-1 text-zinc-700 text-[10px]">{t('category.color')}</p>
+                <div className="flex gap-1 flex-wrap">
                   {CATEGORY_COLORS.map(c => (
                     <button key={c}
-                      className={`w-5 h-5 rounded-full transition-all hover:scale-110 ${category.color === c ? 'ring-2 ring-white/40' : ''}`}
+                      className={`w-4 h-4 rounded-full transition-all hover:scale-110 ${category.color === c ? 'ring-1 ring-white/40 ring-offset-1 ring-offset-zinc-950' : ''}`}
                       style={{ backgroundColor: c }}
                       onClick={() => { onSetColor?.(c); setOverflowOpen(false) }}
                     />
                   ))}
                 </div>
               </div>
-              <div className="border-t border-white/[0.06] mt-1 pt-1">
+              <div className="border-t border-white/[0.05] mt-1 pt-1">
                 {!confirming ? (
                   <button
-                    className="flex w-full items-center gap-2 px-3 py-2 text-red-500/70 hover:text-red-400 hover:bg-white/[0.04] transition-colors"
+                    className="flex w-full items-center px-3 py-1.5 text-zinc-600 hover:text-zinc-300 hover:bg-white/[0.03] transition-colors"
                     onClick={() => setConfirming(true)}
                   >
-                    {t('category.deleteIcon')}
+                    {t('category.archiveIcon')}
                   </button>
                 ) : (
-                  <div className="flex items-center gap-2 px-3 py-2">
-                    <button className="text-red-400 hover:text-red-300 transition-colors font-medium"
-                      onClick={() => { onDelete(); setOverflowOpen(false); setConfirming(false) }}>
+                  <div className="flex items-center gap-2 px-3 py-1.5">
+                    <button className="text-zinc-300 hover:text-zinc-100 transition-colors"
+                      onClick={() => { onArchive(); setOverflowOpen(false); setConfirming(false) }}>
                       {t('category.confirm')}
                     </button>
                     <span className="text-zinc-700">·</span>
-                    <button className="text-zinc-500 hover:text-zinc-300 transition-colors"
+                    <button className="text-zinc-600 hover:text-zinc-400 transition-colors"
                       onClick={() => setConfirming(false)}>
                       {t('category.cancel')}
                     </button>
@@ -296,8 +300,9 @@ export function CategoryItem({
         </div>
       </div>
 
-      {/* Weekly goal with today's segment — always shown */}
+      {/* Weekly goal bar — flush at bottom, no padding */}
       <CategoryGoal weeklyMs={weeklyMs} goalMs={goalMs} onSetGoal={onSetGoal} suggestedMs={suggestedMs} todayMs={todayMs} />
+
     </li>
   )
 }

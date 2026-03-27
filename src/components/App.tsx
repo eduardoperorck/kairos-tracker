@@ -630,6 +630,7 @@ export function App({ storage }: Props) {
               unclassifiedProcess,
               onAssignProcess: (process, catId) => {
                 assignProcess(process, catId)
+                void handleStart(catId)
                 const catName = categories.find(c => c.id === catId)?.name ?? catId
                 showToast(t('toast.ruleLearnedProcess').replace('{process}', process).replace('{category}', catName))
               },
@@ -637,6 +638,7 @@ export function App({ storage }: Props) {
               unclassifiedWorkspace,
               onAssignWorkspace: (ws, catId) => {
                 assignWorkspace(ws, catId)
+                void handleStart(catId)
                 const catName = categories.find(c => c.id === catId)?.name ?? catId
                 showToast(t('toast.ruleLearnedProcess').replace('{process}', ws).replace('{category}', catName))
               },
@@ -644,6 +646,7 @@ export function App({ storage }: Props) {
               elevationSuggestion,
               onElevateProcess: (process, catId) => {
                 elevateProcess(process, catId)
+                void handleStart(catId)
                 const catName = categories.find(c => c.id === catId)?.name ?? catId
                 showToast(t('toast.ruleLearnedProcess').replace('{process}', process).replace('{category}', catName))
               },
@@ -772,6 +775,7 @@ export function App({ storage }: Props) {
           categories={categories.filter(c => !c.archived)}
           onAssign={(process, catId) => {
             assignProcess(process, catId)
+            void handleStart(catId)
             const catName = categories.find(c => c.id === catId)?.name ?? catId
             showToast(t('toast.ruleLearnedProcess').replace('{process}', process).replace('{category}', catName))
           }}

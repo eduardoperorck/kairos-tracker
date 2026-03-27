@@ -7,6 +7,11 @@ import { FOCUS_PRESETS } from '../domain/focusGuard'
 import type { ReactNode } from 'react'
 import type { Storage } from '../persistence/storage'
 
+vi.mock('../services/credentials', () => ({
+  saveCredential: vi.fn().mockResolvedValue(undefined),
+  loadCredential: vi.fn().mockResolvedValue(null),
+}))
+
 function renderWithI18n(ui: ReactNode) {
   return render(<I18nProvider>{ui}</I18nProvider>)
 }
@@ -17,17 +22,16 @@ function makeStorage(): Storage {
 
 const defaultPreset = FOCUS_PRESETS[0]
 
-function makeDefaultProps(storage: Storage, overrides = {}) {
+function makeDefaultProps(storage: Storage, overrides: Record<string, unknown> = {}) {
   return {
     categories: [],
     sessions: [],
     storage,
-    webhookUrl: '',
-    onWebhookUrlChange: vi.fn(),
     focusPreset: defaultPreset,
     onFocusPresetChange: vi.fn(),
     focusStrictMode: false,
     onFocusStrictModeChange: vi.fn(),
+    onToast: vi.fn(),
     ...overrides,
   }
 }
@@ -76,13 +80,6 @@ describe('SettingsView — renders', () => {
     expect(screen.getAllByRole('switch').length).toBeGreaterThanOrEqual(1)
   })
 
-  it('renders Webhooks section', () => {
-    const storage = makeStorage()
-    renderWithI18n(<SettingsView {...makeDefaultProps(storage)} />)
-    fireEvent.click(screen.getByText('Integrations'))
-    fireEvent.click(screen.getByText(/webhooks/i))
-    expect(screen.getByPlaceholderText('https://…')).toBeTruthy()
-  })
 })
 
 describe('SettingsView — strict mode toggle', () => {
@@ -139,12 +136,13 @@ describe('SettingsView — backup', () => {
 })
 
 describe('SettingsView — restore backup', () => {
-  it('shows restored session count after valid JSON restore', async () => {
+  it('calls onToast with restored session count after valid JSON restore', async () => {
+    const onToast = vi.fn()
     const storage = makeStorage()
     const sessions = [
       { id: 's1', categoryId: 'c1', startedAt: 0, endedAt: 3600000, date: '2026-03-15' },
     ]
-    renderWithI18n(<SettingsView {...makeDefaultProps(storage)} />)
+    renderWithI18n(<SettingsView {...makeDefaultProps(storage, { onToast })} />)
     fireEvent.click(screen.getByText(/backup & restore/i))
 
     const file = new File([JSON.stringify(sessions)], 'backup.json', { type: 'application/json' })
@@ -153,7 +151,7 @@ describe('SettingsView — restore backup', () => {
     fireEvent.change(input)
 
     await waitFor(() => {
-      expect(screen.getByText(/Restored 1 session/i)).toBeTruthy()
+      expect(onToast).toHaveBeenCalledWith(expect.stringMatching(/Restored 1 session/i))
     })
   })
 
@@ -188,25 +186,6 @@ describe('SettingsView — restore backup', () => {
   })
 })
 
-describe('SettingsView — webhooks', () => {
-  it('calls onWebhookUrlChange when webhook input loses focus', async () => {
-    const storage = makeStorage()
-    const onWebhookUrlChange = vi.fn()
-    storage.setSetting = vi.fn().mockResolvedValue(undefined)
-    renderWithI18n(<SettingsView {...makeDefaultProps(storage, { onWebhookUrlChange })} />)
-    fireEvent.click(screen.getByText('Integrations'))
-    fireEvent.click(screen.getByText(/webhooks/i))
-
-    const input = screen.getByPlaceholderText('https://…')
-    fireEvent.change(input, { target: { value: 'https://example.com/hook' } })
-    fireEvent.blur(input)
-
-    await waitFor(() => {
-      expect(onWebhookUrlChange).toHaveBeenCalledWith('https://example.com/hook')
-    })
-  })
-})
-
 describe('SettingsView — process rules manager', () => {
   const RULES_KEY = 'user_window_rules'
   const cat = { id: 'cat-1', name: 'Work', activeEntry: null }
@@ -218,7 +197,7 @@ describe('SettingsView — process rules manager', () => {
     const storage = makeStorage()
     renderWithI18n(<SettingsView {...makeDefaultProps(storage, { categories: [cat] })} />)
     fireEvent.click(screen.getByText(/process rules/i))
-    expect(screen.getByText(/rules are created automatically/i)).toBeTruthy()
+    expect(screen.getByText(/No rules yet/i)).toBeTruthy()
   })
 
   it('lists saved process rules with their category', () => {
@@ -255,22 +234,80 @@ describe('SettingsView — process rules manager', () => {
   })
 })
 
-describe('SettingsView — sync path validation', () => {
-  it('shows invalid sync path error for path traversal attempt', async () => {
+describe('SettingsView — toast confirmations', () => {
+  const RULES_KEY = 'user_window_rules'
+  beforeEach(() => localStorage.clear())
+  afterEach(() => localStorage.clear())
+
+  it('calls onToast with "API key saved" when save button is clicked', async () => {
+    const onToast = vi.fn()
     const storage = makeStorage()
-    await storage.setSetting('sync_path', '../etc/passwd')
-    renderWithI18n(<SettingsView {...makeDefaultProps(storage)} />)
-
-    fireEvent.click(screen.getByText(/sync/i))
-
+    renderWithI18n(<SettingsView {...makeDefaultProps(storage, { onToast })} />)
+    // click the accordion button (not the <h3> section label)
+    fireEvent.click(screen.getAllByText(/integrations/i).find(el => el.closest('button'))!)
+    fireEvent.click(screen.getByText(/AI Assistant/i))
+    const input = screen.getByPlaceholderText('sk-ant-…')
+    fireEvent.change(input, { target: { value: 'sk-ant-test1234' } })
+    fireEvent.click(screen.getByText('Save'))
     await waitFor(() => {
-      expect(screen.getByText(/sync now/i)).toBeTruthy()
-    })
-
-    fireEvent.click(screen.getByText(/sync now/i))
-
-    await waitFor(() => {
-      expect(screen.getByText(/Invalid sync path/i)).toBeTruthy()
+      expect(onToast).toHaveBeenCalledWith('API key saved')
     })
   })
+
+  it('calls onToast with "Backup exported" when download backup is clicked', () => {
+    const createObjectURL = vi.fn(() => 'blob:mock')
+    vi.stubGlobal('URL', { createObjectURL, revokeObjectURL: vi.fn() })
+    const clickMock = vi.fn()
+    const origCreate = document.createElement.bind(document)
+    vi.spyOn(document, 'createElement').mockImplementation((tag: string) => {
+      const el = origCreate(tag)
+      if (tag === 'a') { Object.defineProperty(el, 'click', { value: clickMock }); return el }
+      return el
+    })
+    const onToast = vi.fn()
+    const storage = makeStorage()
+    renderWithI18n(<SettingsView {...makeDefaultProps(storage, { onToast })} />)
+    fireEvent.click(screen.getByText(/backup & restore/i))
+    fireEvent.click(screen.getByText(/download backup/i))
+    expect(onToast).toHaveBeenCalledWith('Backup exported')
+  })
+
+  it('calls onToast after sessions are purged', async () => {
+    const onToast = vi.fn()
+    const storage = makeStorage()
+    renderWithI18n(<SettingsView {...makeDefaultProps(storage, { onToast })} />)
+    fireEvent.click(screen.getByText(/backup & restore/i))
+    fireEvent.click(screen.getByText(/Delete sessions before today/i))
+    fireEvent.click(screen.getByText(/Yes, delete/i))
+    await waitFor(() => {
+      expect(onToast).toHaveBeenCalled()
+    })
+  })
+
+  it('calls onToast with "Rule deleted" when a process rule is deleted', () => {
+    localStorage.setItem(RULES_KEY, JSON.stringify([
+      { id: 'u1', matchType: 'process', pattern: 'chrome.exe', categoryId: null, mode: 'auto', enabled: true },
+    ]))
+    const onToast = vi.fn()
+    const storage = makeStorage()
+    renderWithI18n(<SettingsView {...makeDefaultProps(storage, { onToast })} />)
+    fireEvent.click(screen.getByText(/process rules/i))
+    fireEvent.click(screen.getByTitle('Delete rule for chrome.exe'))
+    expect(onToast).toHaveBeenCalledWith('Rule deleted')
+  })
+
+  it('calls onToast with "Rule updated" when rule mode is toggled', () => {
+    localStorage.setItem(RULES_KEY, JSON.stringify([
+      { id: 'u1', matchType: 'process', pattern: 'chrome.exe', categoryId: 'cat-1', mode: 'auto', enabled: true },
+    ]))
+    const onToast = vi.fn()
+    const storage = makeStorage()
+    const cat = { id: 'cat-1', name: 'Work', activeEntry: null }
+    renderWithI18n(<SettingsView {...makeDefaultProps(storage, { onToast, categories: [cat] })} />)
+    fireEvent.click(screen.getByText(/process rules/i))
+    // click the rule mode button specifically (not the legend description)
+    fireEvent.click(screen.getByRole('button', { name: 'auto' }))
+    expect(onToast).toHaveBeenCalledWith('Rule updated')
+  })
 })
+
