@@ -34,7 +34,8 @@ export function AppHeader({ view, setView, dailyRecap, activeCategory }: Props) 
         : {}
     }>
       <div className="mx-auto max-w-xl lg:max-w-3xl xl:max-w-5xl px-6 h-14 flex items-center justify-between">
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2.5">
+          <img src="/logo.png" alt="Kairos" className="h-6 w-6 rounded" />
           <span className="text-sm font-semibold text-zinc-100">{t('app.title')}</span>
           {dailyRecap && (
             <span className="text-xs text-zinc-600 hidden sm:inline">· {dailyRecap}</span>
