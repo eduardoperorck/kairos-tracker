@@ -45,7 +45,7 @@ export async function classifyContext(
   const cached = cache.get(key)
   if (cached && cached.expiresAt > Date.now()) return cached.result
 
-  const backend = await detectLLMBackend(apiKey ?? undefined)
+  const backend = await detectLLMBackend(apiKey ?? null)
   if (backend === 'none') return null
 
   const categoryList = categories

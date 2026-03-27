@@ -7,7 +7,7 @@ import {
   SCORE_THRESHOLD_AUTO, computeTimeOfDayPrior,
 } from '../domain/classifier'
 import type { DomainRule, SignalSet } from '../domain/classifier'
-import type { Storage, CorrectionRecord } from '../persistence/storage'
+import type { Storage } from '../persistence/storage'
 import { migrateLocalStorageRules } from '../persistence/localStorageMigration'
 
 const POLL_INTERVAL_MS = 5_000
@@ -50,25 +50,6 @@ function loadCorrections(): CorrectionRecord[] {
 }
 function saveCorrections(records: CorrectionRecord[]) {
   localStorage.setItem(CORRECTION_KEY, JSON.stringify(records))
-}
-
-/**
- * Increments the correction counter for (contextKey, categoryId).
- * Returns true when the count reaches the threshold — caller should auto-create a rule.
- * Task 10: contextKey replaces the bare process name so workspace-specific overrides
- * don't create overly broad rules.
- */
-function trackCorrection(contextKey: string, categoryId: string, threshold = 3): boolean {
-  const records = loadCorrections()
-  const existing = records.find(r => r.contextKey === contextKey && r.categoryId === categoryId)
-  if (existing) {
-    existing.count++
-    saveCorrections(records)
-    return existing.count >= threshold
-  }
-  records.push({ contextKey, categoryId, count: 1 })
-  saveCorrections(records)
-  return false
 }
 
 // ─── Tauri bridge ─────────────────────────────────────────────────────────────
@@ -627,7 +608,7 @@ export function usePassiveCapture(
 
   const dismissElevation = useCallback((process: string) => {
     setDismissedElevations(prev => new Set([...prev, process]))
-    setElevationSuggestion(null)
+    dispatch({ type: 'SET_ELEVATION', suggestion: null })
   }, [])
 
   // Workspace rule assignment — creates a workspace-type auto rule

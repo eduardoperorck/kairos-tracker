@@ -29,7 +29,7 @@ import { CommandPalette } from './CommandPalette'
 import { OnboardingWizard } from './OnboardingWizard'
 import { ProductivityWrapped } from './ProductivityWrapped'
 import type { CategoryInsights } from './CategoryItem'
-import { FOCUS_PRESETS, type FocusPreset } from '../domain/focusGuard'
+import { FOCUS_PRESETS } from '../domain/focusGuard'
 import { formatElapsed } from '../domain/format'
 import { useInputActivity } from '../hooks/useInputActivity'
 import { usePassiveCapture } from '../hooks/usePassiveCapture'
@@ -42,16 +42,13 @@ import { useLocalGitCommits } from '../hooks/useLocalGitCommits'
 import { useWindowBounds } from '../hooks/useWindowBounds'
 import { useUpdateCheck } from '../hooks/useUpdateCheck'
 import { useObsidianExport } from '../hooks/useObsidianExport'
-import type { Intention, EveningReview } from '../domain/intentions'
 import type { Storage, DailyCaptureStatRow } from '../persistence/storage'
 import { SettingKey } from '../persistence/storage'
 import type { MVDItem } from '../domain/minimumViableDay'
 import { filterToday } from '../domain/minimumViableDay'
-import type { UnclassifiedApp } from '../domain/passiveCapture'
 import { ClassifyOverlay } from './ClassifyOverlay'
 import { AppHeader } from './AppHeader'
 import { useUndoStack } from '../hooks/useUndoStack'
-import type { Category } from '../domain/timer'
 
 
 type Props = { storage: Storage }
@@ -100,7 +97,7 @@ export function App({ storage }: Props) {
   // Settings loaded early so workspaceRoot is available before useLocalGitCommits
   const setFocusPresetRef = useRef<((p: any) => void) | undefined>(undefined)
   const setFocusStrictModeRef = useRef<((s: boolean) => void) | undefined>(undefined)
-  const { claudeApiKey, setClaudeApiKey, githubUsername, setGithubUsername, workspaceRoot, setWorkspaceRoot, screenshotsEnabled, setScreenshotsEnabled } = useSettingsLoader({
+  const { claudeApiKey, githubUsername, workspaceRoot, screenshotsEnabled, setScreenshotsEnabled } = useSettingsLoader({
     storage,
     setFocusPreset: (p) => setFocusPresetRef.current?.(p),
     setFocusStrictMode: (s) => setFocusStrictModeRef.current?.(s),
@@ -159,12 +156,12 @@ export function App({ storage }: Props) {
   const today = useMemo(() => toDateString(Date.now()), [])
 
   const {
-    intentions, setIntentions,
-    eveningReview, setEveningReview,
+    intentions,
+    eveningReview,
     dailyRecap, setDailyRecap,
     handleAddIntention,
     handleSaveReview,
-  } = useDailyState({ storage, today, historySessions, t })
+  } = useDailyState({ storage, today, historySessions, t: t as (key: string) => string })
 
   useObsidianExport(storage, today, sessions, categories, intentions, eveningReview)
 
@@ -202,7 +199,7 @@ export function App({ storage }: Props) {
   const {
     focusPreset, setFocusPreset,
     focusStrictMode, setFocusStrictMode,
-    breakActive, setBreakActive,
+    setBreakActive,
     postponeUsed,
     breakSkipCount, setBreakSkipCount,
     breakCompletedCount, setBreakCompletedCount,

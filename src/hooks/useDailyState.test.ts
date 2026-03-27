@@ -3,7 +3,6 @@ import { renderHook, act, waitFor } from '@testing-library/react'
 import { useDailyState } from './useDailyState'
 
 const TODAY = '2023-11-14'
-const YESTERDAY = '2023-11-13'
 
 function makeStorage(overrides: Record<string, any> = {}) {
   return {

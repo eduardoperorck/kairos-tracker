@@ -33,7 +33,7 @@ function downloadBlob(content: string, filename: string, mimeType: string) {
   URL.revokeObjectURL(url)
 }
 
-export function HistoryView({ sessions, categories, captureBlocks = [], onImportSessions, onBulkTag, onTagSession, storage }: Props) {
+export function HistoryView({ sessions, categories, captureBlocks = [], onImportSessions, onBulkTag, onTagSession, storage: _storage }: Props) {
   const { t } = useI18n()
   const [importStatus, setImportStatus] = useState<string | null>(null)
   const [csvPreset, setCsvPreset] = useState<keyof typeof CSV_PRESETS>('default')

@@ -4,7 +4,7 @@ import { I18nProvider } from '../i18n'
 import { DailyInsightCard } from './DailyInsightCard'
 import type { DailyInsights } from '../domain/dailyInsights'
 
-function renderCard(insights: DailyInsights, categories = [{ id: 'cat-work', name: 'Work' }]) {
+function renderCard(insights: DailyInsights, categories = [{ id: 'cat-work', name: 'Work', activeEntry: null as null }]) {
   return render(
     <I18nProvider>
       <DailyInsightCard insights={insights} categories={categories} />
