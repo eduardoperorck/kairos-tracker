@@ -15,6 +15,23 @@
 
 ---
 
+## Screenshots
+
+<!-- Add screenshots here once the app is running. Suggested shots:
+     1. Main tracker view with active timer
+     2. History view with heatmap + energy curve
+     3. AI digest panel
+     4. ClassifyOverlay / passive capture in action
+     5. Focus Lock fullscreen timer
+     Replace this comment block with:
+     ![Tracker](assets/screenshots/tracker.png)
+     ![History](assets/screenshots/history.png)
+-->
+
+> Screenshots coming soon. Download the [latest release](../../releases/latest) to try it.
+
+---
+
 ## Why this exists
 
 Most productivity tools count hours. This one **understands them**.
@@ -273,6 +290,12 @@ All sensitive data stays local:
 - Ollama option: run AI features 100% offline — zero data leaves the device
 
 ---
+
+## Contributing
+
+Contributions are welcome! This project follows a strict RED → GREEN → REFACTOR TDD workflow.
+
+See [CONTRIBUTING.md](./CONTRIBUTING.md) for setup instructions, architecture overview, and PR guidelines.
 
 ## Development Guide
 
