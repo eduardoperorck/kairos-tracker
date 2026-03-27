@@ -1,9 +1,10 @@
 import { useState, useEffect } from 'react'
+import { VERSION } from '../version'
 
 const CHECK_KEY = 'last_update_check'
 const MIN_INTERVAL_MS = 24 * 3_600_000 // check at most once per day
 const REPO = 'pichau/kairos-tracker'
-const CURRENT_VERSION = '1.0.0'
+const CURRENT_VERSION = VERSION
 
 function semverGt(a: string, b: string): boolean {
   const parse = (v: string) => v.replace(/^v/, '').split('.').map(Number)

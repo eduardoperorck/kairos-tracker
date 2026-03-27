@@ -54,8 +54,7 @@ After 30 days of data, Kairos Tracker identifies your personal peak and valley h
 - **Auto-start timer** — when a classified app gains focus, the timer starts automatically with no user action needed
 - **Smart classify overlay** — unknown apps are identified by name and icon; assign them to a category once and the rule is remembered forever
 - **Workspace classification** — VS Code workspace folders are tracked and classified independently of the process
-- **Browser domain tracking** — companion browser extension reports the active tab domain; domain rules map sites to categories
-- **VS Code extension** — reports workspace and open file to enrich classification and show the timer in the status bar
+- **Browser domain tracking** — domain rules map known sites to categories automatically
 - **Correction learning** — after 3 manual overrides of the same app+context, a permanent rule is promoted automatically
 - **Tracking Accuracy Score** — weekly composite score measuring auto-classification quality, session stability, and coverage
 - **Passive tracking indicator** — subtle status bar shows what the tracker is currently watching
@@ -102,8 +101,6 @@ After 30 days of data, Kairos Tracker identifies your personal peak and valley h
 - **Global shortcuts** — Ctrl+Shift+T to toggle, Ctrl+K for command palette
 - **Native notifications** — goal reached, daily reminder, long-session alert
 - **CLI companion** — `npx @kairos-tracker/cli start work` from any terminal
-- **VS Code extension** — timer in the status bar, start/stop without leaving the editor
-- **Browser extension** — reports active tab domain for automatic site-to-category classification
 - **pt-BR / English** — full i18n support
 
 ---
@@ -138,15 +135,13 @@ src/
 │   ├── deepWorkScore.ts          DWS 0–100 composite metric
 │   ├── focusDebt.ts              cognitive debt accumulation model
 │   ├── adaptiveCycles.ts         natural cycle inference from real session data
-│   ├── distractionRecovery.ts    DRT — time lost per interruption source
 │   ├── focusRecommendations.ts   heuristic coaching engine
 │   ├── calendarParser.ts         ICS/iCal import — extract focus blocks
 │   ├── minimumViableDay.ts       MVD goal model
 │   └── sessionNaming.ts          quick tag suggestions from session patterns
 │
 ├── services/            # External integrations (no UI, no Tauri)
-│   ├── llm.ts                    unified LLM backend (Claude API + Ollama)
-│   └── contextClassifier.ts      ML-style context scoring with time-of-day prior
+│   └── llm.ts                    unified LLM backend (Claude API + Ollama)
 │
 ├── store/               # Zustand global state
 │   └── useTimerStore.ts
@@ -191,8 +186,6 @@ src/
 │   └── localStorageMigration.ts  one-time migration from localStorage → SQLite
 │
 cli/                     # CLI companion (separate npm package)
-vscode-extension/        # VS Code extension (status bar timer + editor context)
-browser-extension/       # Browser extension (active tab domain reporting)
 ```
 
 **Data flow:** `domain` → `store` → `hooks` → `components` → `persistence`
@@ -245,22 +238,6 @@ Reads and writes the same SQLite database as the desktop app. See [cli/README.md
 
 ---
 
-## VS Code Extension
-
-Shows the active timer in the VS Code status bar. Start and stop timers without leaving the editor. Also reports the active workspace and open file to the tracker, enabling workspace-level auto-classification.
-
-See [vscode-extension/README.md](./vscode-extension/README.md) for installation instructions.
-
----
-
-## Browser Extension
-
-Reports the active tab URL and title to the tracker via a local HTTP endpoint. Domain rules map sites to categories — `github.com` auto-starts Work, `youtube.com` is ignored, etc.
-
-See [browser-extension/](./browser-extension/) for installation instructions (Manifest V3, Chrome/Edge).
-
----
-
 ## Configuration
 
 | Setting | Where | Notes |
@@ -280,7 +257,7 @@ See [browser-extension/](./browser-extension/) for installation instructions (Ma
 
 All sensitive data stays local:
 - API keys stored via OS credential store (Windows Credential Manager), never in plain text
-- No webhook or external call except to `api.anthropic.com`, `api.github.com`, and local Ollama
+- No external call except to `api.anthropic.com`, `api.github.com`, and local Ollama
 - Claude prompts use `JSON.stringify` for all user input — category names cannot inject prompt text
 - Tauri CSP restricts network access; localhost HTTP server only accepts connections from `127.0.0.1`
 - Backup restore validates every field at runtime before writing to the database
@@ -316,7 +293,7 @@ Every feature followed the TDD workflow in CLAUDE.md:
 2. Implement minimal code to pass (GREEN)
 3. Refactor without breaking tests
 
-**70+ milestones. 984 tests. 80%+ line coverage. Zero skipped hooks. TypeScript strict — zero errors. Version 1.0.0-alpha.**
+**70+ milestones. 80%+ line coverage. Zero skipped hooks. TypeScript strict — zero errors. Version 1.0.0.**
 
 ---
 

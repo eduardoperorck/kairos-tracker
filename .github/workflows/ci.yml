@@ -67,3 +67,26 @@ jobs:
       - name: Rust dependency audit (cargo audit)
         working-directory: src-tauri
         run: cargo audit
+
+  cargo-check-windows:
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install stable Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Cargo registry
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            src-tauri/target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('src-tauri/Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-cargo-
+
+      - name: cargo check (Windows — validates WinAPI code)
+        working-directory: src-tauri
+        run: cargo check --release

@@ -95,8 +95,6 @@ const en = {
   'settings.syncDesc': 'Export a JSON snapshot to a folder (e.g. OneDrive) for multi-device sync.',
   'settings.syncSave': 'Save',
   'settings.syncNow': 'Sync Now',
-  'settings.webhooks': 'Webhooks',
-  'settings.webhooksDesc': 'POST to this URL on timer start/stop events.',
   'settings.save': 'Save',
   'settings.saved': 'Saved ✓',
   'settings.language': 'Language',
@@ -324,18 +322,12 @@ const en = {
   'settings.retentionNever': 'Never auto-delete',
   'settings.screenshotDesc': 'Capture a screenshot every 5 minutes while a timer is active. Stored locally, never uploaded.',
   'settings.screenshotOptIn': 'Opt-in only.',
-  'settings.slackStatus': 'Slack Status',
-  'settings.slackDesc': 'Auto-set Slack status on timer start. Token needs users.profile:write.',
-  'settings.notionExport': 'Notion Export',
-  'settings.notionDesc': 'Export sessions to a Notion database. Integration token + database ID required.',
-
   // HistoryView
   'history.importCalendar': 'Import Calendar',
   'history.export': '⬇ Export',
   'history.downloadCSV': 'Download CSV',
   'history.downloadJSON': 'Download JSON',
   'history.downloadHTML': 'Download HTML',
-  'history.exportNotion': 'Export to Notion',
   'history.applyTag': 'Apply tag',
   'history.tagOrClear': 'Tag (or empty to clear)',
   'history.emptyStart': 'Start a timer on the Tracker tab — completed sessions will appear here.',
@@ -464,14 +456,6 @@ const en = {
   'palette.setGoals': "Set today's goals",
   'palette.saveBookmark': 'Save context bookmark',
   'palette.restoreBookmark': 'Restore bookmark',
-
-  // Notion integration
-  'notion.configRequired': 'Configure Notion token and database ID in Settings first.',
-  'notion.exporting': 'Exporting…',
-  'notion.exportProgress': 'Exporting… {done}/{total}',
-  'notion.exportSuccess': 'Exported {n} sessions to Notion.',
-  'notion.exportErrors': ' ({n} errors)',
-  'notion.exportFailed': 'Export failed. Check your token and database ID.',
 
   // Calendar import
   'calendar.noEvents': 'No importable events found.',
@@ -653,8 +637,6 @@ const pt: { [K in keyof typeof en]: string } = {
   'settings.syncDesc': 'Exporta um snapshot JSON para uma pasta (ex: OneDrive) para sincronização multi-dispositivo.',
   'settings.syncSave': 'Salvar',
   'settings.syncNow': 'Sincronizar Agora',
-  'settings.webhooks': 'Webhooks',
-  'settings.webhooksDesc': 'POST para esta URL em eventos de start/stop do timer.',
   'settings.save': 'Salvar',
   'settings.saved': 'Salvo ✓',
   'settings.language': 'Idioma',
@@ -882,18 +864,12 @@ const pt: { [K in keyof typeof en]: string } = {
   'settings.retentionNever': 'Nunca apagar',
   'settings.screenshotDesc': 'Captura uma screenshot a cada 5 minutos enquanto um timer está ativo. Armazenada localmente, nunca enviada.',
   'settings.screenshotOptIn': 'Opt-in apenas.',
-  'settings.slackStatus': 'Status do Slack',
-  'settings.slackDesc': 'Define status do Slack ao iniciar timer. Token precisa de users.profile:write.',
-  'settings.notionExport': 'Exportar para Notion',
-  'settings.notionDesc': 'Exportar sessões para banco Notion. Token de integração + ID do banco necessários.',
-
   // HistoryView
   'history.importCalendar': 'Importar Calendário',
   'history.export': '⬇ Exportar',
   'history.downloadCSV': 'Baixar CSV',
   'history.downloadJSON': 'Baixar JSON',
   'history.downloadHTML': 'Baixar HTML',
-  'history.exportNotion': 'Exportar para Notion',
   'history.applyTag': 'Aplicar tag',
   'history.tagOrClear': 'Tag (ou vazio para limpar)',
   'history.emptyStart': 'Inicie um timer na aba Rastreador — sessões concluídas aparecerão aqui.',
@@ -1022,14 +998,6 @@ const pt: { [K in keyof typeof en]: string } = {
   'palette.setGoals': 'Definir metas de hoje',
   'palette.saveBookmark': 'Salvar marcador de contexto',
   'palette.restoreBookmark': 'Restaurar marcador',
-
-  // Notion integration
-  'notion.configRequired': 'Configure o token e o ID do banco Notion nas Configurações.',
-  'notion.exporting': 'Exportando…',
-  'notion.exportProgress': 'Exportando… {done}/{total}',
-  'notion.exportSuccess': '{n} sessões exportadas para o Notion.',
-  'notion.exportErrors': ' ({n} erros)',
-  'notion.exportFailed': 'Falha na exportação. Verifique o token e o ID do banco.',
 
   // Calendar import
   'calendar.noEvents': 'Nenhum evento importável encontrado.',

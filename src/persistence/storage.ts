@@ -13,7 +13,6 @@ export type PersistedCategory = {
 }
 
 export const SettingKey = {
-  WebhookUrl: 'webhook_url',
   FocusPreset: 'focus_preset',
   FocusStrictMode: 'focus_strict_mode',
   AnthropicApiKey: 'anthropic_api_key',
@@ -23,9 +22,6 @@ export const SettingKey = {
   SyncPath: 'sync_path',
   WorkspaceRoot: 'workspace_root',
   ObsidianVaultPath: 'obsidian_vault_path',
-  SlackToken: 'slack_token',
-  NotionToken: 'notion_token',
-  NotionDatabaseId: 'notion_database_id',
   Language: 'language',
   HourlyRate: 'hourly_rate',
 } as const
