@@ -10,21 +10,22 @@ vi.mock('../services/credentials', () => ({
   deleteCredential: vi.fn().mockResolvedValue(undefined),
 }))
 
-// Mock callDigestAPI so tests do not hit the network.
-// Individual tests override this with mockResolvedValueOnce / mockReturnValue / mockRejectedValueOnce.
-vi.mock('../domain/digest', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../domain/digest')>()
-  return {
-    ...actual,
-    callDigestAPI: vi.fn().mockResolvedValue('Weekly digest text'),
-  }
-})
+// Mock callLLM and detectLLMBackend so tests do not hit the network.
+vi.mock('../services/llm', () => ({
+  detectLLMBackend: vi.fn().mockResolvedValue('claude'),
+  callLLM: vi.fn().mockResolvedValue('Weekly digest text'),
+}))
 
 import { loadCredential } from '../services/credentials'
-import { callDigestAPI } from '../domain/digest'
+import { detectLLMBackend, callLLM } from '../services/llm'
 
 function mockApiKey(key: string | null) {
   vi.mocked(loadCredential).mockResolvedValue(key)
+  if (key) {
+    vi.mocked(detectLLMBackend).mockResolvedValue('claude')
+  } else {
+    vi.mocked(detectLLMBackend).mockResolvedValue('none')
+  }
 }
 
 function renderWithI18n(ui: ReactNode) {
@@ -42,8 +43,9 @@ describe('DigestView', () => {
   beforeEach(() => {
     mockApiKey(null)
     // Reset call history so tests don't bleed into each other
-    vi.mocked(callDigestAPI).mockClear()
-    vi.mocked(callDigestAPI).mockResolvedValue('Weekly digest text')
+    vi.mocked(callLLM).mockClear()
+    vi.mocked(callLLM).mockResolvedValue('Weekly digest text')
+    vi.mocked(detectLLMBackend).mockResolvedValue('none')
   })
 
   afterEach(() => {
@@ -67,8 +69,8 @@ describe('DigestView', () => {
 
   it('shows loading state when generating', async () => {
     mockApiKey('sk-ant-test')
-    // Suspend callDigestAPI forever so loading stays true
-    vi.mocked(callDigestAPI).mockReturnValue(new Promise(() => {}))
+    // Suspend callLLM forever so loading stays true
+    vi.mocked(callLLM).mockReturnValue(new Promise(() => {}))
 
     renderWithI18n(<DigestView {...defaultProps} />)
 
@@ -90,17 +92,17 @@ describe('DigestView', () => {
       expect(screen.getByText('Regenerate')).toBeTruthy()
     })
 
-    // Clicking again within the 10-second cooldown must not call callDigestAPI again
-    const callsBefore = vi.mocked(callDigestAPI).mock.calls.length
+    // Clicking again within the 10-second cooldown must not call callLLM again
+    const callsBefore = vi.mocked(callLLM).mock.calls.length
     fireEvent.click(screen.getByText('Regenerate'))
 
     await new Promise(r => setTimeout(r, 50))
-    expect(vi.mocked(callDigestAPI).mock.calls.length).toBe(callsBefore)
+    expect(vi.mocked(callLLM).mock.calls.length).toBe(callsBefore)
   })
 
   it('shows generic error message on failure', async () => {
     mockApiKey('sk-ant-test')
-    vi.mocked(callDigestAPI).mockRejectedValueOnce(new Error('Unable to generate digest. Please try again.'))
+    vi.mocked(callLLM).mockRejectedValueOnce(new Error('Unable to generate digest. Please try again.'))
 
     renderWithI18n(<DigestView {...defaultProps} />)
 
@@ -118,6 +120,7 @@ describe('DigestView', () => {
 
   it('auto-calls generate on mount when claudeApiKey is set and sessions exist and no cache', async () => {
     localStorage.removeItem('digest_cache_2026-W12')
+    vi.mocked(detectLLMBackend).mockResolvedValue('claude')
 
     const sessions = [
       { id: 's1', categoryId: 'cat-1', startedAt: 1_000_000, endedAt: 4_600_000, date: '2026-03-17' },
@@ -132,9 +135,9 @@ describe('DigestView', () => {
       />
     )
 
-    // callDigestAPI should be invoked automatically without any user click
+    // callLLM should be invoked automatically without any user click
     await waitFor(() => {
-      expect(vi.mocked(callDigestAPI)).toHaveBeenCalledOnce()
+      expect(vi.mocked(callLLM)).toHaveBeenCalledOnce()
     })
   })
 
@@ -152,7 +155,7 @@ describe('DigestView', () => {
 
     // Wait long enough that any stray async effect would have fired
     await new Promise(r => setTimeout(r, 50))
-    expect(vi.mocked(callDigestAPI)).not.toHaveBeenCalled()
+    expect(vi.mocked(callLLM)).not.toHaveBeenCalled()
   })
 
   it('does not auto-generate when a cached digest already exists for the week', async () => {
@@ -173,7 +176,7 @@ describe('DigestView', () => {
     )
 
     await new Promise(r => setTimeout(r, 50))
-    expect(vi.mocked(callDigestAPI)).not.toHaveBeenCalled()
+    expect(vi.mocked(callLLM)).not.toHaveBeenCalled()
 
     // The cached text is displayed directly without a network call
     expect(screen.getByText('Cached weekly digest')).toBeTruthy()
@@ -183,9 +186,10 @@ describe('DigestView', () => {
 
   it('shows loading state during auto-generate on mount', async () => {
     localStorage.removeItem('digest_cache_2026-W09')
+    vi.mocked(detectLLMBackend).mockResolvedValue('claude')
 
-    // Suspend callDigestAPI forever so loading stays true
-    vi.mocked(callDigestAPI).mockReturnValue(new Promise(() => {}))
+    // Suspend callLLM forever so loading stays true
+    vi.mocked(callLLM).mockReturnValue(new Promise(() => {}))
 
     const sessions = [
       { id: 's1', categoryId: 'cat-1', startedAt: 1_000_000, endedAt: 4_600_000, date: '2026-03-17' },

@@ -45,6 +45,18 @@ describe('DeadTimeRecoveryWidget', () => {
     expect(onDismiss).toHaveBeenCalled()
   })
 
+  it('shows idleContext in header when provided', () => {
+    renderWithI18n(
+      <DeadTimeRecoveryWidget
+        idleMs={15 * 60_000}
+        idleContext="Chrome"
+        onSelectTask={() => {}}
+        onDismiss={() => {}}
+      />
+    )
+    expect(screen.getByText(/idle in Chrome/i)).toBeInTheDocument()
+  })
+
   it('calls onSelectTask when task clicked', () => {
     const onSelectTask = vi.fn()
     const customTasks: MicroTask[] = [

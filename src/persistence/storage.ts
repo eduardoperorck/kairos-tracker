@@ -1,6 +1,7 @@
 import type { Session } from '../domain/timer'
 import type { Intention, EveningReview } from '../domain/intentions'
 import type { WindowRule } from '../domain/passiveCapture'
+import type { DomainRule } from '../domain/classifier'
 
 export type PersistedCategory = {
   id: string
@@ -26,6 +27,7 @@ export const SettingKey = {
   NotionToken: 'notion_token',
   NotionDatabaseId: 'notion_database_id',
   Language: 'language',
+  HourlyRate: 'hourly_rate',
 } as const
 
 export type SettingKeyType = typeof SettingKey[keyof typeof SettingKey]
@@ -48,9 +50,13 @@ export interface SessionStorage {
   loadSessionsSince(date: string): Promise<Session[]>
   importSessions(sessions: Session[]): Promise<void>
   updateSessionTag(id: string, tag: string | null): Promise<void>
+  deleteSession(id: string): Promise<void>
+  updateSessionTime(id: string, startedAt: number, endedAt: number): Promise<void>
   loadActiveEntry(): Promise<ActiveEntry | null>
   setActiveEntry(categoryId: string, startedAt: number): Promise<void>
   clearActiveEntry(): Promise<void>
+  purgeSessionsBefore(date: string): Promise<number>
+  deleteAllSessions(): Promise<number>
 }
 
 export interface SettingsStorage {
@@ -76,6 +82,8 @@ export type DailyCaptureStatRow = {
 export interface CaptureStorage {
   saveDailyCaptureStat(row: DailyCaptureStatRow): Promise<void>
   loadDailyCaptureStatsSince(date: string): Promise<DailyCaptureStatRow[]>
+  /** M89: Update category_id for all daily_capture_stats rows matching date+process */
+  updateCaptureStatCategory(date: string, process: string, categoryId: string): Promise<void>
 }
 
 export interface WindowRuleStorage {
@@ -84,5 +92,37 @@ export interface WindowRuleStorage {
   deleteWindowRule(id: string): Promise<void>
 }
 
+export interface DomainRuleStorage {
+  loadDomainRules(): Promise<DomainRule[]>
+  saveDomainRule(rule: DomainRule): Promise<void>
+  deleteDomainRule(id: string): Promise<void>
+}
+
+export type CorrectionRecord = {
+  contextKey: string
+  categoryId: string
+  count: number
+}
+
+export interface CorrectionStorage {
+  loadCorrections(): Promise<CorrectionRecord[]>
+  saveCorrection(record: CorrectionRecord): Promise<void>
+}
+
+export type ContextBookmark = {
+  id: string
+  name: string
+  categoryId: string
+  workspace: string | null
+  domain: string | null
+  createdAt: number
+}
+
+export interface ContextBookmarkStorage {
+  loadContextBookmarks(): Promise<ContextBookmark[]>
+  saveContextBookmark(bookmark: ContextBookmark): Promise<void>
+  deleteContextBookmark(id: string): Promise<void>
+}
+
 // Full storage adapter — composes all sub-interfaces.
-export interface Storage extends CategoryStorage, SessionStorage, SettingsStorage, IntentionStorage, CaptureStorage, WindowRuleStorage {}
+export interface Storage extends CategoryStorage, SessionStorage, SettingsStorage, IntentionStorage, CaptureStorage, WindowRuleStorage, DomainRuleStorage, CorrectionStorage, ContextBookmarkStorage {}

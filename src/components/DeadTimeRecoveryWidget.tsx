@@ -5,6 +5,7 @@ import type { TKey } from '../i18n'
 
 type Props = {
   idleMs: number
+  idleContext?: string
   customTasks?: MicroTask[]
   onSelectTask: (task: MicroTask) => void
   onDismiss: () => void
@@ -15,7 +16,7 @@ function taskLabel(task: MicroTask, t: (key: TKey) => string): string {
   return isI18nKey(key) ? t(key as TKey) : task.text
 }
 
-export function DeadTimeRecoveryWidget({ idleMs, customTasks, onSelectTask, onDismiss }: Props) {
+export function DeadTimeRecoveryWidget({ idleMs, idleContext, customTasks, onSelectTask, onDismiss }: Props) {
   const { t } = useI18n()
   const state = computeDeadTime(idleMs, undefined, customTasks)
 
@@ -31,6 +32,7 @@ export function DeadTimeRecoveryWidget({ idleMs, customTasks, onSelectTask, onDi
         <div>
           <p className="font-medium text-zinc-200">
             💤 {t('deadTime.title')} — {formatIdleTime(state.idleMs)} {t('deadTime.idle')}
+            {idleContext && <span className="text-zinc-500"> {t('deadTime.idleIn')} {idleContext}</span>}
           </p>
           <p className="text-xs text-zinc-500 mt-0.5">{t('deadTime.quickWin')}</p>
         </div>

@@ -39,12 +39,12 @@ export function CategoryGoal({ weeklyMs, goalMs, onSetGoal, suggestedMs, todayMs
     goalPercent >= 100 ? 'bg-emerald-400' :
     goalPercent >= 80  ? 'bg-amber-400' :
     goalPercent >= 50  ? 'bg-indigo-400' :
-    'bg-zinc-500'
+    'bg-zinc-600'
 
   const percentColor =
     goalPercent >= 100 ? 'text-emerald-400' :
     goalPercent >= 80  ? 'text-amber-400' :
-    'text-zinc-500'
+    'text-zinc-600'
 
   useEffect(() => {
     if (editingGoal) goalInputRef.current?.focus()
@@ -62,105 +62,94 @@ export function CategoryGoal({ weeklyMs, goalMs, onSetGoal, suggestedMs, todayMs
     setGoalDraft('')
   }
 
-  return (
-    <>
-      {goalMs > 0 && !editingGoal && (
-        <div className="mt-3 pt-3 border-t border-white/5">
-          <div className="mb-1.5 flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <span className="text-xs text-zinc-500">{t('stats.thisWeek')}</span>
-              {todayMs > 0 && (
-                <span className="text-[10px] text-zinc-600">+{formatWeekly(todayMs)} {t('goal.today')}</span>
-              )}
-            </div>
-            <div className="flex items-center gap-1.5">
-              <button
-                className="font-mono text-xs tabular-nums text-zinc-500 hover:text-zinc-300 transition-colors"
-                onClick={() => { setGoalDraft(String(goalMs / 3_600_000)); setEditingGoal(true) }}
-                aria-label="Edit goal"
-              >
-                {formatWeekly(weeklyMs)} / {formatGoalHours(goalMs)}
-              </button>
-              <span className={`text-xs tabular-nums font-medium ${percentColor}`}>
-                {goalPercent}%
-              </span>
-            </div>
-          </div>
-          <div className={`relative h-1.5 w-full rounded-full bg-white/5 overflow-hidden${goalPercent >= 100 ? ' animate-pulse' : ''}`}>
-            {/* Prior days this week */}
-            <div
-              className={`absolute left-0 h-full rounded-full transition-all ${barColor} opacity-40`}
-              style={{ width: `${priorPercent}%` }}
-            />
-            {/* Today's contribution — brighter */}
-            <div
-              className={`absolute h-full rounded-full transition-all ${barColor}`}
-              style={{ left: `${priorPercent}%`, width: `${todayPercent}%` }}
-            />
-          </div>
-          {suggestedMs !== undefined && suggestedMs > 0 && Math.abs(suggestedMs - goalMs) / goalMs > 0.15 && (
+  if (editingGoal) {
+    return (
+      <div className="px-3 pb-2 pt-1">
+        <div className="flex items-center gap-2">
+          <input
+            ref={goalInputRef}
+            aria-label="Weekly goal hours"
+            type="text"
+            inputMode="decimal"
+            placeholder="0"
+            className="w-12 rounded border border-white/10 bg-white/5 px-2 py-0.5 text-center text-xs text-zinc-200 placeholder-zinc-600 outline-none focus:border-white/20 tabular-nums"
+            value={goalDraft}
+            onChange={e => setGoalDraft(e.target.value)}
+            onKeyDown={e => {
+              if (e.key === 'Enter') commitGoal()
+              if (e.key === 'Escape') cancelGoal()
+            }}
+            onBlur={e => {
+              if (!e.relatedTarget?.closest('[data-suggestion]')) commitGoal()
+            }}
+          />
+          <span className="text-[10px] text-zinc-600">{t('goal.hoursPerWeek')}</span>
+          {suggestedMs !== undefined && suggestedMs > 0 && (
             <button
-              className="mt-1.5 text-[10px] text-zinc-600 hover:text-zinc-300 transition-colors"
-              onClick={() => onSetGoal(suggestedMs)}
-              title="Auto-calibrate goal based on recent averages"
+              data-suggestion
+              className="text-[10px] text-zinc-600 hover:text-zinc-300 underline transition-colors"
+              onMouseDown={e => e.preventDefault()}
+              onClick={() => { onSetGoal(suggestedMs); setEditingGoal(false); setGoalDraft('') }}
             >
-              {t('goal.recalibrate')} {formatWeekly(suggestedMs)}?
+              {t('goal.useSuggestion')} {formatWeekly(suggestedMs)}
             </button>
           )}
         </div>
-      )}
+      </div>
+    )
+  }
 
-      {editingGoal && (
-        <div className="mt-3 pt-3 border-t border-white/5">
-          <div className="flex flex-col gap-1.5">
-            <div className="flex items-center gap-2">
-              <input
-                ref={goalInputRef}
-                aria-label="Weekly goal hours"
-                type="text"
-                inputMode="decimal"
-                placeholder="0"
-                className="w-16 rounded-md border border-white/10 bg-white/5 px-2 py-1 text-center text-sm text-zinc-200 placeholder-zinc-600 outline-none transition-colors focus:border-white/20 tabular-nums"
-                value={goalDraft}
-                onChange={e => setGoalDraft(e.target.value)}
-                onKeyDown={e => {
-                  if (e.key === 'Enter') commitGoal()
-                  if (e.key === 'Escape') cancelGoal()
-                }}
-                onBlur={e => {
-                  // Only commit on blur if not clicking "Use suggestion"
-                  if (!e.relatedTarget?.closest('[data-suggestion]')) commitGoal()
-                }}
-              />
-              <span className="text-xs text-zinc-500">{t('goal.hoursPerWeek')}</span>
-            </div>
-            {suggestedMs !== undefined && suggestedMs > 0 && (
-              <div className="flex items-center gap-2">
-                <span className="text-xs text-zinc-600">{t('goal.suggested')} {formatWeekly(suggestedMs)}</span>
-                <button
-                  data-suggestion
-                  className="text-xs text-zinc-500 hover:text-zinc-300 underline transition-colors"
-                  onMouseDown={e => e.preventDefault()}
-                  onClick={() => { onSetGoal(suggestedMs); setEditingGoal(false); setGoalDraft('') }}
-                >
-                  {t('goal.useSuggestion')}
-                </button>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
+  if (goalMs === 0) {
+    return (
+      <div className="px-3 pb-1.5">
+        <button
+          className="text-[10px] text-zinc-700 hover:text-zinc-400 transition-colors"
+          onClick={() => { setGoalDraft(''); setEditingGoal(true) }}
+        >
+          {t('goal.setWeekly')}
+        </button>
+      </div>
+    )
+  }
 
-      {!editingGoal && goalMs === 0 && (
-        <div className="mt-2">
-          <button
-            className="text-xs text-zinc-600 hover:text-zinc-400 transition-colors opacity-0 group-hover:opacity-100"
-            onClick={() => { setGoalDraft(''); setEditingGoal(true) }}
-          >
-            {t('goal.setWeekly')}
-          </button>
-        </div>
+  // Goal set — thin progress bar + stats on hover
+  return (
+    <div className="group/goal px-3 pb-2">
+      {/* Stats row — visible only on hover */}
+      <div className="flex items-center justify-between mb-1 h-3 overflow-hidden">
+        <span className="text-[10px] text-zinc-700 opacity-0 group-hover/goal:opacity-100 transition-opacity">
+          {formatWeekly(weeklyMs)} / {formatGoalHours(goalMs)}
+          {todayMs > 0 && <span className="ml-1 text-zinc-800">+{formatWeekly(todayMs)} {t('goal.today')}</span>}
+        </span>
+        <button
+          className={`text-[10px] tabular-nums opacity-0 group-hover/goal:opacity-100 transition-opacity ${percentColor}`}
+          onClick={() => { setGoalDraft(String(goalMs / 3_600_000)); setEditingGoal(true) }}
+          aria-label="Edit goal"
+        >
+          {goalPercent}%
+        </button>
+      </div>
+
+      {/* Progress bar — always visible, 1px thin */}
+      <div className={`relative h-px w-full rounded-full bg-white/[0.06] overflow-hidden${goalPercent >= 100 ? ' animate-pulse' : ''}`}>
+        <div
+          className={`absolute left-0 h-full rounded-full ${barColor} opacity-30`}
+          style={{ width: `${priorPercent}%` }}
+        />
+        <div
+          className={`absolute h-full rounded-full ${barColor}`}
+          style={{ left: `${priorPercent}%`, width: `${todayPercent}%` }}
+        />
+      </div>
+
+      {suggestedMs !== undefined && suggestedMs > 0 && Math.abs(suggestedMs - goalMs) / goalMs > 0.15 && (
+        <button
+          className="mt-1 text-[10px] text-zinc-700 hover:text-zinc-400 transition-colors opacity-0 group-hover/goal:opacity-100"
+          onClick={() => onSetGoal(suggestedMs)}
+        >
+          {t('goal.recalibrate')} {formatWeekly(suggestedMs)}?
+        </button>
       )}
-    </>
+    </div>
   )
 }

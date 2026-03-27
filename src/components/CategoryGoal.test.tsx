@@ -26,7 +26,7 @@ describe('CategoryGoal', () => {
   it('shows suggestion label when suggestedMs is provided', async () => {
     renderGoal({ suggestedMs: 7_200_000 }) // 2h
     await userEvent.click(screen.getByText(/set weekly goal/i))
-    expect(screen.getByText(/suggested/i)).toBeTruthy()
+    expect(screen.getByText(/suggestion/i)).toBeTruthy()
     expect(screen.getByText(/2h/)).toBeTruthy()
   })
 

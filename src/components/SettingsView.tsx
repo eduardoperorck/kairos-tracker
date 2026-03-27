@@ -10,20 +10,20 @@ import type { Storage } from '../persistence/storage'
 import { SettingKey } from '../persistence/storage'
 import { saveCredential, loadCredential } from '../services/credentials'
 import { computeNaturalCycle } from '../domain/adaptiveCycles'
+import { parseICS } from '../domain/calendarParser'
 import type { CaptureBlock } from '../domain/passiveCapture'
 
 type Props = {
   categories: Category[]
   sessions: Session[]
   storage: Storage
-  webhookUrl: string
-  onWebhookUrlChange: (url: string) => void
   focusPreset: FocusPreset
   onFocusPresetChange: (preset: FocusPreset) => void
   focusStrictMode: boolean
   onFocusStrictModeChange: (strict: boolean) => void
   onScreenshotsEnabledChange?: (enabled: boolean) => void
   captureBlocks?: CaptureBlock[]
+  onToast?: (message: string) => void
 }
 
 function downloadBlob(content: string, filename: string, mimeType: string) {
@@ -59,117 +59,6 @@ function AIBackendStatus({ apiKey }: { apiKey: string }) {
     <p className={`text-xs ${color}`}>
       {dot} {label}{status.model ? ` — ${status.model}` : ''}
     </p>
-  )
-}
-
-// ─── SyncSection ──────────────────────────────────────────────────────────────
-
-function SyncSection({ storage, sessions, categories }: { storage: Storage; sessions: Session[]; categories: Category[] }) {
-  const { t } = useI18n()
-  const [syncPath, setSyncPath] = useState('')
-  const [syncStatus, setSyncStatus] = useState<string | null>(null)
-  const [workspaceRoot, setWorkspaceRoot] = useState('')
-  const [obsidianVaultPath, setObsidianVaultPath] = useState('')
-
-  useEffect(() => {
-    Promise.all([
-      storage.getSetting(SettingKey.SyncPath),
-      storage.getSetting(SettingKey.WorkspaceRoot),
-      storage.getSetting(SettingKey.ObsidianVaultPath),
-    ]).then(([sp, wr, ov]) => {
-      setSyncPath(sp ?? '')
-      setWorkspaceRoot(wr ?? '')
-      setObsidianVaultPath(ov ?? '')
-    })
-  }, [])
-
-  async function handleSaveSyncPath() {
-    await storage.setSetting(SettingKey.SyncPath, syncPath)
-    setSyncStatus(t('settings.syncSaved'))
-  }
-
-  async function handleManualSync() {
-    const path = await storage.getSetting(SettingKey.SyncPath)
-    if (!path) { setSyncStatus(t('settings.syncNoPath')); return }
-    // Block path traversal: reject paths containing '..' segments
-    if (path.includes('..') || path.includes('\\\\') || (!path.startsWith('/') && !/^[A-Za-z]:[/\\]/.test(path))) {
-      setSyncStatus(t('settings.syncInvalid'))
-      return
-    }
-    const json = exportSessionsToJSON(sessions, categories)
-    try {
-      const { writeTextFile } = await import(/* @vite-ignore */ '@tauri-apps/plugin-fs')
-      await writeTextFile(`${path}/timetracker-sync.json`, json)
-      setSyncStatus(`Synced ${sessions.length} sessions to ${path}.`)
-    } catch {
-      // Fallback: just download
-      downloadBlob(json, 'timetracker-sync.json', 'application/json')
-      setSyncStatus('Downloaded sync file (Tauri FS not available).')
-    }
-  }
-
-  return (
-    <section>
-      <h3 className="mb-3 text-xs font-medium text-zinc-500 uppercase tracking-wider">{t('settings.sync')}</h3>
-      <p className="mb-3 text-xs text-zinc-600">{t('settings.syncDesc')}</p>
-      <div className="flex gap-2 mb-2">
-        <input
-          type="text"
-          placeholder="C:\Users\…\OneDrive\TimeTracker"
-          className="flex-1 rounded-lg border border-white/[0.07] bg-white/[0.03] px-3 py-2 text-xs text-zinc-100 placeholder-zinc-600 outline-none focus:border-white/[0.15] transition-all"
-          value={syncPath}
-          onChange={e => setSyncPath(e.target.value)}
-          onKeyDown={e => e.key === 'Enter' && handleSaveSyncPath()}
-        />
-        <button onClick={handleSaveSyncPath} className="rounded-md border border-white/[0.07] bg-white/3 px-3 py-2 text-xs text-zinc-400 hover:text-zinc-100 transition-all">{t('settings.syncSave')}</button>
-      </div>
-      <button onClick={handleManualSync} className="rounded-md border border-white/[0.07] bg-white/3 px-4 py-2 text-xs text-zinc-400 hover:text-zinc-100 hover:border-white/15 transition-all">
-        {t('settings.syncNow')}
-      </button>
-      {syncStatus && <p className="mt-2 text-xs text-emerald-400">{syncStatus}</p>}
-
-      <h3 className="mt-5 mb-2 text-xs font-medium text-zinc-500 uppercase tracking-wider">{t('settings.workspaceRoot')}</h3>
-      <p className="mb-2 text-xs text-zinc-600">{t('settings.workspaceRootDesc')}</p>
-      <div className="flex gap-2">
-        <input
-          type="text"
-          placeholder="C:\Users\…\Projects"
-          className="flex-1 rounded-lg border border-white/[0.07] bg-white/[0.03] px-3 py-2 text-xs text-zinc-100 placeholder-zinc-600 outline-none focus:border-white/[0.15] transition-all"
-          value={workspaceRoot}
-          onChange={e => setWorkspaceRoot(e.target.value)}
-          onKeyDown={e => {
-            if (e.key === 'Enter') void storage.setSetting(SettingKey.WorkspaceRoot, workspaceRoot)
-          }}
-        />
-        <button
-          onClick={() => void storage.setSetting(SettingKey.WorkspaceRoot, workspaceRoot)}
-          className="rounded-md border border-white/[0.07] bg-white/3 px-3 py-2 text-xs text-zinc-400 hover:text-zinc-100 transition-all"
-        >
-          {t('settings.save')}
-        </button>
-      </div>
-
-      <h3 className="mt-5 mb-2 text-xs font-medium text-zinc-500 uppercase tracking-wider">{t('settings.obsidian')}</h3>
-      <p className="mb-2 text-xs text-zinc-600">{t('settings.obsidianDesc')}</p>
-      <div className="flex gap-2">
-        <input
-          type="text"
-          placeholder="C:\Users\…\Obsidian\Daily Notes"
-          className="flex-1 rounded-lg border border-white/[0.07] bg-white/[0.03] px-3 py-2 text-xs text-zinc-100 placeholder-zinc-600 outline-none focus:border-white/[0.15] transition-all"
-          value={obsidianVaultPath}
-          onChange={e => setObsidianVaultPath(e.target.value)}
-          onKeyDown={e => {
-            if (e.key === 'Enter') void storage.setSetting(SettingKey.ObsidianVaultPath, obsidianVaultPath)
-          }}
-        />
-        <button
-          onClick={() => void storage.setSetting(SettingKey.ObsidianVaultPath, obsidianVaultPath)}
-          className="rounded-md border border-white/[0.07] bg-white/3 px-3 py-2 text-xs text-zinc-400 hover:text-zinc-100 transition-all"
-        >
-          {t('settings.save')}
-        </button>
-      </div>
-    </section>
   )
 }
 
@@ -317,7 +206,58 @@ function StartupSection() {
   )
 }
 
-function ProcessRulesSection({ categories }: { categories: Category[] }) {
+function PurgeOldSessionsButton({ storage, onToast }: { storage: Storage; onToast?: (msg: string) => void }) {
+  const { t } = useI18n()
+  const [confirming, setConfirming] = useState<'before-today' | 'all' | null>(null)
+  const today = new Date().toISOString().slice(0, 10)
+
+  async function handlePurge() {
+    let count: number
+    if (confirming === 'all') {
+      count = await storage.deleteAllSessions()
+      onToast?.(t('settings.deletedAllResult').replace('{count}', String(count)))
+    } else {
+      count = await storage.purgeSessionsBefore(today)
+      onToast?.(t('settings.deletedBeforeResult').replace('{count}', String(count)).replace('{date}', today))
+    }
+    setConfirming(null)
+  }
+
+  if (!confirming) {
+    return (
+      <div className="flex gap-4">
+        <button onClick={() => setConfirming('before-today')}
+          className="text-xs text-red-700 hover:text-red-400 transition-colors">
+          {t('settings.deleteBefore')}
+        </button>
+        <button onClick={() => setConfirming('all')}
+          className="text-xs text-red-700 hover:text-red-400 transition-colors">
+          {t('settings.deleteAll')}
+        </button>
+      </div>
+    )
+  }
+
+  const label = confirming === 'all'
+    ? t('settings.deleteAllConfirm')
+    : `${t('settings.deleteBeforePrefix')} ${today}?`
+
+  return (
+    <div className="flex items-center gap-3">
+      <span className="text-xs text-zinc-500">{label}</span>
+      <button onClick={handlePurge}
+        className="rounded border border-red-500/30 bg-red-500/10 px-3 py-1 text-xs text-red-400 hover:text-red-200 transition-all">
+        {t('settings.yesDelete')}
+      </button>
+      <button onClick={() => setConfirming(null)}
+        className="text-xs text-zinc-600 hover:text-zinc-400 transition-colors">
+        {t('category.cancel')}
+      </button>
+    </div>
+  )
+}
+
+function ProcessRulesSection({ categories, onToast }: { categories: Category[]; onToast?: (msg: string) => void }) {
   const { t } = useI18n()
   const [rules, setRules] = useState<WindowRule[]>(() => loadUserRules())
 
@@ -336,57 +276,64 @@ function ProcessRulesSection({ categories }: { categories: Category[] }) {
     const next = rules.filter(r => r.id !== id)
     localStorage.setItem(USER_RULES_KEY, JSON.stringify(next))
     setRules(next)
+    onToast?.(t('toast.ruleDeleted'))
   }
 
   function handleToggleMode(id: string) {
     const next = rules.map(r => r.id !== id ? r : { ...r, mode: r.mode === 'auto' ? 'suggest' as const : 'auto' as const })
     localStorage.setItem(USER_RULES_KEY, JSON.stringify(next))
     setRules(next)
+    onToast?.(t('toast.ruleUpdated'))
   }
 
   return (
     <section>
-      <h3 className="mb-3 text-xs font-medium text-zinc-500 uppercase tracking-wider">{t('settings.processRules')}</h3>
+      <h3 className="mb-2 text-xs font-medium text-zinc-500 uppercase tracking-wider">{t('settings.processRules')}</h3>
+      <p className="mb-3 text-xs text-zinc-600">{t('settings.processRulesDesc')}</p>
       {rules.length === 0 ? (
-        <p className="text-xs text-zinc-600">
-          Rules are created automatically when you classify apps from the Tracker. Open the Tracker tab and wait for an unclassified app banner to appear.
-        </p>
+        <p className="text-xs text-zinc-600">{t('settings.processRulesEmpty')}</p>
       ) : (
-        <ul className="space-y-1">
-          {rules.map(rule => {
-            const catName = rule.categoryId
-              ? (categories.find(c => c.id === rule.categoryId)?.name ?? rule.categoryId)
-              : null
-            return (
-              <li key={rule.id} className="flex items-center gap-2 rounded-lg border border-white/[0.06] bg-white/[0.02] px-3 py-2 text-xs">
-                <span className="flex-1 font-mono text-zinc-300 truncate">{rule.pattern}</span>
-                <span className="text-zinc-500 shrink-0">
-                  {rule.mode === 'ignore' ? t('settings.ignore') : catName ?? '—'}
-                </span>
-                {rule.mode !== 'ignore' && (
+        <>
+          <div className="mb-2 flex gap-4 text-[10px] text-zinc-700">
+            <span><span className="text-emerald-400 font-medium">auto</span> — {t('settings.modeAutoDesc')}</span>
+            <span><span className="text-zinc-400 font-medium">suggest</span> — {t('settings.modeSuggestDesc')}</span>
+          </div>
+          <ul className="space-y-1">
+            {rules.map(rule => {
+              const catName = rule.categoryId
+                ? (categories.find(c => c.id === rule.categoryId)?.name ?? rule.categoryId)
+                : null
+              return (
+                <li key={rule.id} className="flex items-center gap-2 rounded-lg border border-white/[0.06] bg-white/[0.02] px-3 py-2 text-xs">
+                  <span className="flex-1 font-mono text-zinc-300 truncate">{rule.pattern}</span>
+                  <span className="text-zinc-500 shrink-0">
+                    {rule.mode === 'ignore' ? t('settings.ignore') : catName ?? '—'}
+                  </span>
+                  {rule.mode !== 'ignore' && (
+                    <button
+                      title={rule.mode === 'auto' ? t('settings.modeAutoDesc') : t('settings.modeSuggestDesc')}
+                      onClick={() => handleToggleMode(rule.id)}
+                      className={`shrink-0 rounded px-1.5 py-0.5 text-[10px] transition-colors ${
+                        rule.mode === 'auto'
+                          ? 'bg-emerald-500/15 text-emerald-400 hover:bg-emerald-500/25'
+                          : 'bg-white/[0.05] text-zinc-500 hover:text-zinc-300'
+                      }`}
+                    >
+                      {rule.mode}
+                    </button>
+                  )}
                   <button
-                    title={rule.mode === 'auto' ? 'Switch to suggest (manual start)' : 'Switch to auto (automatic start)'}
-                    onClick={() => handleToggleMode(rule.id)}
-                    className={`shrink-0 rounded px-1.5 py-0.5 text-[10px] transition-colors ${
-                      rule.mode === 'auto'
-                        ? 'bg-emerald-500/15 text-emerald-400 hover:bg-emerald-500/25'
-                        : 'bg-white/[0.05] text-zinc-500 hover:text-zinc-300'
-                    }`}
+                    title={`Delete rule for ${rule.pattern}`}
+                    onClick={() => handleDelete(rule.id)}
+                    className="shrink-0 text-zinc-700 hover:text-red-400 transition-colors"
                   >
-                    {rule.mode}
+                    ✕
                   </button>
-                )}
-                <button
-                  title={`Delete rule for ${rule.pattern}`}
-                  onClick={() => handleDelete(rule.id)}
-                  className="shrink-0 text-zinc-700 hover:text-red-400 transition-colors"
-                >
-                  ✕
-                </button>
-              </li>
-            )
-          })}
-        </ul>
+                </li>
+              )
+            })}
+          </ul>
+        </>
       )}
     </section>
   )
@@ -394,7 +341,7 @@ function ProcessRulesSection({ categories }: { categories: Category[] }) {
 
 // ─── SettingsView ─────────────────────────────────────────────────────────────
 
-export function SettingsView({ categories, sessions, storage, webhookUrl, onWebhookUrlChange, focusPreset, onFocusPresetChange, focusStrictMode, onFocusStrictModeChange, onScreenshotsEnabledChange, captureBlocks }: Props) {
+export function SettingsView({ categories, sessions, storage, focusPreset, onFocusPresetChange, focusStrictMode, onFocusStrictModeChange, onScreenshotsEnabledChange, captureBlocks, onToast }: Props) {
   const { t, lang, setLang } = useI18n()
   const [restoreStatus, setRestoreStatus] = useState<string | null>(null)
 
@@ -404,16 +351,10 @@ export function SettingsView({ categories, sessions, storage, webhookUrl, onWebh
       return computeNaturalCycle(captureBlocks)
     } catch { return null }
   }, [captureBlocks])
-  const [webhookDraft, setWebhookDraft] = useState(webhookUrl)
   const [apiKeyDraft, setApiKeyDraft] = useState('')
   const [apiKeySaved, setApiKeySaved] = useState(false)
   const [githubUsername, setGithubUsername] = useState('')
   const [githubSaved, setGithubSaved] = useState(false)
-  const [slackToken, setSlackToken] = useState('')
-  const [slackSaved, setSlackSaved] = useState(false)
-  const [notionToken, setNotionToken] = useState('')
-  const [notionDatabaseId, setNotionDatabaseId] = useState('')
-  const [notionSaved, setNotionSaved] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [expandedIntegration, setExpandedIntegration] = useState<string | null>(null)
   const [integrationsOpen, setIntegrationsOpen] = useState(false)
@@ -426,15 +367,9 @@ export function SettingsView({ categories, sessions, storage, webhookUrl, onWebh
     Promise.all([
       loadCredential(SettingKey.AnthropicApiKey),
       storage.getSetting(SettingKey.GithubUsername),
-      storage.getSetting(SettingKey.SlackToken),
-      storage.getSetting(SettingKey.NotionToken),
-      storage.getSetting(SettingKey.NotionDatabaseId),
-    ]).then(([k, gh, slack, nt, ndb]) => {
+    ]).then(([k, gh]) => {
       if (k) setApiKeyDraft('••••••••' + k.slice(-4))
       if (gh) setGithubUsername(gh)
-      if (slack) setSlackToken('••••••••' + slack.slice(-4))
-      if (nt) setNotionToken('••••••••' + nt.slice(-4))
-      if (ndb) setNotionDatabaseId(ndb)
     })
   }, [])
 
@@ -442,6 +377,7 @@ export function SettingsView({ categories, sessions, storage, webhookUrl, onWebh
     const json = exportSessionsToJSON(sessions, categories)
     const date = toLocalDateString(Date.now())
     downloadBlob(json, `timetracker-backup-${date}.json`, 'application/json')
+    onToast?.(t('toast.backupExported'))
   }
 
   async function handleRestoreFile(e: React.ChangeEvent<HTMLInputElement>) {
@@ -467,7 +403,7 @@ export function SettingsView({ categories, sessions, storage, webhookUrl, onWebh
         }
       })
       await storage.importSessions(sessions)
-      setRestoreStatus(t('backup.restoreSuccess').replace('{n}', String(sessions.length)))
+      onToast?.(t('backup.restoreSuccess').replace('{n}', String(sessions.length)))
     } catch (e) {
       const msg = e instanceof Error ? e.message : ''
       setRestoreStatus(isI18nKey(msg) ? t(msg as TKey) : t('backup.errorInvalid'))
@@ -475,9 +411,36 @@ export function SettingsView({ categories, sessions, storage, webhookUrl, onWebh
     if (fileInputRef.current) fileInputRef.current.value = ''
   }
 
-  async function handleSaveWebhook() {
-    await storage.setSetting(SettingKey.WebhookUrl, webhookDraft)
-    onWebhookUrlChange(webhookDraft)
+  const [hourlyRate, setHourlyRate] = useState('')
+  const [hourlyRateSaved, setHourlyRateSaved] = useState(false)
+  const [calendarEventCount, setCalendarEventCount] = useState<number | null>(null)
+  const calendarInputRef = useRef<HTMLInputElement>(null)
+
+  useEffect(() => {
+    storage.getSetting(SettingKey.HourlyRate).then(v => { if (v) setHourlyRate(v) })
+  }, [storage])
+
+  async function handleHourlyRateSave() {
+    const trimmed = hourlyRate.trim()
+    await storage.setSetting(SettingKey.HourlyRate, trimmed)
+    setHourlyRateSaved(true)
+    onToast?.(t('settings.hourlyRateSaved'))
+  }
+
+  async function handleCalendarFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    try {
+      const text = await file.text()
+      const events = parseICS(text)
+      // Store in localStorage for App.tsx to read
+      localStorage.setItem('calendar_events', JSON.stringify(events))
+      setCalendarEventCount(events.length)
+      onToast?.(t('settings.calendarLoaded').replace('{n}', String(events.length)))
+    } catch {
+      onToast?.('Failed to parse calendar file.')
+    }
+    if (calendarInputRef.current) calendarInputRef.current.value = ''
   }
 
   const [expandedSection, setExpandedSection] = useState<string | null>(null)
@@ -507,29 +470,8 @@ export function SettingsView({ categories, sessions, storage, webhookUrl, onWebh
 
       <div className="space-y-1">
 
-        {/* ── Language ── */}
-        {(() => {
-          const open = expandedSection === 'language'
-          return (
-            <div className="rounded-lg border border-white/[0.06] overflow-hidden">
-              <AccordionRow id="language" label={t('settings.language')} status={t('settings.langName')} />
-              {open && (
-                <div className="px-4 pb-4 flex gap-2">
-                  {(['en', 'pt'] as const).map(l => (
-                    <button key={l} onClick={() => setLang(l)}
-                      className={`rounded-lg border px-4 py-2 text-xs transition-all ${
-                        lang === l
-                          ? 'border-emerald-500/40 bg-emerald-500/8 text-emerald-400'
-                          : 'border-white/[0.07] bg-white/2 text-zinc-500 hover:text-zinc-200 hover:border-white/15'
-                      }`}>
-                      {l === 'en' ? translations.en['settings.langName'] : translations.pt['settings.langName']}
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-          )
-        })()}
+        {/* ── Timer & Focus ── */}
+        <h3 className="px-1 pt-4 pb-1 text-[10px] font-semibold uppercase tracking-widest text-zinc-600">Timer &amp; Focus</h3>
 
         {/* ── Focus Preset ── */}
         {(() => {
@@ -598,7 +540,7 @@ export function SettingsView({ categories, sessions, storage, webhookUrl, onWebh
               <AccordionRow id="rules" label={t('settings.processRules')} />
               {open && (
                 <div className="px-4 pb-4">
-                  <ProcessRulesSection categories={categories} />
+                  <ProcessRulesSection categories={categories} onToast={onToast} />
                 </div>
               )}
             </div>
@@ -620,14 +562,81 @@ export function SettingsView({ categories, sessions, storage, webhookUrl, onWebh
           )
         })()}
 
+        {/* ── Productivity ── */}
+        <h3 className="px-1 pt-4 pb-1 text-[10px] font-semibold uppercase tracking-widest text-zinc-600">{t('settings.productivity')}</h3>
+
+        {(() => {
+          const open = expandedSection === 'productivity'
+          return (
+            <div className="rounded-lg border border-white/[0.06] overflow-hidden">
+              <AccordionRow id="productivity" label={t('settings.hourlyRate')} status={hourlyRate ? `$${hourlyRate}/h` : undefined} />
+              {open && (
+                <div className="px-4 pb-4 space-y-4">
+                  {/* Hourly rate */}
+                  <div className="space-y-2">
+                    <p className="text-xs text-zinc-600">{t('settings.hourlyRateDesc')}</p>
+                    <div className="flex gap-2 items-center">
+                      <span className="text-xs text-zinc-500">$</span>
+                      <input
+                        type="number"
+                        min="0"
+                        step="1"
+                        placeholder={t('settings.hourlyRatePlaceholder')}
+                        value={hourlyRate}
+                        onChange={e => { setHourlyRate(e.target.value); setHourlyRateSaved(false) }}
+                        onKeyDown={e => e.key === 'Enter' && handleHourlyRateSave()}
+                        className="w-32 rounded-lg border border-white/[0.07] bg-white/[0.03] px-3 py-2 text-xs text-zinc-100 placeholder-zinc-600 outline-none focus:border-white/[0.15] transition-all"
+                      />
+                      <span className="text-xs text-zinc-500">/h</span>
+                      <button
+                        onClick={handleHourlyRateSave}
+                        className="rounded-lg border border-white/[0.07] px-3 py-2 text-xs text-zinc-400 hover:text-zinc-100 transition-all"
+                      >
+                        {hourlyRateSaved ? '✓' : t('settings.save')}
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* M93: Calendar .ics import */}
+                  <div className="space-y-2 border-t border-white/[0.04] pt-3">
+                    <p className="text-xs font-medium text-zinc-500">{t('settings.calendarFile')}</p>
+                    <p className="text-xs text-zinc-600">{t('settings.calendarDesc')}</p>
+                    <div className="flex gap-2 items-center">
+                      <input
+                        ref={calendarInputRef}
+                        type="file"
+                        accept=".ics"
+                        onChange={handleCalendarFile}
+                        className="hidden"
+                        id="calendar-file-input"
+                      />
+                      <label
+                        htmlFor="calendar-file-input"
+                        className="cursor-pointer rounded-lg border border-white/[0.07] px-3 py-2 text-xs text-zinc-400 hover:text-zinc-100 transition-all"
+                      >
+                        Choose .ics file
+                      </label>
+                      {calendarEventCount !== null && (
+                        <span className="text-xs text-emerald-400">
+                          {t('settings.calendarLoaded').replace('{n}', String(calendarEventCount))}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          )
+        })()}
+
+        {/* ── Integrations ── */}
+        <h3 className="px-1 pt-4 pb-1 text-[10px] font-semibold uppercase tracking-widest text-zinc-600">Integrations</h3>
+
         {/* ── Integrations (parent accordion) ── */}
         {(() => {
           const connectedCount = [
             apiKeyDraft.startsWith('••'),
             !!githubUsername,
-            slackToken.startsWith('••'),
-            notionToken.startsWith('••'),
-            !!webhookDraft,
           ].filter(Boolean).length
           const subtitle = connectedCount > 0
             ? `${connectedCount} connected`
@@ -667,11 +676,11 @@ export function SettingsView({ categories, sessions, storage, webhookUrl, onWebh
                                 className="flex-1 rounded-lg border border-white/[0.07] bg-white/[0.03] px-3 py-2 text-xs text-zinc-100 placeholder-zinc-600 outline-none focus:border-white/[0.15] transition-all"
                                 value={apiKeyDraft.startsWith('••') ? '' : apiKeyDraft}
                                 onChange={e => { setApiKeyDraft(e.target.value); setApiKeySaved(false) }}
-                                onKeyDown={e => e.key === 'Enter' && !apiKeyDraft.startsWith('••') && saveCredential(SettingKey.AnthropicApiKey, apiKeyDraft).then(() => setApiKeySaved(true))}
+                                onKeyDown={e => e.key === 'Enter' && !apiKeyDraft.startsWith('••') && saveCredential(SettingKey.AnthropicApiKey, apiKeyDraft).then(() => { setApiKeySaved(true); onToast?.(t('toast.apiKeySaved')) })}
                               />
                               <button onClick={() => {
                                   if (!apiKeyDraft || apiKeyDraft.startsWith('••')) return
-                                  saveCredential(SettingKey.AnthropicApiKey, apiKeyDraft).then(() => { setApiKeySaved(true); setApiKeyDraft('••••••••' + apiKeyDraft.slice(-4)) })
+                                  saveCredential(SettingKey.AnthropicApiKey, apiKeyDraft).then(() => { setApiKeySaved(true); setApiKeyDraft('••••••••' + apiKeyDraft.slice(-4)); onToast?.(t('toast.apiKeySaved')) })
                                 }}
                                 className="rounded-md border border-white/[0.07] bg-white/[0.03] px-3 py-2 text-xs text-zinc-400 hover:text-zinc-100 transition-all">
                                 {apiKeySaved ? t('settings.saved') : t('settings.save')}
@@ -709,116 +718,8 @@ export function SettingsView({ categories, sessions, storage, webhookUrl, onWebh
                                 onBlur={() => { storage.getSetting(SettingKey.GithubUsername).then(v => { if (v !== githubUsername) storage.setSetting(SettingKey.GithubUsername, githubUsername).then(() => setGithubSaved(true)) }) }}
                                 onKeyDown={e => e.key === 'Enter' && storage.setSetting(SettingKey.GithubUsername, githubUsername).then(() => setGithubSaved(true))}
                               />
-                              {githubSaved && <span className="self-center text-xs text-emerald-400">Saved ✓</span>}
+                              {githubSaved && <span className="self-center text-xs text-emerald-400">{t('settings.saved')}</span>}
                             </div>
-                          </div>
-                        )}
-                      </div>
-                    )
-                  })()}
-
-                  {/* ── Slack ── */}
-                  {(() => {
-                    const connected = slackToken.startsWith('••')
-                    const open = expandedIntegration === 'slack'
-                    return (
-                      <div>
-                        <button className="flex w-full items-center justify-between px-6 py-3 text-xs text-zinc-400 hover:bg-white/[0.02] transition-colors"
-                          onClick={() => toggleIntegration('slack')}>
-                          <span className="font-medium">{t('settings.slackStatus')}</span>
-                          <span className={connected ? 'text-emerald-400' : 'text-zinc-600'}>
-                            {connected ? t('settings.connected') : open ? '▲' : t('settings.setup')}
-                          </span>
-                        </button>
-                        {open && (
-                          <div className="px-6 pb-4 space-y-2">
-                            <p className="text-xs text-zinc-600">{t('settings.slackDesc')}</p>
-                            <div className="flex gap-2">
-                              <input type="password" placeholder="xoxp-…"
-                                className="flex-1 rounded-lg border border-white/[0.07] bg-white/[0.03] px-3 py-2 text-xs text-zinc-100 placeholder-zinc-600 outline-none focus:border-white/[0.15] transition-all"
-                                value={slackToken.startsWith('••') ? '' : slackToken}
-                                onChange={e => { setSlackToken(e.target.value); setSlackSaved(false) }}
-                                onKeyDown={e => e.key === 'Enter' && !slackToken.startsWith('••') && storage.setSetting(SettingKey.SlackToken, slackToken).then(() => { setSlackSaved(true); setSlackToken('••••••••' + slackToken.slice(-4)) })}
-                              />
-                              <button onClick={() => {
-                                  if (!slackToken || slackToken.startsWith('••')) return
-                                  storage.setSetting(SettingKey.SlackToken, slackToken).then(() => { setSlackSaved(true); setSlackToken('••••••••' + slackToken.slice(-4)) })
-                                }}
-                                className="rounded-md border border-white/[0.07] bg-white/[0.03] px-3 py-2 text-xs text-zinc-400 hover:text-zinc-100 transition-all">
-                                {slackSaved ? t('settings.saved') : t('settings.save')}
-                              </button>
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    )
-                  })()}
-
-                  {/* ── Notion ── */}
-                  {(() => {
-                    const connected = notionToken.startsWith('••')
-                    const open = expandedIntegration === 'notion'
-                    return (
-                      <div>
-                        <button className="flex w-full items-center justify-between px-6 py-3 text-xs text-zinc-400 hover:bg-white/[0.02] transition-colors"
-                          onClick={() => toggleIntegration('notion')}>
-                          <span className="font-medium">{t('settings.notionExport')}</span>
-                          <span className={connected ? 'text-emerald-400' : 'text-zinc-600'}>
-                            {connected ? t('settings.connected') : open ? '▲' : t('settings.setup')}
-                          </span>
-                        </button>
-                        {open && (
-                          <div className="px-6 pb-4 space-y-2">
-                            <p className="text-xs text-zinc-600">{t('settings.notionDesc')}</p>
-                            <div className="flex gap-2">
-                              <input type="password" placeholder="secret_…"
-                                className="flex-1 rounded-lg border border-white/[0.07] bg-white/[0.03] px-3 py-2 text-xs text-zinc-100 placeholder-zinc-600 outline-none focus:border-white/[0.15] transition-all"
-                                value={notionToken.startsWith('••') ? '' : notionToken}
-                                onChange={e => { setNotionToken(e.target.value); setNotionSaved(false) }}
-                              />
-                              <input type="text" placeholder="Database ID"
-                                className="flex-1 rounded-lg border border-white/[0.07] bg-white/[0.03] px-3 py-2 text-xs text-zinc-100 placeholder-zinc-600 outline-none focus:border-white/[0.15] transition-all"
-                                value={notionDatabaseId}
-                                onChange={e => { setNotionDatabaseId(e.target.value); setNotionSaved(false) }}
-                              />
-                              <button onClick={async () => {
-                                  if (!notionToken || notionToken.startsWith('••')) return
-                                  await Promise.all([storage.setSetting(SettingKey.NotionToken, notionToken), storage.setSetting(SettingKey.NotionDatabaseId, notionDatabaseId)])
-                                  setNotionSaved(true); setNotionToken('••••••••' + notionToken.slice(-4))
-                                }}
-                                className="rounded-md border border-white/[0.07] bg-white/[0.03] px-3 py-2 text-xs text-zinc-400 hover:text-zinc-100 transition-all">
-                                {notionSaved ? t('settings.saved') : t('settings.save')}
-                              </button>
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    )
-                  })()}
-
-                  {/* ── Webhooks ── */}
-                  {(() => {
-                    const connected = !!webhookDraft
-                    const open = expandedIntegration === 'webhook'
-                    return (
-                      <div>
-                        <button className="flex w-full items-center justify-between px-6 py-3 text-xs text-zinc-400 hover:bg-white/[0.02] transition-colors"
-                          onClick={() => toggleIntegration('webhook')}>
-                          <span className="font-medium">{t('settings.webhooks')}</span>
-                          <span className={connected ? 'text-emerald-400' : 'text-zinc-600'}>
-                            {connected ? t('settings.connected') : open ? '▲' : t('settings.setup')}
-                          </span>
-                        </button>
-                        {open && (
-                          <div className="px-6 pb-4 space-y-2">
-                            <p className="text-xs text-zinc-600">{t('settings.webhooksDesc')}</p>
-                            <input type="url" placeholder="https://…"
-                              className="w-full rounded-lg border border-white/[0.07] bg-white/[0.03] px-3 py-2 text-xs text-zinc-100 placeholder-zinc-600 outline-none focus:border-white/[0.15] transition-all"
-                              value={webhookDraft}
-                              onChange={e => setWebhookDraft(e.target.value)}
-                              onKeyDown={e => e.key === 'Enter' && handleSaveWebhook()}
-                              onBlur={handleSaveWebhook}
-                            />
                           </div>
                         )}
                       </div>
@@ -831,20 +732,8 @@ export function SettingsView({ categories, sessions, storage, webhookUrl, onWebh
           )
         })()}
 
-        {/* ── Sync ── */}
-        {(() => {
-          const open = expandedSection === 'sync'
-          return (
-            <div className="rounded-lg border border-white/[0.06] overflow-hidden">
-              <AccordionRow id="sync" label={t('settings.sync')} />
-              {open && (
-                <div className="px-4 pb-4">
-                  <SyncSection storage={storage} sessions={sessions} categories={categories} />
-                </div>
-              )}
-            </div>
-          )
-        })()}
+        {/* ── Data & Export ── */}
+        <h3 className="px-1 pt-4 pb-1 text-[10px] font-semibold uppercase tracking-widest text-zinc-600">Data &amp; Export</h3>
 
         {/* ── Screenshots ── */}
         {(() => {
@@ -879,6 +768,38 @@ export function SettingsView({ categories, sessions, storage, webhookUrl, onWebh
                     {t('settings.restoreBackup')}
                   </button>
                   {restoreStatus && <p className="mt-2 text-xs text-emerald-400 w-full">{restoreStatus}</p>}
+
+                  {/* Purge old sessions */}
+                  <div className="w-full mt-3 pt-3 border-t border-white/[0.05]">
+                    <PurgeOldSessionsButton storage={storage} onToast={onToast} />
+                  </div>
+                </div>
+              )}
+            </div>
+          )
+        })()}
+
+        {/* ── Appearance ── */}
+        <h3 className="px-1 pt-4 pb-1 text-[10px] font-semibold uppercase tracking-widest text-zinc-600">Appearance</h3>
+
+        {/* ── Language ── */}
+        {(() => {
+          const open = expandedSection === 'language'
+          return (
+            <div className="rounded-lg border border-white/[0.06] overflow-hidden">
+              <AccordionRow id="language" label={t('settings.language')} status={t('settings.langName')} />
+              {open && (
+                <div className="px-4 pb-4 flex gap-2">
+                  {(['en', 'pt'] as const).map(l => (
+                    <button key={l} onClick={() => setLang(l)}
+                      className={`rounded-lg border px-4 py-2 text-xs transition-all ${
+                        lang === l
+                          ? 'border-emerald-500/40 bg-emerald-500/8 text-emerald-400'
+                          : 'border-white/[0.07] bg-white/2 text-zinc-500 hover:text-zinc-200 hover:border-white/15'
+                      }`}>
+                      {l === 'en' ? translations.en['settings.langName'] : translations.pt['settings.langName']}
+                    </button>
+                  ))}
                 </div>
               )}
             </div>

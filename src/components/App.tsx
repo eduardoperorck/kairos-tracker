@@ -13,69 +13,59 @@ import { useInitStore } from '../hooks/useInitStore'
 import { useTrayStatus } from '../hooks/useTrayStatus'
 import { registerGlobalShortcuts } from '../hooks/useGlobalShortcuts'
 import { useIdleDetection } from '../hooks/useIdleDetection'
-import { useWebhooks } from '../hooks/useWebhooks'
 import { useNotifications } from '../hooks/useNotifications'
 import { computeStats } from '../domain/stats'
 import { exportDayAsMarkdown } from '../domain/history'
 import { toDateString, getWeekDates, computeWeekMs, computeStreak } from '../domain/timer'
 import { computeEnergyPattern, isFlowSession } from '../domain/history'
 import { ActiveTimerBar } from './ActiveTimerBar'
+import { Toast } from './Toast'
+import { UndoToast } from './UndoToast'
+import { PassiveTrackingIndicator } from './PassiveTrackingIndicator'
+import { SessionFixWidget } from './SessionFixWidget'
+import { splitSession, editSessionTime } from '../domain/sessionFix'
+import { useToast } from '../hooks/useToast'
 import { CommandPalette } from './CommandPalette'
 import { OnboardingWizard } from './OnboardingWizard'
 import { ProductivityWrapped } from './ProductivityWrapped'
 import type { CategoryInsights } from './CategoryItem'
-import { shouldTriggerBreak, FOCUS_PRESETS, type FocusPreset } from '../domain/focusGuard'
-import { createIntention, createEveningReview } from '../domain/intentions'
+import { FOCUS_PRESETS } from '../domain/focusGuard'
 import { formatElapsed } from '../domain/format'
 import { useInputActivity } from '../hooks/useInputActivity'
 import { usePassiveCapture } from '../hooks/usePassiveCapture'
+import { useSessionManagement } from '../hooks/useSessionManagement'
+import { useFocusGuardState } from '../hooks/useFocusGuardState'
+import { useDailyState } from '../hooks/useDailyState'
+import { useSettingsLoader } from '../hooks/useSettingsLoader'
 import { useAutoBackup } from '../hooks/useAutoBackup'
 import { useLocalGitCommits } from '../hooks/useLocalGitCommits'
 import { useWindowBounds } from '../hooks/useWindowBounds'
 import { useUpdateCheck } from '../hooks/useUpdateCheck'
 import { useObsidianExport } from '../hooks/useObsidianExport'
-import { setSlackFocusStatus, clearSlackStatus } from '../services/slack'
-import { suggestSessionTag } from '../domain/sessionNaming'
-import type { Intention, EveningReview } from '../domain/intentions'
 import type { Storage, DailyCaptureStatRow } from '../persistence/storage'
 import { SettingKey } from '../persistence/storage'
-import { loadCredential } from '../services/credentials'
 import type { MVDItem } from '../domain/minimumViableDay'
 import { filterToday } from '../domain/minimumViableDay'
-import { DEFAULT_CATEGORY_SUGGESTIONS } from '../domain/passiveCapture'
-import type { CategorySlot, UnclassifiedApp } from '../domain/passiveCapture'
-import type { Category } from '../domain/timer'
+import { ClassifyOverlay } from './ClassifyOverlay'
+import { AppHeader } from './AppHeader'
+import { useUndoStack } from '../hooks/useUndoStack'
 
-const POSTPONE_MS = 5 * 60_000 // 5 minutes
-const MIN_SESSION_MS = 30_000 // 30 seconds — micro-session gate
-const PRIMARY_VIEWS = ['tracker', 'today', 'stats'] as const
-const SECONDARY_VIEWS = ['history', 'settings'] as const
 
 type Props = { storage: Storage }
 
 export function App({ storage }: Props) {
   const { t } = useI18n()
-  const { categories, sessions, historySessions, addCategory, startTimer, stopTimer, deleteCategory, renameCategory, setWeeklyGoal, setCategoryColor, setPendingTag, archiveCategory } = useTimerState()
+  const { toast, showToast } = useToast()
+  const { categories, sessions, historySessions, addCategory, renameCategory, setWeeklyGoal, setCategoryColor, setPendingTag, archiveCategory } = useTimerState()
 
   // ── UI state ────────────────────────────────────────────────────────────────
-  const [input, setInput] = useState('')
   const [view, setView] = useState<'tracker' | 'stats' | 'history' | 'today' | 'settings'>('tracker')
   const [focusLockActive, setFocusLockActive] = useState(false)
   const [paletteOpen, setPaletteOpen] = useState(false)
   const [onboardingDone, setOnboardingDone] = useState(
     () => localStorage.getItem('onboarding_complete') === 'true'
   )
-  const [intentions, setIntentions] = useState<Intention[]>([])
-  const [eveningReview, setEveningReview] = useState<EveningReview | null>(null)
-  const [webhookUrl, setWebhookUrl] = useState<string | null>(null)
-  const [claudeApiKey, setClaudeApiKey] = useState<string | null>(null)
-  const [githubUsername, setGithubUsername] = useState<string | null>(null)
-  const [workspaceRoot, setWorkspaceRoot] = useState<string | null>(null)
-  const [slackToken, setSlackToken] = useState<string | null>(null)
-  const [screenshotsEnabled, setScreenshotsEnabled] = useState(false)
   const [wrappedOpen, setWrappedOpen] = useState(false)
-  const [navMoreOpen, setNavMoreOpen] = useState(false)
-  const navMoreRef = useRef<HTMLDivElement>(null)
   const openNLPRef = useRef<(() => void) | null>(null)
   const [mvdItems, setMvdItems] = useState<MVDItem[]>(() => {
     try {
@@ -83,20 +73,10 @@ export function App({ storage }: Props) {
       return filterToday(all, toDateString(Date.now()))
     } catch { return [] }
   })
-  // Daily recap banner — shown once per day on first open
-  const [dailyRecap, setDailyRecap] = useState<string | null>(null)
-  // Morning intentions prompt — shown on first launch of the day when no intentions set
-  const [showMorningPrompt, setShowMorningPrompt] = useState(() => {
-    const todayKey = toDateString(Date.now())
-    return localStorage.getItem(`morning_prompt_dismissed_${todayKey}`) !== 'true'
-  })
   // Shortcut tooltip — shown once after onboarding completes
   const [showShortcutTip, setShowShortcutTip] = useState(() =>
     localStorage.getItem('shortcut_tip_shown') !== 'true'
   )
-
-  // Periodic tick to keep shouldShowBreak up to date (re-evaluates Date.now() every 30s)
-  const [, setTick] = useState(0)
 
   // N1: track last category switch
   const [lastSwitch, setLastSwitch] = useState<{ at: number; fromName: string } | null>(null)
@@ -104,24 +84,28 @@ export function App({ storage }: Props) {
   const [idleMs, setIdleMs] = useState(0)
   const lastActivityRef = useRef(Date.now())
 
-  // ── FocusGuard state ────────────────────────────────────────────────────────
-  const [focusPreset, setFocusPreset] = useState<FocusPreset>(FOCUS_PRESETS[0])
-  const [focusStrictMode, setFocusStrictMode] = useState(false)
-  const [breakActive, setBreakActive] = useState(false)
-  const [postponedUntil, setPostponedUntil] = useState<number | null>(null)
-  const [postponeUsed, setPostponeUsed] = useState(false)
-  const [breakSkipCount, setBreakSkipCount] = useState(0)
-  const [breakCompletedCount, setBreakCompletedCount] = useState(0)
-
   // ── Hooks ───────────────────────────────────────────────────────────────────
   useInitStore(storage)
-  const webhooks = useWebhooks(webhookUrl)
   const notifications = useNotifications()
+  const { push: pushUndo, undo, canUndo, lastOperation: undoOperation } = useUndoStack()
   const inputActivity = useInputActivity()
+  const [pendingFixSession, setPendingFixSession] = useState<import('../domain/timer').Session | null>(null)
+  const SESSION_FIX_THRESHOLD_MS = 45 * 60_000
+  const [meetingMode, setMeetingMode] = useState<{ active: boolean; startedAt: number | null; previousCategoryId: string | null; previousCategoryName: string | null }>({ active: false, startedAt: null, previousCategoryId: null, previousCategoryName: null })
+  const [meetingResume, setMeetingResume] = useState<{ categoryId: string; categoryName: string; durationMs: number } | null>(null)
+
+  // Settings loaded early so workspaceRoot is available before useLocalGitCommits
+  const setFocusPresetRef = useRef<((p: any) => void) | undefined>(undefined)
+  const setFocusStrictModeRef = useRef<((s: boolean) => void) | undefined>(undefined)
+  const { claudeApiKey, githubUsername, workspaceRoot, screenshotsEnabled, setScreenshotsEnabled } = useSettingsLoader({
+    storage,
+    setFocusPreset: (p) => setFocusPresetRef.current?.(p),
+    setFocusStrictMode: (s) => setFocusStrictModeRef.current?.(s),
+  })
 
   // P1: passive window capture (M89: pass inputActivity for idle detection)
   const activeCatId = categories.find(c => c.activeEntry !== null)?.id ?? null
-  const { blocks: captureBlocks, unclassifiedProcess, suggestedCategoryId, recentTitles, elevationSuggestion, assignProcess, dismissProcess, elevateProcess, dismissElevation, resetAutoStart } = usePassiveCapture(activeCatId, inputActivity)
+  const { blocks: captureBlocks, unclassifiedProcess, unclassifiedWorkspace, suggestedCategoryId, recentTitles, elevationSuggestion, idlePauseMs, classificationReason, currentWindow, assignProcess, dismissProcess, elevateProcess, dismissElevation, assignWorkspace, dismissWorkspace, resetAutoStart, dismissIdlePause } = usePassiveCapture(activeCatId, inputActivity, undefined, storage, historySessions)
   useAutoBackup(storage, historySessions, categories)
   const localGitCommits = useLocalGitCommits(recentTitles, workspaceRoot)
   useWindowBounds()
@@ -169,51 +153,29 @@ export function App({ storage }: Props) {
     return () => window.removeEventListener('beforeunload', onUnload)
   }, [flushCaptureStats])
 
-  // ── Load settings on mount ──────────────────────────────────────────────────
-  useEffect(() => {
-    Promise.all([
-      storage.getSetting(SettingKey.WebhookUrl),
-      storage.getSetting(SettingKey.FocusPreset),
-      storage.getSetting(SettingKey.FocusStrictMode),
-      loadCredential(SettingKey.AnthropicApiKey),
-      storage.getSetting(SettingKey.GithubUsername),
-      storage.getSetting(SettingKey.ScreenshotsEnabled),
-      storage.getSetting(SettingKey.WorkspaceRoot),
-      storage.getSetting(SettingKey.SlackToken),
-    ]).then(([url, preset, strict, apiKey, ghUser, screenshots, wsRoot, slackTok]) => {
-      setWebhookUrl(url)
-      setClaudeApiKey(apiKey)
-      setGithubUsername(ghUser)
-      setScreenshotsEnabled(screenshots === 'true')
-      setWorkspaceRoot(wsRoot)
-      setSlackToken(slackTok)
-      if (preset) {
-        const found = FOCUS_PRESETS.find(p => p.name === preset)
-        if (found) setFocusPreset(found)
-      }
-      if (strict === 'true') setFocusStrictMode(true)
-    }).catch(err => {
-      console.error('[App] Failed to load settings:', err)
-    })
-  }, [])
-
   const today = useMemo(() => toDateString(Date.now()), [])
+
+  const {
+    intentions,
+    eveningReview,
+    dailyRecap, setDailyRecap,
+    handleAddIntention,
+    handleSaveReview,
+  } = useDailyState({ storage, today, historySessions, t: t as (key: string) => string })
 
   useObsidianExport(storage, today, sessions, categories, intentions, eveningReview)
 
-  useEffect(() => {
-    Promise.all([
-      storage.loadIntentionsByDate(today),
-      storage.loadEveningReviewByDate(today),
-    ]).then(([ints, rev]) => {
-      setIntentions(ints)
-      setEveningReview(rev)
-    }).catch(err => {
-      console.error('[App] Failed to load daily data:', err)
-    })
-  }, [today])
-
   const weekDates = useMemo(() => getWeekDates(today), [today])
+
+  const { input, setInput, handleAdd, handleStart, handleStop } = useSessionManagement({
+    storage,
+    recentTitles,
+    captureBlocksRef,
+    flushCaptureStats,
+    notifications,
+    setLastSwitch,
+    weekDates,
+  })
   const streaks = useMemo(() => Object.fromEntries(
     categories.map(c => [
       c.id,
@@ -234,12 +196,20 @@ export function App({ storage }: Props) {
   const activeCategory = categories.find(c => c.activeEntry !== null)
   const activeStartedAt = activeCategory?.activeEntry?.startedAt ?? null
 
-  // ── Reset break state when active category changes ──────────────────────────
-  useEffect(() => {
-    setBreakActive(false)
-    setPostponedUntil(null)
-    setPostponeUsed(false)
-  }, [activeCategory?.id])
+  const {
+    focusPreset, setFocusPreset,
+    focusStrictMode, setFocusStrictMode,
+    setBreakActive,
+    postponeUsed,
+    breakSkipCount, setBreakSkipCount,
+    breakCompletedCount, setBreakCompletedCount,
+    shouldShowBreak,
+    handlePostpone,
+  } = useFocusGuardState({ activeStartedAt, activeCategoryId: activeCategory?.id ?? null })
+
+  // Bind focus setters to refs so they are available when settings load async
+  setFocusPresetRef.current = setFocusPreset
+  setFocusStrictModeRef.current = setFocusStrictMode
 
   // ── Long-session notification — first at 90 min, then every 30 min ──────────
   const lastLongSessionNotifRef = useRef<number>(0)
@@ -259,13 +229,6 @@ export function App({ storage }: Props) {
     }, 5 * 60_000) // check every 5 min
     return () => clearInterval(id)
   }, [activeStartedAt, activeCategory?.id])
-
-  // ── 30-second tick — ensures shouldShowBreak is re-evaluated promptly ────────
-  useEffect(() => {
-    if (!activeStartedAt) return
-    const id = setInterval(() => setTick(t => t + 1), 30_000)
-    return () => clearInterval(id)
-  }, [activeStartedAt])
 
   // ── Daily reminder if no sessions tracked by 20h ────────────────────────────
   useEffect(() => {
@@ -295,16 +258,6 @@ export function App({ storage }: Props) {
   useEffect(() => {
     localStorage.setItem('mvd_items', JSON.stringify(mvdItems))
   }, [mvdItems])
-
-  // ── Nav overflow click-outside ───────────────────────────────────────────────
-  useEffect(() => {
-    if (!navMoreOpen) return
-    function onDown(e: MouseEvent) {
-      if (navMoreRef.current && !navMoreRef.current.contains(e.target as Node)) setNavMoreOpen(false)
-    }
-    document.addEventListener('mousedown', onDown)
-    return () => document.removeEventListener('mousedown', onDown)
-  }, [navMoreOpen])
 
   // ── Command palette keyboard shortcut ───────────────────────────────────────
   useEffect(() => {
@@ -347,36 +300,13 @@ export function App({ storage }: Props) {
     if (!suggestedCategoryId) return
     const state = useTimerStore.getState()
     const active = state.categories.find(c => c.activeEntry !== null)
-    if (active?.id !== suggestedCategoryId) handleStart(suggestedCategoryId)
+    if (active?.id !== suggestedCategoryId) {
+      handleStart(suggestedCategoryId)
+      const catName = state.categories.find(c => c.id === suggestedCategoryId)?.name
+      if (catName) setDailyRecap(`▶ ${catName} — auto-started`)
+      setTimeout(() => setDailyRecap(null), 4_000)
+    }
   }, [suggestedCategoryId])
-
-  // ── Daily recap: show yesterday's summary on first open of the day ──────────
-  useEffect(() => {
-    if (historySessions.length === 0) return
-    const todayStr = toDateString(Date.now())
-    const lastOpen = localStorage.getItem('last_open_date')
-    localStorage.setItem('last_open_date', todayStr)
-    if (!lastOpen || lastOpen === todayStr) return
-
-    const yesterday = toDateString(Date.now() - 86_400_000)
-    const yesterdaySessions = historySessions.filter(s => s.date === yesterday)
-    if (yesterdaySessions.length === 0) return
-
-    const totalMs = yesterdaySessions.reduce((sum, s) => sum + (s.endedAt - s.startedAt), 0)
-    const catCount = new Set(yesterdaySessions.map(s => s.categoryId)).size
-    const totalH = Math.floor(totalMs / 3_600_000)
-    const totalM = Math.floor((totalMs % 3_600_000) / 60_000)
-    const timeStr = totalH > 0 ? `${totalH}h ${totalM}m` : `${totalM}m`
-    setDailyRecap(`${t('app.yesterdayPrefix')} ${timeStr} tracked across ${catCount} categor${catCount === 1 ? 'y' : 'ies'}.`)
-  }, [historySessions])
-
-  // ── FocusGuard trigger ──────────────────────────────────────────────────────
-  const now = Date.now()
-  const postponeBlocked = postponedUntil !== null && now < postponedUntil
-  const shouldShowBreak = !breakActive
-    && !postponeBlocked
-    && activeStartedAt !== null
-    && shouldTriggerBreak(activeStartedAt, now, focusPreset.workMs)
 
   // ── Handlers ────────────────────────────────────────────────────────────────
   async function handleOnboardingComplete({ categories: names, preset: presetName }: { categories: string[]; preset: string }) {
@@ -392,112 +322,33 @@ export function App({ storage }: Props) {
     setOnboardingDone(true)
   }
 
-  async function handleAdd() {
-    const name = input.trim()
-    if (!name) return
-    addCategory(name)
-    setInput('')
-    const { categories: next } = useTimerStore.getState()
-    const created = next[next.length - 1]
-    await storage.saveCategory(created.id, created.name)
-  }
-
-  async function handleStart(id: string) {
-    const prev = categories.find(c => c.activeEntry !== null)
-    const prevStartedAt = prev?.activeEntry?.startedAt ?? null  // capture before startTimer changes state
-    if (prev && prev.id !== id) {
-      setLastSwitch({ at: Date.now(), fromName: prev.name })
-      void flushCaptureStats(captureBlocksRef.current)
-    }
-    startTimer(id)
-    const cat = categories.find(c => c.id === id)
-    if (cat) {
-      webhooks.onTimerStarted(cat.name, Date.now())
-      if (slackToken) void setSlackFocusStatus(slackToken, cat.name).catch(() => {})
-    }
-    if (prev && prev.id !== id) {
-      const elapsed = prevStartedAt !== null ? Date.now() - prevStartedAt : 0
-      const { sessions: s } = useTimerStore.getState()
-      if (elapsed >= MIN_SESSION_MS) {
-        await storage.saveSession(s[s.length - 1])
-      } else {
-        // Remove the micro-session from memory so storage and Zustand stay in sync
-        useTimerStore.setState({ sessions: s.slice(0, -1) })
-      }
-    }
-    // Persist active timer so it survives crashes and is visible to CLI
-    const entry = useTimerStore.getState().categories.find(c => c.id === id)?.activeEntry
-    if (entry) {
-      await storage.setActiveEntry(id, entry.startedAt)
-    }
-  }
 
   async function handleRename(id: string, newName: string) {
     renameCategory(id, newName)
     await storage.renameCategory(id, newName)
   }
 
-  async function handleDelete(id: string) {
-    deleteCategory(id)
-    await storage.deleteCategory(id)
-  }
 
   async function handleArchive(id: string, archived: boolean) {
     archiveCategory(id, archived)
     await storage.archiveCategory(id, archived)
-  }
-
-  async function handleStop(id: string, tag?: string) {
-    const cat = categories.find(c => c.id === id)
-    const entry = cat?.activeEntry
-    const weeklyBefore = computeWeekMs(sessions, id, weekDates)
-    const resolvedTag = tag ?? suggestSessionTag(recentTitles) ?? undefined
-    stopTimer(id, resolvedTag)
-    const { sessions: s } = useTimerStore.getState()
-    const saved = s[s.length - 1]
-    const elapsed = entry ? saved.endedAt - entry.startedAt : 0
-    if (elapsed < MIN_SESSION_MS) {
-      // Remove the micro-session from store and clear active entry without persisting
-      useTimerStore.setState({ sessions: s.slice(0, -1) })
-      await storage.clearActiveEntry()
-      return
-    }
-    await storage.saveSession(saved)
-    await storage.clearActiveEntry()
-    if (slackToken) void clearSlackStatus(slackToken).catch(() => {})
-
-    if (cat && entry) {
-      const todaySessions = useTimerStore.getState().sessions.filter(s => s.date === today)
-      const weeklyAfterStop = weeklyBefore + (saved.endedAt - entry.startedAt)
-      webhooks.onTimerStopped(cat.name, entry.startedAt, saved.endedAt, resolvedTag, todaySessions.length, weeklyAfterStop)
-
-      // Notify on goal milestones (25 / 50 / 75 / 100 %)
-      const goalMs = cat.weeklyGoalMs ?? 0
-      if (goalMs > 0) {
-        const weeklyAfter = weeklyAfterStop
-        const pctBefore = (weeklyBefore / goalMs) * 100
-        const pctAfter  = (weeklyAfter  / goalMs) * 100
-        for (const milestone of [25, 50, 75] as const) {
-          if (pctBefore < milestone && pctAfter >= milestone) {
-            void notifications.notifyGoalMilestone(cat.name, milestone)
-          }
-        }
-        if (pctBefore < 100 && pctAfter >= 100) {
-          notifications.notifyGoalReached(cat.name, Math.round(goalMs / 3_600_000))
-          const catWeeklyCount = useTimerStore.getState().sessions.filter(s => weekDates.includes(s.date) && s.categoryId === id).length
-          webhooks.onGoalReached(cat.name, goalMs, weeklyAfter, catWeeklyCount, streaks[id] ?? 0)
-        }
-      }
-
-      // Streak milestone webhook
-      const streak = streaks[id] ?? 0
-      webhooks.onStreakMilestone(cat.name, streak)
+    showToast(archived ? t('toast.archived') : t('toast.unarchived'))
+    if (archived) {
+      pushUndo({
+        label: t('undo.archived'),
+        undo: async () => {
+          archiveCategory(id, false)
+          await storage.archiveCategory(id, false)
+        },
+      })
     }
   }
+
 
   async function handleSetGoal(id: string, ms: number) {
     setWeeklyGoal(id, ms)
     await storage.setWeeklyGoal(id, ms)
+    showToast(t('toast.goalSaved'))
   }
 
   async function handleSetColor(id: string, color: string) {
@@ -509,27 +360,61 @@ export function App({ storage }: Props) {
     setPendingTag(id, tag)
   }
 
-  async function handleAddIntention(text: string) {
-    const intention = createIntention(text, today)
-    await storage.saveIntention(intention)
-    setIntentions(prev => [...prev, intention])
+  async function handleStopWithFix(id: string, tag?: string) {
+    const session = await handleStop(id, tag)
+    if (session && (session.endedAt - session.startedAt) >= SESSION_FIX_THRESHOLD_MS) {
+      setPendingFixSession(session)
+    }
   }
 
-  async function handleSaveReview(mood: 1 | 2 | 3 | 4 | 5, notes: string) {
-    const review = createEveningReview(today, mood, notes)
-    await storage.saveEveningReview(review)
-    setEveningReview(review)
-    // Daily review webhook with category breakdown
-    const totalMs = categories.reduce((sum, c) => sum + c.accumulatedMs, 0)
-    const sorted = categories.slice().sort((a, b) => b.accumulatedMs - a.accumulatedMs)
-    const topCat = sorted[0]
-    const breakdown = sorted.filter(c => c.accumulatedMs > 0).map(c => ({ category: c.name, durationMs: c.accumulatedMs }))
-    webhooks.onDailyReview(mood, totalMs, topCat?.name ?? '', breakdown)
+  async function handleSessionEditTime(startedAt: number, endedAt: number) {
+    if (!pendingFixSession) return
+    const updated = editSessionTime(pendingFixSession, startedAt, endedAt)
+    await storage.updateSessionTime(updated.id, updated.startedAt, updated.endedAt)
+    const allSessions = await storage.loadSessionsSince(toDateString(Date.now() - 90 * 86_400_000))
+    useTimerStore.setState({ historySessions: allSessions })
+    setPendingFixSession(null)
+    showToast(t('toast.sessionLogged'))
   }
 
-  function handlePostpone() {
-    setPostponedUntil(Date.now() + POSTPONE_MS)
-    setPostponeUsed(true)
+  async function handleSessionSplit(splitDurationMs: number, newCategoryId: string) {
+    if (!pendingFixSession) return
+    const [first, second] = splitSession(pendingFixSession, splitDurationMs, newCategoryId)
+    await storage.updateSessionTime(first.id, first.startedAt, first.endedAt)
+    await storage.saveSession(second)
+    const allSessions = await storage.loadSessionsSince(toDateString(Date.now() - 90 * 86_400_000))
+    useTimerStore.setState({ historySessions: allSessions })
+    setPendingFixSession(null)
+    showToast(t('toast.sessionLogged'))
+  }
+
+  async function startMeeting() {
+    const prev = categories.find(c => c.activeEntry !== null)
+    if (prev) {
+      await handleStop(prev.id)
+    }
+    let meetingCat = categories.find(c => c.name.toLowerCase() === 'meeting' && !c.archived)
+    if (!meetingCat) {
+      addCategory('Meeting')
+      const { categories: next } = useTimerStore.getState()
+      meetingCat = next[next.length - 1]
+      await storage.saveCategory(meetingCat.id, meetingCat.name)
+    }
+    await handleStart(meetingCat.id)
+    setMeetingMode({ active: true, startedAt: Date.now(), previousCategoryId: prev?.id ?? null, previousCategoryName: prev?.name ?? null })
+  }
+
+  async function endMeeting() {
+    const meetingCat = categories.find(c => c.name.toLowerCase() === 'meeting' && c.activeEntry !== null)
+    if (meetingCat) {
+      await handleStop(meetingCat.id, 'meeting')
+    }
+    const { previousCategoryId, previousCategoryName, startedAt } = meetingMode
+    const durationMs = startedAt ? Date.now() - startedAt : 0
+    setMeetingMode({ active: false, startedAt: null, previousCategoryId: null, previousCategoryName: null })
+    if (previousCategoryId && previousCategoryName) {
+      setMeetingResume({ categoryId: previousCategoryId, categoryName: previousCategoryName, durationMs })
+    }
   }
 
   // ── Render ──────────────────────────────────────────────────────────────────
@@ -575,7 +460,7 @@ export function App({ storage }: Props) {
         />
       )}
 
-      {shouldShowBreak && (
+      {shouldShowBreak && !meetingMode.active && (
         <FocusGuard
           activeCategory={activeCategory?.name ?? null}
           startedAt={activeStartedAt}
@@ -586,96 +471,90 @@ export function App({ storage }: Props) {
           onPostpone={handlePostpone}
           onBreakSkipped={() => {
             setBreakSkipCount(c => c + 1)
-            if (activeCategory && activeStartedAt) {
-              webhooks.onBreakSkipped(activeCategory.name, Date.now() - activeStartedAt)
-            }
           }}
         />
       )}
 
-      {/* Header — tinted with active category color when timer is running */}
-      <header className="border-b border-white/6 transition-colors" style={
-        activeCategory?.color && view === 'tracker'
-          ? { borderColor: activeCategory.color + '30', backgroundColor: activeCategory.color + '08' }
-          : {}
-      }>
-        <div className="mx-auto max-w-xl lg:max-w-3xl xl:max-w-5xl px-6 h-14 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <span className="text-sm font-semibold text-zinc-100">{t('app.title')}</span>
-            {dailyRecap && (
-              <span className="text-xs text-zinc-600 hidden sm:inline">· {dailyRecap}</span>
-            )}
-          </div>
-          <nav className="flex items-center">
-            {/* Primary tabs — Tracker + Stats */}
-            {PRIMARY_VIEWS.map(v => (
-              <button
-                key={v}
-                onClick={() => setView(v)}
-                className={`relative px-4 h-14 text-sm transition-colors ${
-                  view === v ? 'text-zinc-100' : 'text-zinc-500 hover:text-zinc-300'
-                }`}
-              >
-                {v === 'tracker' ? t('nav.timer') : v === 'today' ? t('nav.today') : t('nav.stats')}
-                {view === v && (
-                  <span className="absolute bottom-0 left-0 right-0 h-px bg-zinc-100" />
-                )}
-              </button>
-            ))}
-
-            {/* Secondary nav — ··· overflow */}
-            <div className="relative" ref={navMoreRef}>
-              <button
-                onClick={() => setNavMoreOpen(p => !p)}
-                className={`relative px-3 h-14 text-sm transition-colors ${
-                  SECONDARY_VIEWS.includes(view as typeof SECONDARY_VIEWS[number])
-                    ? 'text-zinc-100'
-                    : 'text-zinc-500 hover:text-zinc-300'
-                }`}
-                title="More"
-              >
-                ···
-                {SECONDARY_VIEWS.includes(view as typeof SECONDARY_VIEWS[number]) && (
-                  <span className="absolute bottom-0 left-0 right-0 h-px bg-zinc-100" />
-                )}
-              </button>
-              {navMoreOpen && (
-                <div className="absolute right-0 top-14 z-30 w-36 rounded-lg border border-white/[0.1] bg-zinc-900 py-1 shadow-xl text-sm">
-                  {SECONDARY_VIEWS.map(v => (
-                    <button
-                      key={v}
-                      onClick={() => { setView(v); setNavMoreOpen(false) }}
-                      className={`flex w-full px-4 py-2 transition-colors ${
-                        view === v ? 'text-zinc-100 bg-white/[0.04]' : 'text-zinc-400 hover:text-zinc-100 hover:bg-white/[0.03]'
-                      }`}
-                    >
-                      {v === 'history' ? t('nav.history') : t('nav.settings')}
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            <button
-              onClick={() => setPaletteOpen(true)}
-              className="ml-1 rounded border border-white/[0.07] px-2 py-1 text-[10px] text-zinc-600 hover:text-zinc-400 hover:border-white/15 transition-all"
-              title="Open command palette (⌘K)"
-            >
-              ⌘K
-            </button>
-          </nav>
+      {/* Task 8: idle pause banner — shown when 5+ min of inactivity detected */}
+      {idlePauseMs !== null && activeCategory && (
+        <div className="fixed bottom-16 left-1/2 z-50 -translate-x-1/2 flex items-center gap-3 rounded-xl border border-amber-500/20 bg-zinc-900/95 px-4 py-2.5 shadow-xl text-xs text-zinc-300 backdrop-blur">
+          <span>{t('idle.youWereAway').replace('{min}', String(Math.round(idlePauseMs / 60_000)))}</span>
+          <button
+            onClick={() => dismissIdlePause()}
+            className="rounded border border-zinc-700 px-2.5 py-1 text-zinc-300 hover:text-zinc-100 transition-colors"
+          >
+            {t('idle.keepTime')}
+          </button>
+          <button
+            onClick={() => {
+              handleStop(activeCategory.id)
+              dismissIdlePause()
+            }}
+            className="rounded border border-amber-500/30 bg-amber-500/10 px-2.5 py-1 text-amber-400 hover:text-amber-200 transition-colors"
+          >
+            {t('idle.discardTime')}
+          </button>
         </div>
-      </header>
+      )}
+
+      {/* M-UX6: Meeting resume banner */}
+      {meetingResume && (
+        <div className="fixed bottom-16 left-1/2 z-50 -translate-x-1/2 flex items-center gap-3 rounded-xl border border-sky-500/20 bg-zinc-900/95 px-4 py-2.5 shadow-xl text-xs text-zinc-300 backdrop-blur">
+          <span>
+            {t('meeting.resumePrompt')
+              .replace('{min}', String(Math.round(meetingResume.durationMs / 60_000)))
+              .replace('{name}', meetingResume.categoryName)}
+          </span>
+          <button
+            onClick={() => { handleStart(meetingResume.categoryId); setMeetingResume(null) }}
+            className="rounded border border-sky-500/30 bg-sky-500/10 px-2.5 py-1 text-sky-400 hover:text-sky-200 transition-colors"
+          >
+            {t('meeting.resume')}
+          </button>
+          <button
+            onClick={() => setMeetingResume(null)}
+            className="rounded border border-zinc-700 px-2.5 py-1 text-zinc-400 hover:text-zinc-200 transition-colors"
+          >
+            {t('meeting.skip')}
+          </button>
+        </div>
+      )}
+
+      {pendingFixSession && (
+        <div className="fixed bottom-4 left-1/2 z-50 -translate-x-1/2 w-full max-w-sm px-4">
+          <SessionFixWidget
+            session={pendingFixSession}
+            categories={categories}
+            onConfirm={() => setPendingFixSession(null)}
+            onEditTime={handleSessionEditTime}
+            onSplit={handleSessionSplit}
+            onDismiss={() => setPendingFixSession(null)}
+          />
+        </div>
+      )}
+
+      <AppHeader view={view} setView={setView} dailyRecap={dailyRecap} activeCategory={activeCategory} />
 
       {activeCategory && activeStartedAt && (
         <ActiveTimerBar
           categoryName={activeCategory.name}
           color={activeCategory.color}
           startedAt={activeStartedAt}
-          onStop={() => handleStop(activeCategory.id)}
+          onStop={() => handleStopWithFix(activeCategory.id)}
+          onMeeting={meetingMode.active ? endMeeting : startMeeting}
+          isMeeting={meetingMode.active}
           presetName={focusPreset.name}
+          classificationReason={classificationReason}
+          todaySessions={historySessions.filter(s => s.date === toDateString(Date.now()))}
+          categories={categories}
         />
       )}
+
+      <PassiveTrackingIndicator
+        currentWindow={currentWindow}
+        idleMs={idleMs}
+        isTimerActive={!!activeCategory}
+      />
 
       <main className="mx-auto max-w-xl lg:max-w-3xl xl:max-w-5xl px-6 py-8">
 
@@ -685,80 +564,10 @@ export function App({ storage }: Props) {
           </div>
         )}
 
-        {/* Single-slot top-level banner — strict priority: morningPrompt > shortcutTip */}
+        {/* Shortcut tip banner */}
         {(() => {
-          const activeBanner: 'morning' | 'shortcut' | null =
-            showMorningPrompt && intentions.length === 0 && mvdItems.length === 0 ? 'morning' :
-            showShortcutTip && onboardingDone && categories.length > 0 ? 'shortcut' :
-            null
-
-          // M68: compute yesterday brief for morning card
-          const morningBrief = (() => {
-            if (activeBanner !== 'morning' || historySessions.length === 0) return null
-            const yesterday = toDateString(Date.now() - 86_400_000)
-            const yesterdaySessions = historySessions.filter(s => s.date === yesterday)
-            if (yesterdaySessions.length === 0) return null
-            const totalMs = yesterdaySessions.reduce((sum, s) => sum + (s.endedAt - s.startedAt), 0)
-            const byCategory = new Map<string, number>()
-            for (const s of yesterdaySessions) byCategory.set(s.categoryId, (byCategory.get(s.categoryId) ?? 0) + (s.endedAt - s.startedAt))
-            const topCatId = [...byCategory.entries()].sort((a, b) => b[1] - a[1])[0]?.[0]
-            const topCatName = categories.find(c => c.id === topCatId)?.name ?? ''
-            return { totalMs, topCatName }
-          })()
-
-          if (activeBanner === 'morning' && view === 'tracker') return (
-            <div className="mb-4 rounded-lg border border-amber-500/20 bg-amber-500/[0.06] px-4 py-3 text-xs">
-              <div className="flex items-start justify-between">
-                <div className="flex-1">
-                  <p className="text-amber-200 font-medium mb-1">{t('app.goodMorning')}</p>
-                  {morningBrief && (
-                    <p className="text-amber-400/80 mb-1">
-                      {t('app.yesterdayPrefix')} {formatElapsed(morningBrief.totalMs)}{morningBrief.topCatName ? ` ${t('app.topPrefix')} ${morningBrief.topCatName}` : ''}
-                    </p>
-                  )}
-                  {/* M71: inline intention input */}
-                  <form
-                    onSubmit={async (e) => {
-                      e.preventDefault()
-                      const input = (e.target as HTMLFormElement).elements.namedItem('intention') as HTMLInputElement
-                      if (input.value.trim()) {
-                        await handleAddIntention(input.value.trim())
-                        input.value = ''
-                      }
-                    }}
-                    className="mt-2 flex gap-2"
-                  >
-                    <input
-                      name="intention"
-                      placeholder={t('app.addIntention')}
-                      className="flex-1 bg-amber-500/10 border border-amber-500/20 rounded px-2 py-1 text-xs text-amber-200 placeholder-amber-700 outline-none focus:border-amber-500/40"
-                    />
-                    <button type="submit" className="text-xs text-amber-400 hover:text-amber-200 transition-colors px-2">
-                      +
-                    </button>
-                  </form>
-                  <button
-                    onClick={() => setView('today')}
-                    className="mt-1 text-xs text-amber-600 hover:text-amber-300 transition-colors"
-                  >
-                    {t('app.setIntentions')}
-                  </button>
-                </div>
-                <button
-                  onClick={() => {
-                    const todayKey = toDateString(Date.now())
-                    localStorage.setItem(`morning_prompt_dismissed_${todayKey}`, 'true')
-                    setShowMorningPrompt(false)
-                  }}
-                  className="ml-4 text-amber-600 hover:text-amber-300 transition-colors shrink-0"
-                >
-                  ✕
-                </button>
-              </div>
-            </div>
-          )
-
-          if (activeBanner === 'shortcut' && view === 'tracker') return (
+          if (!(showShortcutTip && onboardingDone && categories.length > 0 && view === 'tracker')) return null
+          return (
             <div className="mb-4 flex items-center justify-between rounded-lg border border-white/[0.07] bg-white/[0.02] px-4 py-2 text-xs text-zinc-500">
               <span>Tip: press <kbd className="rounded bg-white/10 px-1 py-0.5 font-mono text-zinc-400">1</kbd>–<kbd className="rounded bg-white/10 px-1 py-0.5 font-mono text-zinc-400">9</kbd> to start a timer · <kbd className="rounded bg-white/10 px-1 py-0.5 font-mono text-zinc-400">⌘K</kbd> for everything else</span>
               <button
@@ -769,62 +578,84 @@ export function App({ storage }: Props) {
               </button>
             </div>
           )
-
-          return null
         })()}
 
         {view === 'tracker' ? (
           <TrackerView
-            input={input}
-            setInput={setInput}
-            categories={categories}
-            sessions={sessions}
-            historySessions={historySessions}
-            weekDates={weekDates}
-            categoryInsights={categoryInsights}
-            activeCategory={activeCategory}
-            claudeApiKey={claudeApiKey}
-            breakSkipCount={breakSkipCount}
-            breakCompletedCount={breakCompletedCount}
-            onAdd={handleAdd}
-            onStart={handleStart}
-            onStop={handleStop}
-            onDelete={handleDelete}
-            onArchive={handleArchive}
-            onRename={handleRename}
-            onSetGoal={handleSetGoal}
-            onSetColor={handleSetColor}
-            onSetTag={handleSetTag}
+            timer={{
+              input,
+              setInput,
+              categories,
+              sessions,
+              historySessions,
+              weekDates,
+              categoryInsights,
+              activeCategory,
+              claudeApiKey,
+              breakSkipCount,
+              breakCompletedCount,
+              onAdd: handleAdd,
+              onStart: handleStart,
+              onStop: handleStopWithFix,
+              onArchive: handleArchive,
+              onRename: handleRename,
+              onSetGoal: handleSetGoal,
+              onSetColor: handleSetColor,
+              onSetTag: handleSetTag,
+              onNLPConfirm: async (entry) => {
+                const hh = String(entry.startHour).padStart(2, '0')
+                const mm = String(entry.startMinute ?? 0).padStart(2, '0')
+                const startedAt = new Date(entry.date + 'T' + hh + ':' + mm + ':00').getTime()
+                const session = {
+                  id: `nlp-${Date.now()}`,
+                  categoryId: entry.categoryId,
+                  date: entry.date,
+                  startedAt,
+                  endedAt: startedAt + entry.durationMs,
+                  tag: entry.tag,
+                }
+                await storage.saveSession(session)
+                const allSessions = await storage.loadSessionsSince(toDateString(Date.now() - 90 * 86_400_000))
+                useTimerStore.setState({ historySessions: allSessions })
+                showToast(t('toast.sessionLogged'))
+              },
+            }}
+            capture={{
+              idleMs,
+              inputActivity,
+              currentWindow,
+              unclassifiedProcess,
+              onAssignProcess: (process, catId) => {
+                assignProcess(process, catId)
+                void handleStart(catId)
+                const catName = categories.find(c => c.id === catId)?.name ?? catId
+                showToast(t('toast.ruleLearnedProcess').replace('{process}', process).replace('{category}', catName))
+              },
+              onDismissProcess: dismissProcess,
+              unclassifiedWorkspace,
+              onAssignWorkspace: (ws, catId) => {
+                assignWorkspace(ws, catId)
+                void handleStart(catId)
+                const catName = categories.find(c => c.id === catId)?.name ?? catId
+                showToast(t('toast.ruleLearnedProcess').replace('{process}', ws).replace('{category}', catName))
+              },
+              onDismissWorkspace: dismissWorkspace,
+              elevationSuggestion,
+              onElevateProcess: (process, catId) => {
+                elevateProcess(process, catId)
+                void handleStart(catId)
+                const catName = categories.find(c => c.id === catId)?.name ?? catId
+                showToast(t('toast.ruleLearnedProcess').replace('{process}', process).replace('{category}', catName))
+              },
+              onDismissElevation: dismissElevation,
+            }}
+            mvd={{ items: mvdItems, onChange: setMvdItems }}
+            storage={storage}
             onFocusLock={() => setFocusLockActive(true)}
             onShortcutUsed={() => { localStorage.setItem('shortcut_tip_shown', 'true'); setShowShortcutTip(false) }}
             onOpenNLP={fn => { openNLPRef.current = fn }}
             switchedAt={lastSwitch?.at ?? null}
             switchedFromCategory={lastSwitch?.fromName ?? ''}
-            idleMs={idleMs}
-            inputActivity={inputActivity}
-            onNLPConfirm={async (entry) => {
-              const startedAt = new Date(entry.date + 'T' + String(entry.startHour).padStart(2, '0') + ':00:00').getTime()
-              const session = {
-                id: `nlp-${Date.now()}`,
-                categoryId: entry.categoryId,
-                date: entry.date,
-                startedAt,
-                endedAt: startedAt + entry.durationMs,
-                tag: entry.tag,
-              }
-              await storage.saveSession(session)
-              const allSessions = await storage.loadSessionsSince(toDateString(Date.now() - 90 * 86_400_000))
-              useTimerStore.setState({ historySessions: allSessions })
-            }}
-            storage={storage}
-            unclassifiedProcess={unclassifiedProcess}
-            onAssignProcess={assignProcess}
-            onDismissProcess={dismissProcess}
-            elevationSuggestion={elevationSuggestion}
-            onElevateProcess={elevateProcess}
-            onDismissElevation={dismissElevation}
-            mvdItems={mvdItems}
-            onMVDChange={setMvdItems}
           />
         ) : view === 'stats' ? (
           <StatsView
@@ -922,14 +753,13 @@ export function App({ storage }: Props) {
             categories={categories}
             sessions={historySessions}
             storage={storage}
-            webhookUrl={webhookUrl ?? ''}
-            onWebhookUrlChange={url => setWebhookUrl(url || null)}
             focusPreset={focusPreset}
             onFocusPresetChange={setFocusPreset}
             focusStrictMode={focusStrictMode}
             onFocusStrictModeChange={setFocusStrictMode}
             onScreenshotsEnabledChange={setScreenshotsEnabled}
             captureBlocks={captureBlocks}
+            onToast={showToast}
           />
         )}
 
@@ -940,99 +770,19 @@ export function App({ storage }: Props) {
         <ClassifyOverlay
           process={unclassifiedProcess}
           categories={categories.filter(c => !c.archived)}
-          onAssign={assignProcess}
+          onAssign={(process, catId) => {
+            assignProcess(process, catId)
+            void handleStart(catId)
+            const catName = categories.find(c => c.id === catId)?.name ?? catId
+            showToast(t('toast.ruleLearnedProcess').replace('{process}', process).replace('{category}', catName))
+          }}
           onDismiss={dismissProcess}
         />
       )}
+
+      <Toast message={toast} />
+      <UndoToast operation={undoOperation} onUndo={undo} canUndo={canUndo} />
     </div>
   )
 }
 
-// ── ClassifyOverlay ───────────────────────────────────────────────────────────
-
-const SLOT_KEYWORDS: Record<CategorySlot, string[]> = {
-  work:     ['work', 'trabalho', 'job', 'professional', 'dev', 'code', 'coding'],
-  study:    ['study', 'estudo', 'learn', 'aprender', 'course', 'curso'],
-  personal: ['personal', 'pessoal', 'life', 'leisure', 'lazer', 'hobby'],
-}
-
-function slotMatchesCategory(slot: CategorySlot, name: string): boolean {
-  const n = name.toLowerCase()
-  return SLOT_KEYWORDS[slot].some(kw => n.includes(kw))
-}
-
-function ClassifyOverlay({
-  process: app,
-  categories,
-  onAssign,
-  onDismiss,
-}: {
-  process: UnclassifiedApp
-  categories: Category[]
-  onAssign: (process: string, categoryId: string) => void
-  onDismiss: (process: string) => void
-}) {
-  const { t } = useI18n()
-
-  // Find which slot DEFAULT_CATEGORY_SUGGESTIONS maps this app's rule id to
-  // Try matching by process name against rule patterns in DEFAULT_DEV_RULES
-  const suggestedSlot: CategorySlot | null = (() => {
-    const procLower = app.process.toLowerCase()
-    for (const [ruleId, slot] of Object.entries(DEFAULT_CATEGORY_SUGGESTIONS)) {
-      // ruleId maps to a pattern — we compare against known process names heuristically
-      if (procLower.includes(ruleId.replace(/-title$/, '').replace(/-ins$/, ''))) return slot as CategorySlot
-    }
-    return null
-  })()
-
-  const suggestedCategory = suggestedSlot
-    ? categories.find(c => slotMatchesCategory(suggestedSlot, c.name)) ?? null
-    : null
-
-  return (
-    <div className="fixed bottom-4 right-4 z-50 w-80 rounded-xl border border-sky-500/30 bg-zinc-900/95 shadow-2xl backdrop-blur-sm p-4 animate-in slide-in-from-bottom-4 fade-in duration-200">
-      <div className="flex items-center gap-2 mb-3">
-        {app.iconBase64 && (
-          <img src={app.iconBase64} alt="" className="h-6 w-6 rounded" aria-hidden="true" />
-        )}
-        <div className="flex-1 min-w-0">
-          <p className="text-sm font-semibold text-sky-300 truncate">{app.displayName}</p>
-          <p className="text-[10px] text-zinc-500 truncate">{app.process}</p>
-        </div>
-        <button
-          onClick={() => onDismiss(app.process)}
-          className="text-zinc-600 hover:text-zinc-400 transition-colors text-lg leading-none"
-          aria-label="Dismiss"
-        >
-          ×
-        </button>
-      </div>
-
-      <p className="text-xs text-zinc-400 mb-2">{t('tracker.whichCategory')}</p>
-
-      {suggestedCategory && (
-        <button
-          onClick={() => onAssign(app.process, suggestedCategory.id)}
-          className="w-full mb-2 rounded-lg px-3 py-2 text-sm font-medium border border-sky-500/40 bg-sky-500/10 text-sky-200 hover:bg-sky-500/20 transition-all"
-        >
-          {suggestedCategory.name}
-          <span className="ml-2 text-[10px] text-sky-500 font-normal">sugerido</span>
-        </button>
-      )}
-
-      <div className="flex flex-wrap gap-1.5">
-        {categories
-          .filter(c => c.id !== suggestedCategory?.id)
-          .map(c => (
-            <button
-              key={c.id}
-              onClick={() => onAssign(app.process, c.id)}
-              className="rounded border border-white/[0.08] bg-white/[0.04] px-2.5 py-1 text-xs text-zinc-300 hover:text-zinc-100 hover:border-white/20 transition-all"
-            >
-              {c.name}
-            </button>
-          ))}
-      </div>
-    </div>
-  )
-}

@@ -1,6 +1,32 @@
-use tauri::Manager;
+use tauri::{Emitter, Manager};
 use std::collections::HashMap;
-use std::sync::Mutex;
+use std::sync::{Mutex, Condvar, OnceLock};
+use std::sync::Arc;
+
+/// Global signal: WinEvent hook → background capture thread (Task 5 — sub-second detection).
+static FOREGROUND_SIGNAL: OnceLock<Arc<(Mutex<bool>, Condvar)>> = OnceLock::new();
+
+/// WinEvent hook callback — called by the OS on EVENT_SYSTEM_FOREGROUND.
+/// Signals the background capture thread to wake immediately.
+/// Parameters match the Windows WINEVENTPROC signature exactly.
+#[cfg(target_os = "windows")]
+unsafe extern "system" fn foreground_changed_hook(
+    _hook: winapi::shared::windef::HWINEVENTHOOK,
+    _event: winapi::shared::minwindef::DWORD,
+    _hwnd: winapi::shared::windef::HWND,
+    _id_object: winapi::shared::ntdef::LONG,
+    _id_child: winapi::shared::ntdef::LONG,
+    _id_event_thread: winapi::shared::minwindef::DWORD,
+    _dwms_event_time: winapi::shared::minwindef::DWORD,
+) {
+    if let Some(signal) = FOREGROUND_SIGNAL.get() {
+        let (lock, cvar) = signal.as_ref();
+        if let Ok(mut triggered) = lock.lock() {
+            *triggered = true;
+            cvar.notify_one();
+        }
+    }
+}
 
 /// Accumulated input activity since last drain — filled by background polling thread.
 pub struct InputAccumulator {
@@ -38,8 +64,10 @@ impl Default for InputAccumulator {
 pub struct AppState {
     icon_cache: Mutex<HashMap<String, Option<String>>>,
     input: Mutex<InputAccumulator>,
-    browser_ctx: Mutex<Option<BrowserContext>>,  // M-C1: latest URL from browser extension
-    editor_ctx: Mutex<Option<EditorContext>>,     // M-C2: latest workspace from VS Code extension
+    browser_ctx: Mutex<Option<BrowserContext>>,   // M-C1: latest URL from browser extension
+    editor_ctx: Mutex<Option<EditorContext>>,      // M-C2: latest workspace from VS Code extension
+    window_rules_json: Mutex<String>,             // M-BG2: user rules synced from frontend (JSON)
+    capture_buffer: Mutex<Vec<CaptureTickPayload>>, // M-BG3: ring buffer for webview wake-up recovery
 }
 
 #[derive(serde::Serialize, Clone)]
@@ -69,18 +97,18 @@ pub struct EditorContext {
 
 // ─── M-C1/C2: HTTP context receiver ─────────────────────────────────────────
 
-/// Extracts the value of a JSON string field from a raw JSON body.
-/// Minimal implementation — avoids adding serde_json as a dependency.
-/// Only handles flat objects with string values.
-fn extract_json_str(json: &str, key: &str) -> Option<String> {
-    let pattern = format!("\"{}\"", key);
-    let pos = json.find(&pattern)?;
-    let after = json[pos + pattern.len()..].trim_start();
-    let after = after.strip_prefix(':')?.trim_start();
-    if !after.starts_with('"') { return None; }
-    let inner = &after[1..];
-    let end = inner.find('"')?;
-    Some(inner[..end].replace("\\\"", "\"").replace("\\\\", "\\"))
+/// M77: Typed payloads for the browser and editor HTTP endpoints.
+/// Replaces the hand-rolled extract_json_str parser with serde_json deserialization.
+#[derive(serde::Deserialize)]
+struct BrowserPayload { url: String, title: String }
+
+#[derive(serde::Deserialize)]
+struct EditorPayload {
+    workspace: String,
+    #[serde(default)]
+    file: String,
+    #[serde(default)]
+    language: String,
 }
 
 /// Fix-2: Extracts only the hostname from a URL, stripping path, query and fragment.
@@ -187,22 +215,21 @@ fn handle_http_connection(stream: std::net::TcpStream, handle: tauri::AppHandle)
     match path {
         "/browser" => {
             // Fix-2: extract only hostname — never store the full URL
-            if let (Some(raw_url), Some(title)) = (
-                extract_json_str(body, "url"),
-                extract_json_str(body, "title"),
-            ) {
-                if let Some(hostname) = extract_hostname(&raw_url) {
-                    *state.browser_ctx.lock().unwrap() = Some(BrowserContext { hostname, title });
+            if let Ok(p) = serde_json::from_str::<BrowserPayload>(body) {
+                if let Some(hostname) = extract_hostname(&p.url) {
+                    *state.browser_ctx.lock().unwrap() = Some(BrowserContext { hostname, title: p.title });
                 }
             }
         }
         "/editor" => {
-            if let Some(workspace) = extract_json_str(body, "workspace") {
-                *state.editor_ctx.lock().unwrap() = Some(EditorContext {
-                    workspace,
-                    file:     extract_json_str(body, "file").unwrap_or_default(),
-                    language: extract_json_str(body, "language").unwrap_or_default(),
-                });
+            if let Ok(p) = serde_json::from_str::<EditorPayload>(body) {
+                if !p.workspace.is_empty() {
+                    *state.editor_ctx.lock().unwrap() = Some(EditorContext {
+                        workspace: p.workspace,
+                        file:      p.file,
+                        language:  p.language,
+                    });
+                }
             }
         }
         _ => {}
@@ -214,6 +241,96 @@ fn handle_http_connection(stream: std::net::TcpStream, handle: tauri::AppHandle)
           Content-Type: text/plain\r\n\
           Content-Length: 2\r\n\r\nOK"
     );
+}
+
+// ─── M-BG: Background capture ────────────────────────────────────────────────
+
+/// Minimal window rule shape for deserializing rules synced from the frontend.
+/// Only the fields needed for process/title matching are included.
+#[derive(serde::Deserialize)]
+struct BgWindowRule {
+    #[serde(rename = "matchType")]
+    match_type: String,
+    pattern: String,
+    #[serde(rename = "categoryId")]
+    category_id: Option<String>,
+    mode: String,
+    enabled: bool,
+}
+
+/// Payload emitted as a Tauri event every poll cycle.
+/// The frontend hook listens to "capture_tick" and runs classification from there.
+#[derive(serde::Serialize, Clone)]
+pub struct CaptureTickPayload {
+    pub ts: i64,
+    pub process: String,
+    pub title: String,
+    pub hostname: Option<String>,
+    /// Pre-matched categoryId from the synced user rules (auto mode only).
+    /// null when no auto rule matches — frontend scores further with domain/workspace signals.
+    pub category_id: Option<String>,
+    pub display_name: String,
+}
+
+/// Apply the first matching auto rule from JSON-encoded rules.
+/// Returns the categoryId if an auto rule matches, None otherwise (ignore or suggest).
+fn apply_rules_json(rules_json: &str, process: &str, title: &str) -> Option<String> {
+    let rules: Vec<BgWindowRule> = serde_json::from_str(rules_json).unwrap_or_default();
+    for rule in &rules {
+        if !rule.enabled { continue; }
+        let matches = match rule.match_type.as_str() {
+            "process" => rule.pattern.to_lowercase() == process.to_lowercase(),
+            "title"   => title.to_lowercase().contains(&rule.pattern.to_lowercase()),
+            _         => false,
+        };
+        if matches {
+            if rule.mode == "ignore" { return None; }
+            if rule.mode == "auto" {
+                if rule.category_id.is_some() { return rule.category_id.clone(); }
+            }
+        }
+    }
+    None
+}
+
+/// Lightweight foreground-window query used by the background thread.
+/// Returns (process_exe, title) without icon extraction (too heavy for a background loop).
+#[cfg(target_os = "windows")]
+fn foreground_window_basic() -> Option<(String, String)> {
+    use winapi::um::winuser::{GetForegroundWindow, GetWindowTextW, GetWindowThreadProcessId};
+    use winapi::um::processthreadsapi::OpenProcess;
+    use winapi::um::psapi::GetModuleFileNameExW;
+    use winapi::um::handleapi::CloseHandle;
+    use winapi::um::winnt::PROCESS_QUERY_INFORMATION;
+    unsafe {
+        let hwnd = GetForegroundWindow();
+        if hwnd.is_null() { return None; }
+        let mut title_buf = [0u16; 512];
+        let title_len = GetWindowTextW(hwnd, title_buf.as_mut_ptr(), title_buf.len() as i32);
+        if title_len == 0 { return None; }
+        let title = String::from_utf16_lossy(&title_buf[..title_len as usize]);
+        let mut pid: u32 = 0;
+        GetWindowThreadProcessId(hwnd, &mut pid);
+        let handle = OpenProcess(PROCESS_QUERY_INFORMATION | 0x0010, 0, pid);
+        if handle.is_null() { return None; }
+        let mut path_buf = [0u16; 512];
+        let path_len = GetModuleFileNameExW(handle, std::ptr::null_mut(), path_buf.as_mut_ptr(), path_buf.len() as u32);
+        CloseHandle(handle);
+        if path_len == 0 { return None; }
+        let path_wide = &path_buf[..path_len as usize];
+        let process = String::from_utf16_lossy(path_wide)
+            .split('\\').last().unwrap_or("unknown").to_string();
+        Some((process, title))
+    }
+}
+
+#[cfg(not(target_os = "windows"))]
+fn foreground_window_basic() -> Option<(String, String)> { None }
+
+/// Sync window rules from the frontend so the background thread can pre-classify.
+#[tauri::command]
+fn sync_window_rules(rules_json: String, state: tauri::State<AppState>) {
+    *state.window_rules_json.lock().unwrap() = rules_json;
 }
 
 // ─── Windows helpers ─────────────────────────────────────────────────────────
@@ -374,56 +491,61 @@ unsafe fn extract_icon_base64(path_wide: &[u16]) -> Option<String> {
     Some(format!("data:image/bmp;base64,{}", base64_encode(&bmp)))
 }
 
+/// M76: Shared HWND → ActiveWindow resolver.
+/// Extracts title, process name, display name and cached icon from a single HWND.
+/// Used by both `get_active_window` and `get_visible_windows` to eliminate duplication.
+#[cfg(target_os = "windows")]
+unsafe fn resolve_hwnd(
+    hwnd: winapi::shared::windef::HWND,
+    icon_cache: &mut HashMap<String, Option<String>>,
+) -> Option<ActiveWindow> {
+    use winapi::um::winuser::{GetWindowTextW, GetWindowThreadProcessId};
+    use winapi::um::processthreadsapi::OpenProcess;
+    use winapi::um::psapi::GetModuleFileNameExW;
+    use winapi::um::handleapi::CloseHandle;
+    use winapi::um::winnt::PROCESS_QUERY_INFORMATION;
+
+    let mut title_buf = [0u16; 512];
+    let title_len = GetWindowTextW(hwnd, title_buf.as_mut_ptr(), title_buf.len() as i32);
+    if title_len == 0 { return None; }
+    let title = String::from_utf16_lossy(&title_buf[..title_len as usize]);
+
+    let mut pid: u32 = 0;
+    GetWindowThreadProcessId(hwnd, &mut pid);
+    let handle = OpenProcess(PROCESS_QUERY_INFORMATION | 0x0010, 0, pid);
+    if handle.is_null() { return None; }
+
+    let mut path_buf = [0u16; 512];
+    let path_len = GetModuleFileNameExW(handle, std::ptr::null_mut(), path_buf.as_mut_ptr(), path_buf.len() as u32);
+    CloseHandle(handle);
+    if path_len == 0 { return None; }
+
+    let path_wide = &path_buf[..path_len as usize];
+    let process = String::from_utf16_lossy(path_wide)
+        .split('\\').last().unwrap_or("unknown").to_string();
+    let display_name = get_display_name(path_wide);
+
+    let icon_base64 = if let Some(cached) = icon_cache.get(&process) {
+        cached.clone()
+    } else {
+        let icon = extract_icon_base64(path_wide);
+        icon_cache.insert(process.clone(), icon.clone());
+        icon
+    };
+
+    Some(ActiveWindow { title, process, display_name, icon_base64 })
+}
+
 #[tauri::command]
 fn get_active_window(state: tauri::State<AppState>) -> Option<ActiveWindow> {
     #[cfg(target_os = "windows")]
     {
-        use winapi::um::winuser::{GetForegroundWindow, GetWindowTextW, GetWindowThreadProcessId};
-        use winapi::um::processthreadsapi::OpenProcess;
-        use winapi::um::psapi::GetModuleFileNameExW;
-        use winapi::um::handleapi::CloseHandle;
-        use winapi::um::winnt::PROCESS_QUERY_INFORMATION;
-
+        use winapi::um::winuser::GetForegroundWindow;
         unsafe {
             let hwnd = GetForegroundWindow();
             if hwnd.is_null() { return None; }
-
-            // Get window title
-            let mut title_buf = [0u16; 512];
-            let title_len = GetWindowTextW(hwnd, title_buf.as_mut_ptr(), title_buf.len() as i32);
-            if title_len == 0 { return None; }
-            let title = String::from_utf16_lossy(&title_buf[..title_len as usize]);
-
-            // Get process name
-            let mut pid: u32 = 0;
-            GetWindowThreadProcessId(hwnd, &mut pid);
-            let handle = OpenProcess(PROCESS_QUERY_INFORMATION | 0x0010 /* PROCESS_VM_READ */, 0, pid);
-            if handle.is_null() { return None; }
-
-            let mut path_buf = [0u16; 512];
-            let path_len = GetModuleFileNameExW(handle, std::ptr::null_mut(), path_buf.as_mut_ptr(), path_buf.len() as u32);
-            CloseHandle(handle);
-
-            if path_len == 0 { return None; }
-
-            let path_wide = &path_buf[..path_len as usize];
-            let process = String::from_utf16_lossy(path_wide)
-                .split('\\').last().unwrap_or("unknown").to_string();
-            let display_name = get_display_name(path_wide);
-
-            // Cache icon by process name to avoid repeated GDI extraction
-            let icon_base64 = {
-                let mut cache = state.icon_cache.lock().unwrap();
-                if let Some(cached) = cache.get(&process) {
-                    cached.clone()
-                } else {
-                    let icon = extract_icon_base64(path_wide);
-                    cache.insert(process.clone(), icon.clone());
-                    icon
-                }
-            };
-
-            Some(ActiveWindow { title, process, display_name, icon_base64 })
+            let mut cache = state.icon_cache.lock().unwrap();
+            resolve_hwnd(hwnd, &mut cache)
         }
     }
     #[cfg(not(target_os = "windows"))]
@@ -472,25 +594,18 @@ fn get_visible_windows(state: tauri::State<AppState>) -> Vec<ActiveWindow> {
     #[cfg(target_os = "windows")]
     {
         use winapi::um::winuser::{
-            EnumWindows, GetForegroundWindow, GetWindowTextW, GetWindowThreadProcessId,
-            IsWindowVisible, IsIconic,
+            EnumWindows, GetForegroundWindow, IsWindowVisible, IsIconic,
         };
-        use winapi::um::processthreadsapi::OpenProcess;
-        use winapi::um::psapi::GetModuleFileNameExW;
-        use winapi::um::handleapi::CloseHandle;
-        use winapi::um::winnt::PROCESS_QUERY_INFORMATION;
 
         const MAX: usize = 5;
 
         unsafe {
-            // Collect all top-level HWNDs in Z-order
             let mut hwnds: Vec<winapi::shared::windef::HWND> = Vec::with_capacity(64);
             EnumWindows(
                 Some(collect_hwnds),
                 &mut hwnds as *mut _ as winapi::shared::minwindef::LPARAM,
             );
 
-            // Put foreground window first
             let fg = GetForegroundWindow();
             if !fg.is_null() {
                 hwnds.retain(|&h| h != fg);
@@ -499,61 +614,23 @@ fn get_visible_windows(state: tauri::State<AppState>) -> Vec<ActiveWindow> {
 
             let mut results = Vec::with_capacity(MAX);
 
-            for hwnd in hwnds.iter().take(MAX * 4) {
+            for &hwnd in hwnds.iter().take(MAX * 4) {
                 if results.len() >= MAX { break; }
-                if IsWindowVisible(*hwnd) == 0 { continue; }
-                if IsIconic(*hwnd) != 0 { continue; }
+                if IsWindowVisible(hwnd) == 0 { continue; }
+                if IsIconic(hwnd) != 0 { continue; }
 
-                let mut title_buf = [0u16; 512];
-                let title_len = GetWindowTextW(*hwnd, title_buf.as_mut_ptr(), title_buf.len() as i32);
-                if title_len == 0 { continue; }
-                let title = String::from_utf16_lossy(&title_buf[..title_len as usize]);
-
-                // Skip system/shell windows
-                let title_lc = title.to_ascii_lowercase();
-                if title_lc == "program manager"
-                    || title_lc.contains("windows taskbar")
-                    || title_lc.is_empty()
-                {
-                    continue;
-                }
-
-                let mut pid: u32 = 0;
-                GetWindowThreadProcessId(*hwnd, &mut pid);
-                let handle = OpenProcess(
-                    PROCESS_QUERY_INFORMATION | 0x0010,
-                    0,
-                    pid,
-                );
-                if handle.is_null() { continue; }
-
-                let mut path_buf = [0u16; 512];
-                let path_len = GetModuleFileNameExW(
-                    handle,
-                    std::ptr::null_mut(),
-                    path_buf.as_mut_ptr(),
-                    path_buf.len() as u32,
-                );
-                CloseHandle(handle);
-                if path_len == 0 { continue; }
-
-                let path_wide = &path_buf[..path_len as usize];
-                let process = String::from_utf16_lossy(path_wide)
-                    .split('\\').last().unwrap_or("unknown").to_string();
-                let display_name = get_display_name(path_wide);
-
-                let icon_base64 = {
-                    let mut cache = state.icon_cache.lock().unwrap();
-                    if let Some(cached) = cache.get(&process) {
-                        cached.clone()
-                    } else {
-                        let icon = extract_icon_base64(path_wide);
-                        cache.insert(process.clone(), icon.clone());
-                        icon
+                let mut cache = state.icon_cache.lock().unwrap();
+                if let Some(win) = resolve_hwnd(hwnd, &mut cache) {
+                    // Skip system/shell windows
+                    let title_lc = win.title.to_ascii_lowercase();
+                    if title_lc == "program manager"
+                        || title_lc.contains("windows taskbar")
+                        || title_lc.is_empty()
+                    {
+                        continue;
                     }
-                };
-
-                results.push(ActiveWindow { title, process, display_name, icon_base64 });
+                    results.push(win);
+                }
             }
 
             results
@@ -616,10 +693,27 @@ fn get_git_log(repo_path: String, since_date: String) -> Vec<GitCommit> {
     }
 }
 
+/// M-BG3: Drain the in-memory capture buffer — called by the frontend on mount
+/// to replay events that arrived while the webview was initializing.
 #[tauri::command]
-fn update_tray_status(_category: String, _elapsed: String) {
-  // Update tray tooltip with active timer info
-  // Stub: full implementation requires tray handle
+fn drain_capture_buffer(state: tauri::State<AppState>) -> Vec<CaptureTickPayload> {
+  let mut buf = state.capture_buffer.lock().unwrap();
+  std::mem::take(&mut *buf)
+}
+
+#[tauri::command]
+fn update_tray_status(app: tauri::AppHandle, category: String, elapsed: String) {
+  #[cfg(target_os = "windows")]
+  if let Some(tray) = app.tray_by_id("kairos") {
+    let tooltip = if category.is_empty() {
+      "Kairos — idle".to_string()
+    } else {
+      format!("Kairos — {} ({})", category, elapsed)
+    };
+    let _ = tray.set_tooltip(Some(&tooltip));
+  }
+  #[cfg(not(target_os = "windows"))]
+  let _ = (app, category, elapsed);
 }
 
 #[tauri::command]
@@ -923,6 +1017,8 @@ pub fn run() {
     }),
     browser_ctx: Mutex::new(None),
     editor_ctx: Mutex::new(None),
+    window_rules_json: Mutex::new("[]".to_string()),
+    capture_buffer: Mutex::new(Vec::new()),
   };
 
   tauri::Builder::default()
@@ -1003,6 +1099,102 @@ pub fn run() {
         });
       }
 
+      // M-BG1: Background window capture thread.
+      // Wakes immediately on foreground change (WinEvent) + 2 s fallback poll.
+      // Runs regardless of whether the app window is visible — enables system-wide tracking.
+      {
+        let bg_handle = app.handle().clone();
+        #[cfg(target_os = "windows")]
+        let bg_signal = std::sync::Arc::clone(
+          FOREGROUND_SIGNAL.get_or_init(|| std::sync::Arc::new((std::sync::Mutex::new(false), std::sync::Condvar::new())))
+        );
+        std::thread::spawn(move || {
+          loop {
+            #[cfg(target_os = "windows")]
+            {
+              let (lock, cvar) = bg_signal.as_ref();
+              let guard = lock.lock().unwrap();
+              let (mut guard, _) = cvar.wait_timeout(guard, std::time::Duration::from_secs(2)).unwrap();
+              *guard = false; // clear the signal so next iteration waits properly
+            }
+            #[cfg(not(target_os = "windows"))]
+            std::thread::sleep(std::time::Duration::from_secs(2));
+
+            let Some((process, title)) = foreground_window_basic() else { continue };
+
+            let state = bg_handle.state::<AppState>();
+
+            // M-C1: attach latest browser hostname if available
+            let hostname = state.browser_ctx.lock().unwrap()
+              .as_ref().map(|c| c.hostname.clone());
+
+            // M-BG2: pre-classify with synced user rules
+            let rules_json = state.window_rules_json.lock().unwrap().clone();
+            let category_id = apply_rules_json(&rules_json, &process, &title);
+
+            // Display name: cached icon lookup (no icon in BG — too heavy)
+            let display_name = process.trim_end_matches(".exe").trim_end_matches(".EXE").to_string();
+
+            let ts = std::time::SystemTime::now()
+              .duration_since(std::time::UNIX_EPOCH)
+              .unwrap_or_default()
+              .as_millis() as i64;
+
+            let payload = CaptureTickPayload {
+              ts,
+              process,
+              title,
+              hostname,
+              category_id,
+              display_name,
+            };
+
+            // M-BG3: push to ring buffer (max 300 events) for wake-up recovery
+            {
+              let state = bg_handle.state::<AppState>();
+              let mut buf = state.capture_buffer.lock().unwrap();
+              if buf.len() >= 300 { buf.remove(0); }
+              buf.push(payload.clone());
+            }
+
+            let _ = bg_handle.emit("capture_tick", payload);
+          }
+        });
+      }
+
+      // Task 5: WinEvent hook thread — sets up EVENT_SYSTEM_FOREGROUND hook and runs a
+      // message loop so the OS can deliver foreground-change notifications sub-second.
+      #[cfg(target_os = "windows")]
+      {
+        // Ensure the signal is initialized before the hook thread starts
+        FOREGROUND_SIGNAL.get_or_init(|| std::sync::Arc::new((std::sync::Mutex::new(false), std::sync::Condvar::new())));
+        std::thread::spawn(move || {
+          use winapi::um::winuser::{
+            SetWinEventHook, UnhookWinEvent, GetMessageW, TranslateMessage, DispatchMessageW,
+            EVENT_SYSTEM_FOREGROUND, WINEVENT_OUTOFCONTEXT, WINEVENT_SKIPOWNPROCESS, MSG,
+          };
+          unsafe {
+            let hook = SetWinEventHook(
+              EVENT_SYSTEM_FOREGROUND,
+              EVENT_SYSTEM_FOREGROUND,
+              std::ptr::null_mut(),
+              Some(foreground_changed_hook),
+              0,
+              0,
+              WINEVENT_OUTOFCONTEXT | WINEVENT_SKIPOWNPROCESS,
+            );
+            if hook.is_null() { return; }
+            let mut msg: MSG = std::mem::zeroed();
+            // Message loop — required for WinEvent hook delivery
+            while GetMessageW(&mut msg, std::ptr::null_mut(), 0, 0) > 0 {
+              TranslateMessage(&msg);
+              DispatchMessageW(&msg);
+            }
+            UnhookWinEvent(hook);
+          }
+        });
+      }
+
       // M-C1/C2: HTTP context receiver — accepts browser URL and VS Code workspace.
       // Listens on 127.0.0.1:27183 for POST /browser and POST /editor.
       {
@@ -1016,10 +1208,63 @@ pub fn run() {
         });
       }
 
+      // System tray — minimize-to-tray support.
+      #[cfg(target_os = "windows")]
+      {
+        use tauri::menu::{MenuBuilder, MenuItemBuilder};
+        use tauri::tray::TrayIconBuilder;
+
+        let show_item = MenuItemBuilder::with_id("show", "Show Kairos").build(app)?;
+        let quit_item = MenuItemBuilder::with_id("quit", "Quit").build(app)?;
+        let menu = MenuBuilder::new(app)
+          .items(&[&show_item, &quit_item])
+          .build()?;
+
+        let tray_handle = app.handle().clone();
+        TrayIconBuilder::with_id("kairos")
+          .tooltip("Kairos")
+          .menu(&menu)
+          .on_menu_event(move |_tray, event| match event.id().as_ref() {
+            "show" => {
+              if let Some(win) = tray_handle.get_webview_window("main") {
+                let _ = win.show();
+                let _ = win.set_focus();
+              }
+            }
+            "quit" => std::process::exit(0),
+            _ => {}
+          })
+          .on_tray_icon_event(|tray, event| {
+            if let tauri::tray::TrayIconEvent::DoubleClick { .. } = event {
+              let app = tray.app_handle();
+              if let Some(win) = app.get_webview_window("main") {
+                let _ = win.show();
+                let _ = win.set_focus();
+              }
+            }
+          })
+          .build(app)?;
+      }
+
+      // Minimize to tray on close (Windows only).
+      #[cfg(target_os = "windows")]
+      {
+        let main_win = app.get_webview_window("main").expect("no main window");
+        let win_for_close = main_win.clone();
+        main_win.on_window_event(move |event| {
+          if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+            api.prevent_close();
+            let _ = win_for_close.hide();
+          }
+        });
+      }
+
       Ok(())
     })
     .invoke_handler(tauri::generate_handler![
       update_tray_status,
+      drain_capture_buffer,
+      sync_window_rules,
       get_idle_seconds,
       set_always_on_top,
       get_active_window,

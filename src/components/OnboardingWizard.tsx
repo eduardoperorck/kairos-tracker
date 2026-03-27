@@ -10,10 +10,11 @@ type Props = {
 }
 
 const SUGGESTED_CATEGORIES = ['Work', 'Study', 'Exercise', 'Personal']
+const TOTAL_STEPS = 4
 
 export function OnboardingWizard({ onComplete }: Props) {
   const { t } = useI18n()
-  const [step, setStep] = useState<1 | 2 | 3>(1)
+  const [step, setStep] = useState<0 | 1 | 2 | 3 | 4>(0)
   const [categories, setCategories] = useState<string[]>([])
   const [input, setInput] = useState('')
   const [preset, setPreset] = useState(FOCUS_PRESETS[0].name)
@@ -32,7 +33,27 @@ export function OnboardingWizard({ onComplete }: Props) {
     onComplete({ categories, preset })
   }
 
-  if (step === 1) {
+  function StepIndicator({ current }: { current: number }) {
+    return (
+      <p className="text-xs text-zinc-600 mb-6">
+        {t('onboarding.stepOf').replace('{step}', String(current)).replace('{total}', String(TOTAL_STEPS))}
+      </p>
+    )
+  }
+
+  function SkipButton() {
+    return (
+      <button
+        onClick={handleFinish}
+        className="text-xs text-zinc-700 hover:text-zinc-500 transition-colors mt-4"
+      >
+        {t('onboarding.skip')}
+      </button>
+    )
+  }
+
+  // Step 0: Welcome splash
+  if (step === 0) {
     return (
       <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-[#0f0f0f] px-6 text-center">
         <p className="mb-3 text-xs font-medium uppercase tracking-[0.2em] text-zinc-600">Time Tracker</p>
@@ -41,7 +62,7 @@ export function OnboardingWizard({ onComplete }: Props) {
         </h1>
         <p className="mb-10 text-sm text-zinc-500 max-w-xs">{t('onboarding.step1Sub')}</p>
         <button
-          onClick={() => setStep(2)}
+          onClick={() => setStep(1)}
           className="rounded-lg border border-white/[0.1] bg-white/[0.06] px-8 py-3 text-sm font-medium text-zinc-100 hover:bg-white/[0.1] transition-all"
         >
           {t('onboarding.start')}
@@ -50,14 +71,15 @@ export function OnboardingWizard({ onComplete }: Props) {
     )
   }
 
-  if (step === 2) {
+  // Step 1: Create categories
+  if (step === 1) {
     return (
       <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-[#0f0f0f] px-6">
         <div className="w-full max-w-sm">
+          <StepIndicator current={1} />
           <h2 className="mb-1 text-xl font-semibold text-zinc-100">{t('onboarding.step2Title')}</h2>
           <p className="mb-6 text-sm text-zinc-500">{t('onboarding.step2Sub')}</p>
 
-          {/* Suggestions */}
           <div className="mb-4 flex flex-wrap gap-2">
             {SUGGESTED_CATEGORIES.map(name => (
               <button
@@ -74,7 +96,6 @@ export function OnboardingWizard({ onComplete }: Props) {
             ))}
           </div>
 
-          {/* Custom input */}
           <div className="mb-4 flex gap-2">
             <input
               className="flex-1 rounded-lg border border-white/[0.07] bg-white/3 px-4 py-2.5 text-sm text-zinc-100 placeholder-zinc-600 outline-none focus:border-white/15 transition-all"
@@ -91,7 +112,6 @@ export function OnboardingWizard({ onComplete }: Props) {
             </button>
           </div>
 
-          {/* Added list */}
           {categories.length > 0 && (
             <ul className="mb-6 space-y-1">
               {categories.map(name => (
@@ -109,19 +129,101 @@ export function OnboardingWizard({ onComplete }: Props) {
           )}
 
           <button
-            onClick={() => setStep(3)}
+            onClick={() => setStep(2)}
             className="w-full rounded-lg border border-white/[0.08] bg-white/[0.04] py-2.5 text-sm text-zinc-300 hover:text-zinc-100 hover:border-white/15 transition-all"
           >
             {t('onboarding.continue')}
           </button>
+          <div className="flex justify-center">
+            <SkipButton />
+          </div>
         </div>
       </div>
     )
   }
 
+  // Step 2: How tracking works
+  if (step === 2) {
+    return (
+      <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-[#0f0f0f] px-6">
+        <div className="w-full max-w-sm">
+          <StepIndicator current={2} />
+          <h2 className="mb-1 text-xl font-semibold text-zinc-100">{t('onboarding.howTitle')}</h2>
+          <p className="mb-8 text-sm text-zinc-500">{t('onboarding.howSub')}</p>
+
+          {/* Visual flow diagram */}
+          <div className="mb-8 space-y-3">
+            {[
+              { icon: '🖥️', label: 'VS Code opened' },
+              { icon: '🤖', label: 'Classified as Work' },
+              { icon: '⏱️', label: 'Session started' },
+            ].map((item, i) => (
+              <div key={i} className="flex items-center gap-3">
+                <span className="text-base">{item.icon}</span>
+                <span className="text-sm text-zinc-300">{item.label}</span>
+                {i < 2 && <span className="ml-auto text-zinc-700">↓</span>}
+              </div>
+            ))}
+          </div>
+
+          <button
+            onClick={() => setStep(3)}
+            className="w-full rounded-lg border border-white/[0.08] bg-white/[0.04] py-2.5 text-sm text-zinc-300 hover:text-zinc-100 hover:border-white/15 transition-all"
+          >
+            {t('onboarding.next')}
+          </button>
+          <div className="flex justify-center">
+            <SkipButton />
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  // Step 3: Keyboard shortcuts
+  if (step === 3) {
+    return (
+      <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-[#0f0f0f] px-6">
+        <div className="w-full max-w-sm">
+          <StepIndicator current={3} />
+          <h2 className="mb-1 text-xl font-semibold text-zinc-100">{t('onboarding.shortcutsTitle')}</h2>
+          <p className="mb-8 text-sm text-zinc-500">{t('onboarding.shortcutsSub')}</p>
+
+          <div className="mb-8 space-y-3">
+            <div className="flex items-center justify-between rounded-lg border border-white/[0.06] px-4 py-2.5">
+              <span className="text-sm text-zinc-400">Start timer 1–9</span>
+              <div className="flex gap-1">
+                {['1', '2', '3'].map(k => (
+                  <kbd key={k} className="rounded bg-white/10 px-1.5 py-0.5 text-xs font-mono text-zinc-300">{k}</kbd>
+                ))}
+                <span className="text-zinc-600 text-xs self-center">…</span>
+              </div>
+            </div>
+            <div className="flex items-center justify-between rounded-lg border border-white/[0.06] px-4 py-2.5">
+              <span className="text-sm text-zinc-400">Command palette</span>
+              <kbd className="rounded bg-white/10 px-1.5 py-0.5 text-xs font-mono text-zinc-300">⌘K</kbd>
+            </div>
+          </div>
+
+          <button
+            onClick={() => setStep(4)}
+            className="w-full rounded-lg border border-white/[0.08] bg-white/[0.04] py-2.5 text-sm text-zinc-300 hover:text-zinc-100 hover:border-white/15 transition-all"
+          >
+            {t('onboarding.next')}
+          </button>
+          <div className="flex justify-center">
+            <SkipButton />
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  // Step 4: Focus style (final)
   return (
     <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-[#0f0f0f] px-6">
       <div className="w-full max-w-sm">
+        <StepIndicator current={4} />
         <h2 className="mb-1 text-xl font-semibold text-zinc-100">{t('onboarding.step3Title')}</h2>
         <p className="mb-6 text-sm text-zinc-500">{t('onboarding.step3Sub')}</p>
 

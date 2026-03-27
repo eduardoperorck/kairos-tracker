@@ -179,6 +179,7 @@ export type ParsedTimeEntry = {
   categoryId: string
   date: string          // YYYY-MM-DD
   startHour: number     // 0-23
+  startMinute?: number  // 0-59, optional — defaults to 0
   durationMs: number
   tag?: string
 }

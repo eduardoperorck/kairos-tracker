@@ -1,4 +1,6 @@
-import { createContext, useContext, useState, type ReactNode } from 'react'
+import { createContext, useContext, useState, useEffect, type ReactNode } from 'react'
+import { SettingKey } from './persistence/storage'
+import type { Storage } from './persistence/storage'
 
 export type Lang = 'en' | 'pt'
 
@@ -37,6 +39,15 @@ const en = {
   'stats.weekOf': 'week of',
   'stats.hourDist': 'Hour Distribution',
   'stats.heatmap': 'Activity Heatmap (13 weeks)',
+  'stats.tabOverview': 'Overview',
+  'stats.tabPatterns': 'Patterns',
+  'stats.tabAdvanced': 'Advanced',
+  'stats.replayDay': 'Replay my day',
+  'interrupt.title': 'Context Switch Cost',
+  'interrupt.switches': 'context switches today',
+  'interrupt.lost': 'min lost',
+  'interrupt.cost': 'estimated cost',
+  'interrupt.noRate': 'Set hourly rate in Settings to see cost.',
   'history.title': 'History',
   'history.empty': 'No history yet.',
   'history.importToggl': 'Import Toggl',
@@ -47,7 +58,7 @@ const en = {
   'intentions.empty': 'No intentions set yet.',
   'intentions.markDone': 'Mark done',
   'intentions.markUndone': 'Mark undone',
-  'intentions.eveningTitle': 'Evening Review',
+  'intentions.eveningTitle': 'Day Review',
   'intentions.howWasDay': 'How was your day?',
   'intentions.notesPlaceholder': 'Notes about your day...',
   'intentions.saveReview': 'Save Review',
@@ -67,12 +78,19 @@ const en = {
   'settings.backup': 'Backup & Restore',
   'settings.downloadBackup': 'Download Backup (JSON)',
   'settings.restoreBackup': 'Restore from Backup',
+  'settings.deleteBefore': 'Delete sessions before today…',
+  'settings.deleteAll': 'Delete ALL sessions…',
+  'settings.deleteAllConfirm': 'Delete ALL sessions?',
+  'settings.deleteBeforePrefix': 'Delete everything before',
+  'settings.deletedAllResult': 'Deleted all {count} session(s).',
+  'settings.deletedBeforeResult': 'Deleted {count} session(s) before {date}.',
+  'settings.yesDelete': 'Yes, delete',
   'settings.focusPreset': 'Focus Guard Preset',
   'settings.strictMode': 'Strict mode',
   'settings.strictOn': 'no skipping allowed',
   'settings.strictOff': 'skipping allowed',
-  'settings.apiKey': 'Claude API Key',
-  'settings.apiKeyDesc': 'Used for AI Weekly Digest. Stored locally, never sent anywhere else.',
+  'settings.apiKey': 'AI Assistant (Claude / Ollama)',
+  'settings.apiKeyDesc': 'Claude API key for AI features. Ollama is detected automatically — no key needed if running locally.',
   'settings.sync': 'OneDrive / Folder Sync',
   'settings.syncDesc': 'Export a JSON snapshot to a folder (e.g. OneDrive) for multi-device sync.',
   'settings.syncSave': 'Save',
@@ -101,10 +119,18 @@ const en = {
   'onboarding.step3Title': 'Choose your focus style',
   'onboarding.step3Sub': 'You can change this any time in Settings.',
   'onboarding.done': 'Start tracking',
+  'onboarding.next': 'Next →',
+  'onboarding.skip': 'Skip',
+  'onboarding.howTitle': 'How tracking works',
+  'onboarding.howSub': 'The app detects which window is active and suggests the right category. You stay in control — it only tracks what you approve.',
+  'onboarding.shortcutsTitle': 'Keyboard shortcuts',
+  'onboarding.shortcutsSub': 'Press 1–9 to start a timer instantly. Press Cmd+K (or Ctrl+K) to open the command palette for everything else.',
+  'onboarding.stepOf': '{step} / {total}',
   'statCard.share': 'Share week',
   'statCard.copied': 'Copied!',
   'statCard.copyFailed': 'Copy failed',
   'wrapped.open': 'Productivity Wrapped',
+  'wrapped.monthlyRecap': 'See {month} recap →',
   'wrapped.next': 'Next →',
   'wrapped.share': 'Share',
   'wrapped.close': '✕',
@@ -115,6 +141,16 @@ const en = {
   'nlp.confirm': 'Add session',
   'nlp.cancel': 'Cancel',
   'nlp.parsing': 'Parsing…',
+  'manual.category': 'Category',
+  'manual.date': 'Date',
+  'manual.start': 'Start',
+  'manual.end': 'End',
+  'manual.tag': 'Tag',
+  'manual.optional': 'optional',
+  'manual.errorNoCategory': 'Select a category.',
+  'manual.errorEndBeforeStart': 'End time must be after start time.',
+  'tracker.logTimeManual': 'Manual',
+  'tracker.logTimeAI': 'AI',
   'github.correlation': 'GitHub commits',
   'focusDebt.title': 'Focus Debt',
   'focusDebt.minimal': 'Minimal',
@@ -167,6 +203,7 @@ const en = {
   'sessionName.skip': 'Skip',
   'deadTime.title': 'Dead time',
   'deadTime.idle': 'idle',
+  'deadTime.idleIn': 'idle in',
   'deadTime.quickWin': 'Quick win while you\'re in transition?',
   'distraction.title': 'Distraction Budget',
   'distraction.noApps': 'No distraction apps detected today.',
@@ -176,8 +213,8 @@ const en = {
   'input.moderate': 'moderate',
   'input.active': 'active',
   'input.intense': 'intense',
-  'mvd.title': 'Minimum Viable Day',
-  'mvd.subtitle': '3 critical tasks that define a successful day',
+  'mvd.title': "Today's Focus",
+  'mvd.subtitle': 'Up to 3 must-dos that define a successful day',
   'mvd.achieved': 'Achieved!',
   'mvd.max': 'Max 3 must-dos per day.',
   'mvd.add': 'Add',
@@ -216,17 +253,30 @@ const en = {
   'tracker.yesAlways': 'Yes, always',
   'tracker.notNow': 'Not now',
   'tracker.logTime': '+ log time',
+  'tracker.logTimePlaceholder': 'e.g. "2h deep work on feature-x yesterday"',
+  'tracker.mvdPlaceholder': 'Add a priority for today...',
   'tracker.archived': 'archived',
   'tracker.noGoalsHint': 'No goals set — add up to',
-  'tracker.autoStart': 'auto-start',
-  'tracker.whenever': 'whenever active?',
+  'tracker.autoStart': 'is active while tracking',
+  'tracker.whenever': '— start automatically?',
+  'tracker.workspacePrompt': 'VS Code opened',
+  'tracker.workspaceAssign': 'No category assigned yet — which one fits?',
+  'tracker.workspaceIgnore': 'Always ignore',
+  'tracker.detectedJustNow': 'just now',
+  'tracker.detectedAgo': '{n}min ago',
+  'tracker.activeJustNow': 'active just now',
+  'tracker.activeFor': 'active for {n}min',
+  'tracker.done': '✓ Done',
+  'tracker.unarchive': 'Unarchive',
+  'app.category': 'category',
+  'app.categories': 'categories',
 
   // CategoryItem menu
   'category.rename': 'Rename',
   'category.tagLastSession': 'Tag last session',
   'category.tagLastSessionLabel': 'Tag last session:',
   'category.color': 'Color',
-  'category.deleteIcon': 'Delete',
+  'category.archiveIcon': 'Archive',
 
   // CategoryGoal
   'goal.setWeekly': 'Set weekly goal',
@@ -247,8 +297,19 @@ const en = {
   'settings.startupOn': 'App will start on login.',
   'settings.startupOff': 'Removed from startup.',
   'settings.startupUnavail': 'Not available (Windows only).',
+  'settings.productivity': 'Productivity',
+  'settings.hourlyRate': 'Hourly rate (optional)',
+  'settings.hourlyRateDesc': 'Used to estimate the cost of context switches and interruptions.',
+  'settings.hourlyRatePlaceholder': 'e.g. 50',
+  'settings.hourlyRateSaved': 'Rate saved',
+  'settings.calendarFile': 'Calendar (.ics)',
+  'settings.calendarDesc': 'Load a local .ics file to auto-tag sessions overlapping with calendar events (meetings, standups, calls).',
+  'settings.calendarLoaded': '{n} events loaded',
   'settings.processRules': 'Process Rules',
-  'settings.processRulesEmpty': 'No custom rules — classify a process from the Tracker tab to add rules here.',
+  'settings.processRulesDesc': 'Rules link apps to categories. When a classified app gains focus, the timer starts automatically.',
+  'settings.processRulesEmpty': 'No rules yet — open an app while a timer is running and classify it from the banner in the Tracker tab.',
+  'settings.modeAutoDesc': 'starts the timer automatically when this app is detected',
+  'settings.modeSuggestDesc': 'suggests the category — you control when tracking starts',
   'settings.ignore': 'ignore',
   'settings.syncSaved': 'Sync path saved.',
   'settings.syncNoPath': 'No sync path configured.',
@@ -401,6 +462,8 @@ const en = {
   'palette.changePreset': 'Change focus preset',
   'palette.weeklyDigest': 'View weekly digest',
   'palette.setGoals': "Set today's goals",
+  'palette.saveBookmark': 'Save context bookmark',
+  'palette.restoreBookmark': 'Restore bookmark',
 
   // Notion integration
   'notion.configRequired': 'Configure Notion token and database ID in Settings first.',
@@ -438,6 +501,39 @@ const en = {
   // Language name (shown in settings accordion status)
   'settings.langName': 'English',
 
+  // Passive tracking indicator (M-UX3)
+  'tracking.watching': 'watching',
+  'tracking.idle': 'idle',
+
+  // Toast confirmations
+  'toast.archived': 'Category archived',
+  'toast.unarchived': 'Category unarchived',
+  'toast.ruleCreated': 'Rule created',
+  'toast.ruleLearnedProcess': 'Got it — "{process}" will be tracked as {category}',
+  'toast.ruleDeleted': 'Rule deleted',
+  'toast.ruleUpdated': 'Rule updated',
+  'toast.sessionLogged': 'Session logged',
+  'toast.goalSaved': 'Goal saved',
+  'toast.apiKeySaved': 'API key saved',
+  'toast.backupExported': 'Backup exported',
+  'sessionFix.editTime': 'Edit time',
+  'sessionFix.split': 'Split',
+  'sessionFix.confirm': 'Confirm',
+  'sessionFix.save': 'Save',
+  'sessionFix.applySplit': 'Apply split',
+  'sessionFix.splitWas': 'was',
+  'sessionFix.splitMinutes': 'min of',
+  'sessionFix.start': 'Start',
+  'sessionFix.end': 'End',
+  'sessionFix.dismiss': 'Dismiss session fix',
+  'undo.archived': 'Category archived',
+  'undo.label': 'Undo',
+
+  // Task 8: idle pause banner
+  'idle.youWereAway': 'You were away for {min} minutes.',
+  'idle.keepTime': 'Keep time',
+  'idle.discardTime': 'Discard idle time',
+
   // Session auto-naming labels (returned as i18n keys by suggestSessionName)
   'sessionTag.coding': 'Coding',
   'sessionTag.codeReview': 'Code Review',
@@ -449,6 +545,21 @@ const en = {
   'sessionTag.documents': 'Documents',
   'sessionTag.projectManagement': 'Project Management',
   'sessionTag.session': 'Session',
+
+  // M-UX8: Daily Insight Card
+  'insights.title': 'Today\'s insights',
+  'insights.focusToday': 'You focused {time} today',
+  'insights.aboveAverage': '— above your average',
+  'insights.belowAverage': '— below your average',
+  'insights.streak': '{days}-day streak in {name} — keep going!',
+  'insights.peakHours': 'Your best focus hours: {hours}',
+
+  // M-UX6: Meeting Mode
+  'meeting.start': 'Meeting',
+  'meeting.end': 'End Meeting',
+  'meeting.resumePrompt': 'Back from meeting ({min}min) — resume {name}?',
+  'meeting.resume': 'Resume',
+  'meeting.skip': 'Skip',
 } as const
 
 const pt: { [K in keyof typeof en]: string } = {
@@ -468,10 +579,10 @@ const pt: { [K in keyof typeof en]: string } = {
   'category.confirm': 'Confirmar',
   'category.cancel': 'Cancelar',
   'category.addTag': '+ tag',
-  'category.clearTag': 'limpar tag',
-  'category.lastTracked': 'última vez',
+  'category.clearTag': 'Limpar tag',
+  'category.lastTracked': 'Última vez',
   'category.colorLabel': 'Cor da categoria',
-  'category.peak': 'pico:',
+  'category.peak': 'Pico:',
   'focusLock.exit': 'Sair do Focus Lock',
   'stats.title': 'Estatísticas',
   'stats.back': '← Voltar',
@@ -486,6 +597,15 @@ const pt: { [K in keyof typeof en]: string } = {
   'stats.weekOf': 'semana de',
   'stats.hourDist': 'Distribuição por Hora',
   'stats.heatmap': 'Heatmap de Atividade (13 semanas)',
+  'stats.tabOverview': 'Visão Geral',
+  'stats.tabPatterns': 'Padrões',
+  'stats.tabAdvanced': 'Avançado',
+  'stats.replayDay': 'Rever meu dia',
+  'interrupt.title': 'Custo de Troca de Contexto',
+  'interrupt.switches': 'trocas de contexto hoje',
+  'interrupt.lost': 'min perdidos',
+  'interrupt.cost': 'custo estimado',
+  'interrupt.noRate': 'Defina a taxa horária nas Configurações para ver o custo.',
   'history.title': 'Histórico',
   'history.empty': 'Sem histórico ainda.',
   'history.importToggl': 'Importar Toggl',
@@ -496,7 +616,7 @@ const pt: { [K in keyof typeof en]: string } = {
   'intentions.empty': 'Nenhuma intenção definida ainda.',
   'intentions.markDone': 'Marcar como feito',
   'intentions.markUndone': 'Marcar como não feito',
-  'intentions.eveningTitle': 'Revisão da Tarde',
+  'intentions.eveningTitle': 'Revisão do Dia',
   'intentions.howWasDay': 'Como foi seu dia?',
   'intentions.notesPlaceholder': 'Notas sobre seu dia...',
   'intentions.saveReview': 'Salvar Revisão',
@@ -516,12 +636,19 @@ const pt: { [K in keyof typeof en]: string } = {
   'settings.backup': 'Backup & Restauração',
   'settings.downloadBackup': 'Baixar Backup (JSON)',
   'settings.restoreBackup': 'Restaurar Backup',
+  'settings.deleteBefore': 'Deletar sessões antes de hoje…',
+  'settings.deleteAll': 'Deletar TODAS as sessões…',
+  'settings.deleteAllConfirm': 'Deletar TODAS as sessões?',
+  'settings.deleteBeforePrefix': 'Deletar tudo antes de',
+  'settings.deletedAllResult': 'Deletadas todas as {count} sessão(ões).',
+  'settings.deletedBeforeResult': 'Deletadas {count} sessão(ões) antes de {date}.',
+  'settings.yesDelete': 'Sim, deletar',
   'settings.focusPreset': 'Preset do Focus Guard',
   'settings.strictMode': 'Modo estrito',
   'settings.strictOn': 'sem permissão de pular',
   'settings.strictOff': 'pode pular',
-  'settings.apiKey': 'Chave API Claude',
-  'settings.apiKeyDesc': 'Usada para o Resumo Semanal IA. Armazenada localmente, nunca enviada para outro lugar.',
+  'settings.apiKey': 'Assistente IA (Claude / Ollama)',
+  'settings.apiKeyDesc': 'Chave Claude para funções de IA. Ollama é detectado automaticamente — nenhuma chave necessária se estiver rodando localmente.',
   'settings.sync': 'Sync OneDrive / Pasta',
   'settings.syncDesc': 'Exporta um snapshot JSON para uma pasta (ex: OneDrive) para sincronização multi-dispositivo.',
   'settings.syncSave': 'Salvar',
@@ -550,10 +677,18 @@ const pt: { [K in keyof typeof en]: string } = {
   'onboarding.step3Title': 'Escolha seu estilo de foco',
   'onboarding.step3Sub': 'Você pode mudar isso a qualquer momento nas Configurações.',
   'onboarding.done': 'Começar a rastrear',
+  'onboarding.next': 'Próximo →',
+  'onboarding.skip': 'Pular',
+  'onboarding.howTitle': 'Como o tracking funciona',
+  'onboarding.howSub': 'O app detecta qual janela está ativa e sugere a categoria certa. Você mantém o controle — só rastreia o que você aprovar.',
+  'onboarding.shortcutsTitle': 'Atalhos de teclado',
+  'onboarding.shortcutsSub': 'Pressione 1–9 para iniciar um timer na hora. Pressione Cmd+K (ou Ctrl+K) para abrir a paleta de comandos.',
+  'onboarding.stepOf': '{step} / {total}',
   'statCard.share': 'Compartilhar semana',
   'statCard.copied': 'Copiado!',
   'statCard.copyFailed': 'Falha ao copiar',
   'wrapped.open': 'Productivity Wrapped',
+  'wrapped.monthlyRecap': 'Ver recap de {month} →',
   'wrapped.next': 'Próximo →',
   'wrapped.share': 'Compartilhar',
   'wrapped.close': '✕',
@@ -564,6 +699,16 @@ const pt: { [K in keyof typeof en]: string } = {
   'nlp.confirm': 'Adicionar sessão',
   'nlp.cancel': 'Cancelar',
   'nlp.parsing': 'Analisando…',
+  'manual.category': 'Categoria',
+  'manual.date': 'Data',
+  'manual.start': 'Início',
+  'manual.end': 'Fim',
+  'manual.tag': 'Tag',
+  'manual.optional': 'opcional',
+  'manual.errorNoCategory': 'Selecione uma categoria.',
+  'manual.errorEndBeforeStart': 'O horário de fim deve ser após o início.',
+  'tracker.logTimeManual': 'Manual',
+  'tracker.logTimeAI': 'IA',
   'github.correlation': 'Commits GitHub',
   'focusDebt.title': 'Dívida de Foco',
   'focusDebt.minimal': 'Mínima',
@@ -615,18 +760,19 @@ const pt: { [K in keyof typeof en]: string } = {
   'sessionName.save': 'Salvar',
   'sessionName.skip': 'Pular',
   'deadTime.title': 'Tempo morto',
-  'deadTime.idle': 'inativo',
+  'deadTime.idle': 'Inativo',
+  'deadTime.idleIn': 'Ocioso em',
   'deadTime.quickWin': 'Ganho rápido durante a transição?',
   'distraction.title': 'Orçamento de Distração',
   'distraction.noApps': 'Nenhum app de distração detectado hoje.',
   'distraction.overBudget': 'Acima do orçamento em',
-  'input.idle': 'inativo',
-  'input.light': 'leve',
-  'input.moderate': 'moderado',
-  'input.active': 'ativo',
-  'input.intense': 'intenso',
-  'mvd.title': 'Dia Mínimo Viável',
-  'mvd.subtitle': '3 tarefas essenciais para o dia ser um sucesso',
+  'input.idle': 'Inativo',
+  'input.light': 'Leve',
+  'input.moderate': 'Moderado',
+  'input.active': 'Ativo',
+  'input.intense': 'Intenso',
+  'mvd.title': 'Foco do Dia',
+  'mvd.subtitle': 'Até 3 tarefas obrigatórias para o dia ser um sucesso',
   'mvd.achieved': 'Conquistado!',
   'mvd.max': 'Máx 3 tarefas obrigatórias por dia.',
   'mvd.add': 'Adicionar',
@@ -653,29 +799,42 @@ const pt: { [K in keyof typeof en]: string } = {
   'rec.moreData': 'Continue rastreando! Após mais algumas sessões, você verá padrões e recomendações personalizados.',
 
   // ActiveTimerBar
-  'activeTimer.stop': 'parar',
+  'activeTimer.stop': 'Parar',
 
   // TrackerView
   'tracker.tagQuestion': 'Tag?',
-  'tracker.skipTag': 'pular',
+  'tracker.skipTag': 'Pular',
   'tracker.todaysGoals': 'Metas do dia',
   'tracker.addCategory': '+ Adicionar categoria',
   'tracker.whichCategory': '— qual categoria é essa?',
-  'tracker.ignore': 'ignorar',
+  'tracker.ignore': 'Ignorar',
   'tracker.yesAlways': 'Sim, sempre',
   'tracker.notNow': 'Agora não',
   'tracker.logTime': '+ registrar tempo',
+  'tracker.logTimePlaceholder': 'ex: "2h trabalho focado na feature-x ontem"',
+  'tracker.mvdPlaceholder': 'Adicionar prioridade para hoje...',
   'tracker.archived': 'arquivadas',
   'tracker.noGoalsHint': 'Sem metas — adicione até',
-  'tracker.autoStart': 'iniciar automaticamente',
-  'tracker.whenever': 'quando ativo?',
+  'tracker.autoStart': 'está ativo enquanto rastreia',
+  'tracker.whenever': '— iniciar automaticamente?',
+  'tracker.workspacePrompt': 'VS Code abriu',
+  'tracker.workspaceAssign': 'Sem categoria atribuída — qual combina?',
+  'tracker.workspaceIgnore': 'Sempre ignorar',
+  'tracker.detectedJustNow': 'agora mesmo',
+  'tracker.detectedAgo': 'há {n}min',
+  'tracker.activeJustNow': 'ativo agora mesmo',
+  'tracker.activeFor': 'ativo há {n}min',
+  'tracker.done': '✓ Feito',
+  'tracker.unarchive': 'Desarquivar',
+  'app.category': 'categoria',
+  'app.categories': 'categorias',
 
   // CategoryItem menu
   'category.rename': 'Renomear',
   'category.tagLastSession': 'Marcar última sessão',
   'category.tagLastSessionLabel': 'Marcar última sessão:',
   'category.color': 'Cor',
-  'category.deleteIcon': 'Excluir',
+  'category.archiveIcon': 'Arquivar',
 
   // CategoryGoal
   'goal.setWeekly': 'Definir meta semanal',
@@ -696,8 +855,19 @@ const pt: { [K in keyof typeof en]: string } = {
   'settings.startupOn': 'App iniciará no login.',
   'settings.startupOff': 'Removido da inicialização.',
   'settings.startupUnavail': 'Não disponível (apenas Windows).',
+  'settings.productivity': 'Produtividade',
+  'settings.hourlyRate': 'Taxa horária (opcional)',
+  'settings.hourlyRateDesc': 'Usada para estimar o custo de trocas de contexto e interrupções.',
+  'settings.hourlyRatePlaceholder': 'ex. 50',
+  'settings.hourlyRateSaved': 'Taxa salva',
+  'settings.calendarFile': 'Calendário (.ics)',
+  'settings.calendarDesc': 'Carregue um arquivo .ics local para marcar automaticamente sessões que coincidem com eventos do calendário (reuniões, standups, ligações).',
+  'settings.calendarLoaded': '{n} eventos carregados',
   'settings.processRules': 'Regras de Processo',
-  'settings.processRulesEmpty': 'Sem regras — classifique um processo na aba Rastreador para adicionar regras aqui.',
+  'settings.processRulesDesc': 'Regras vinculam apps a categorias. Quando um app classificado ganhar foco, o timer inicia automaticamente.',
+  'settings.processRulesEmpty': 'Sem regras ainda — abra um app com o timer ativo e classifique-o pelo banner na aba Rastreador.',
+  'settings.modeAutoDesc': 'inicia o timer automaticamente quando este app for detectado',
+  'settings.modeSuggestDesc': 'sugere a categoria — você controla quando o rastreamento começa',
   'settings.ignore': 'ignorar',
   'settings.syncSaved': 'Caminho de sync salvo.',
   'settings.syncNoPath': 'Nenhum caminho de sync configurado.',
@@ -850,6 +1020,8 @@ const pt: { [K in keyof typeof en]: string } = {
   'palette.changePreset': 'Mudar preset de foco',
   'palette.weeklyDigest': 'Ver resumo semanal',
   'palette.setGoals': 'Definir metas de hoje',
+  'palette.saveBookmark': 'Salvar marcador de contexto',
+  'palette.restoreBookmark': 'Restaurar marcador',
 
   // Notion integration
   'notion.configRequired': 'Configure o token e o ID do banco Notion nas Configurações.',
@@ -887,6 +1059,39 @@ const pt: { [K in keyof typeof en]: string } = {
   // Language name
   'settings.langName': 'Português',
 
+  // Passive tracking indicator (M-UX3)
+  'tracking.watching': 'Monitorando',
+  'tracking.idle': 'Ocioso',
+
+  // Toast confirmations
+  'toast.archived': 'Categoria arquivada',
+  'toast.unarchived': 'Categoria desarquivada',
+  'toast.ruleCreated': 'Regra criada',
+  'toast.ruleLearnedProcess': 'Entendido — "{process}" será rastreado como {category}',
+  'toast.ruleDeleted': 'Regra removida',
+  'toast.ruleUpdated': 'Regra atualizada',
+  'toast.sessionLogged': 'Sessão registrada',
+  'toast.goalSaved': 'Meta salva',
+  'toast.apiKeySaved': 'Chave de API salva',
+  'toast.backupExported': 'Backup exportado',
+  'sessionFix.editTime': 'Editar tempo',
+  'sessionFix.split': 'Dividir',
+  'sessionFix.confirm': 'Confirmar',
+  'sessionFix.save': 'Salvar',
+  'sessionFix.applySplit': 'Aplicar divisão',
+  'sessionFix.splitWas': 'foi',
+  'sessionFix.splitMinutes': 'min de',
+  'sessionFix.start': 'Início',
+  'sessionFix.end': 'Fim',
+  'sessionFix.dismiss': 'Dispensar correção',
+  'undo.archived': 'Categoria arquivada',
+  'undo.label': 'Desfazer',
+
+  // Task 8: idle pause banner
+  'idle.youWereAway': 'Você ficou ausente por {min} minutos.',
+  'idle.keepTime': 'Manter tempo',
+  'idle.discardTime': 'Descartar tempo inativo',
+
   // Session auto-naming labels
   'sessionTag.coding': 'Programação',
   'sessionTag.codeReview': 'Revisão de Código',
@@ -898,6 +1103,21 @@ const pt: { [K in keyof typeof en]: string } = {
   'sessionTag.documents': 'Documentos',
   'sessionTag.projectManagement': 'Gestão de Projetos',
   'sessionTag.session': 'Sessão',
+
+  // M-UX8: Daily Insight Card
+  'insights.title': 'Insights de hoje',
+  'insights.focusToday': 'Você focou {time} hoje',
+  'insights.aboveAverage': '— acima da sua média',
+  'insights.belowAverage': '— abaixo da sua média',
+  'insights.streak': 'Sequência de {days} dias em {name} — continue!',
+  'insights.peakHours': 'Seus melhores horários de foco: {hours}',
+
+  // M-UX6: Meeting Mode
+  'meeting.start': 'Reunião',
+  'meeting.end': 'Encerrar Reunião',
+  'meeting.resumePrompt': 'Voltou de reunião ({min}min) — retomar {name}?',
+  'meeting.resume': 'Retomar',
+  'meeting.skip': 'Ignorar',
 }
 
 export const translations: Record<Lang, { [K in keyof typeof en]: string }> = { en, pt }
@@ -931,14 +1151,28 @@ const I18nContext = createContext<I18nContextType>({
   setLang: () => {},
 })
 
-export function I18nProvider({ children }: { children: ReactNode }) {
+export function I18nProvider({ children, storage }: { children: ReactNode; storage?: Storage }) {
   const [lang, setLangState] = useState<Lang>(() =>
     localStorage.getItem('lang') === 'pt' ? 'pt' : 'en'
   )
 
+  // M99: on mount, prefer SQLite-persisted language over localStorage
+  useEffect(() => {
+    if (!storage) return
+    storage.getSetting(SettingKey.Language).then(saved => {
+      if (saved === 'pt' || saved === 'en') {
+        setLangState(saved)
+        localStorage.setItem('lang', saved)
+      }
+    }).catch(() => { /* storage not available yet */ })
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
   function setLang(next: Lang) {
     setLangState(next)
     localStorage.setItem('lang', next)
+    // M99: persist to SQLite so language survives reinstall / localStorage clear
+    storage?.setSetting(SettingKey.Language, next).catch(() => { /* non-critical */ })
   }
 
   const t = (key: TKey): string => translations[lang][key]

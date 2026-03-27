@@ -23,7 +23,8 @@ This file documents the scientific reasoning behind every metric and analysis im
 13. [Code Quality / Commit-DWS Correlation](#13-code-quality--commit-dws-correlation)
 14. [Late Night & Weekend Work Signals](#14-late-night--weekend-work-signals)
 15. [Daily Intentions & Minimum Viable Day](#15-daily-intentions--minimum-viable-day)
-16. [Daily Focus Score (DFS)](#section-16--daily-focus-score-dfs)
+16. [Daily Focus Score (DFS)](#16-daily-focus-score-dfs)
+17. [Passive Capture & Tracking Accuracy](#17-passive-capture--tracking-accuracy)
 
 ---
 
@@ -313,7 +314,7 @@ Perceived progress, even small, is the single largest driver of daily work engag
 
 ---
 
-## Section 16 — Daily Focus Score (DFS)
+## 16. Daily Focus Score (DFS)
 
 **Purpose:** A single 0–100 score representing overall day quality, combining time depth, session quality, and goal progress.
 
@@ -332,6 +333,61 @@ Perceived progress, even small, is the single largest driver of daily work engag
 - Context-blind: 6h target means the same to a designer, developer, or student
 - Does not differentiate between deep work and shallow work time (DWS does)
 - Weekend/holiday sessions counted equally as weekdays
+
+---
+
+---
+
+## 17. Passive Capture & Tracking Accuracy
+
+**Central thesis:** Automatic time tracking must be held accountable to the same quality standards as manual tracking; a system that silently misclassifies time provides false data worse than no data at all.
+
+### Passive capture model
+
+The passive capture system polls the foreground window every 5 seconds and aggregates contiguous same-process blocks. Only blocks longer than 30 seconds are retained — this filters transient window flashes (alt-tab, notifications) that would inflate switch counts and pollute classification.
+
+**30-second minimum block threshold** is informed by:
+
+**Iqbal & Bailey (2006)** — interactions shorter than ~20–30 seconds do not constitute genuine task engagement and should not be counted as context switches for analytical purposes.
+
+**Gloria Mark et al. (2005)** — the 11-minute average interruption cycle means most real task engagements are at least several minutes long; sub-30-second blocks are overwhelmingly transient.
+
+### Correction learning threshold (n = 3)
+
+When a user manually overrides the automatic classification of the same app+context 3 times, a permanent rule is promoted. The threshold of 3 is derived from:
+
+**Herbert H. Clark, Eve V. Clark (1977) — *Psychology and Language: An Introduction to Psycholinguistics***
+Three consistent repetitions are sufficient for a human observer to infer intentionality rather than error. The same principle applies to user correction signals: a single override may be incidental; three overrides constitute a reliable pattern.
+
+**Amos Tversky, Daniel Kahneman (1974) — "Judgment under Uncertainty: Heuristics and Biases" (*Science*, 185, 1124–1131)**
+A minimum sample of 3 observations is generally accepted in heuristic decision-making literature as the threshold for inferring a reliable pattern from behavioural data. Below 3, variance is too high to distinguish signal from noise.
+
+### Tracking Accuracy Score (TAS)
+
+The weekly TAS is a composite 0–100 score:
+
+| Component | Weight | Definition |
+|-----------|--------|-----------|
+| Auto-accuracy | 40% | % of auto-classified blocks never manually overridden |
+| Coverage | 30% | % of session time that has overlapping passive-capture blocks |
+| Stability | 20% | Average session duration normalised to a 60-min anchor |
+| Low noise | 10% | 1 − (sessions < 2 min / total sessions) |
+
+**Auto-accuracy (40%):** High weight because a system that classifies time correctly with no manual effort is the core value proposition. Heavily penalised if the user regularly has to correct classifications.
+
+**Coverage (30%):** A significant portion of time off-screen (sleep, away) is expected and healthy. The metric rewards breadth of capture, not perfection.
+
+**Stability (20%):** Grounded in Ericsson et al. (1993): expert practitioners sustain approximately 60-minute deliberate practice sessions. An average session duration close to 60 minutes signals disciplined, deep-work-oriented use.
+
+**Low noise (10%):** Sessions under 2 minutes are likely accidental starts or test taps. The noise ratio measures data hygiene — high noise inflates session counts without adding meaningful tracked time.
+
+> **Note:** The specific component weights are heuristic, derived from product reasoning rather than empirical calibration. They reflect a judgement about the relative importance of automatic correctness, time coverage, session discipline, and data hygiene.
+
+### Idle detection threshold (5 minutes)
+
+**Zijlstra et al. (1999)** — Brief pauses of 2–5 minutes in cognitive work are common and do not signal a task switch. Using 5 minutes as the idle threshold avoids false pauses from short breaks, bathroom trips, or paper-based work, while reliably detecting genuine away-from-computer time.
+
+**Gloria Mark (2023) — *Attention Span*** — Workers frequently disengage from the computer for short periods as part of their normal workflow. An idle threshold below 5 minutes would generate excessive false positives in normal use.
 
 ---
 
@@ -356,3 +412,4 @@ Perceived progress, even small, is the single largest driver of daily work engag
 | Intentions / MVD | Implementation Intentions | Gollwitzer (1999) |
 | Late Night / Weekend | Psychological Detachment | Sonnentag (2003); Geurts & Sonnentag (2006) |
 | Daily Focus Score | Time depth + session quality | Csikszentmihalyi (1990); Newport (2016) |
+| Passive Capture / TAS | Auto-classification accountability | Mark et al. (2005); Iqbal & Bailey (2006) |

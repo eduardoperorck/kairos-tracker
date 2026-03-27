@@ -1,8 +1,9 @@
 import Database from '@tauri-apps/plugin-sql'
-import type { Storage, PersistedCategory, DailyCaptureStatRow } from './storage'
+import type { Storage, PersistedCategory, DailyCaptureStatRow, CorrectionRecord, ContextBookmark } from './storage'
 import type { Session } from '../domain/timer'
 import type { Intention, EveningReview } from '../domain/intentions'
 import type { WindowRule } from '../domain/passiveCapture'
+import type { DomainRule } from '../domain/classifier'
 
 const DB_PATH = 'sqlite:timetracker.db'
 
@@ -64,6 +65,32 @@ const MIGRATIONS: string[] = [
     tag         TEXT,
     mode        TEXT NOT NULL,
     enabled     INTEGER NOT NULL DEFAULT 1
+  )`,
+  // v6a — domain_rules: user-assigned domain → category mappings (was localStorage)
+  `CREATE TABLE IF NOT EXISTS domain_rules (
+    id          TEXT PRIMARY KEY,
+    domain      TEXT NOT NULL,
+    category_id TEXT NOT NULL
+  )`,
+  // v6b — correction_records: correction learning counters (was localStorage)
+  `CREATE TABLE IF NOT EXISTS correction_records (
+    context_key TEXT NOT NULL,
+    category_id TEXT NOT NULL,
+    count       INTEGER NOT NULL DEFAULT 1,
+    PRIMARY KEY (context_key, category_id)
+  )`,
+  // v7a — index on sessions.date for loadSessionsByDate / loadSessionsSince queries
+  `CREATE INDEX IF NOT EXISTS idx_sessions_date ON sessions(date)`,
+  // v7b — composite index on (category_id, date) for per-category date range queries
+  `CREATE INDEX IF NOT EXISTS idx_sessions_category_date ON sessions(category_id, date)`,
+  // v8 — context_bookmarks: user-saved workspace+domain+category snapshots (M90)
+  `CREATE TABLE IF NOT EXISTS context_bookmarks (
+    id          TEXT PRIMARY KEY,
+    name        TEXT NOT NULL,
+    category_id TEXT NOT NULL,
+    workspace   TEXT,
+    domain      TEXT,
+    created_at  INTEGER NOT NULL
   )`,
 ]
 
@@ -149,6 +176,22 @@ export async function createTauriStorage(): Promise<Storage> {
       }))
     },
 
+    async purgeSessionsBefore(date: string): Promise<number> {
+      const countRows = await db.select<{ n: number }[]>(
+        'SELECT COUNT(*) as n FROM sessions WHERE date < ?', [date]
+      )
+      const count = countRows[0]?.n ?? 0
+      await db.execute('DELETE FROM sessions WHERE date < ?', [date])
+      return count
+    },
+
+    async deleteAllSessions(): Promise<number> {
+      const countRows = await db.select<{ n: number }[]>('SELECT COUNT(*) as n FROM sessions')
+      const count = countRows[0]?.n ?? 0
+      await db.execute('DELETE FROM sessions')
+      return count
+    },
+
     async setActiveEntry(categoryId: string, startedAt: number) {
       await db.execute('DELETE FROM active_entries')
       await db.execute(
@@ -225,16 +268,31 @@ export async function createTauriStorage(): Promise<Storage> {
     },
 
     async importSessions(sessions: Session[]): Promise<void> {
-      for (const s of sessions) {
-        await db.execute(
-          'INSERT OR IGNORE INTO sessions (id, category_id, started_at, ended_at, date, tag) VALUES (?, ?, ?, ?, ?, ?)',
-          [s.id, s.categoryId, s.startedAt, s.endedAt, s.date, s.tag ?? null]
-        )
+      await db.execute('BEGIN TRANSACTION')
+      try {
+        for (const s of sessions) {
+          await db.execute(
+            'INSERT OR IGNORE INTO sessions (id, category_id, started_at, ended_at, date, tag) VALUES (?, ?, ?, ?, ?, ?)',
+            [s.id, s.categoryId, s.startedAt, s.endedAt, s.date, s.tag ?? null]
+          )
+        }
+        await db.execute('COMMIT')
+      } catch (e) {
+        await db.execute('ROLLBACK')
+        throw e
       }
     },
 
     async updateSessionTag(id: string, tag: string | null): Promise<void> {
       await db.execute('UPDATE sessions SET tag = ? WHERE id = ?', [tag, id])
+    },
+
+    async deleteSession(id: string): Promise<void> {
+      await db.execute('DELETE FROM sessions WHERE id = ?', [id])
+    },
+
+    async updateSessionTime(id: string, startedAt: number, endedAt: number): Promise<void> {
+      await db.execute('UPDATE sessions SET started_at = ?, ended_at = ? WHERE id = ?', [startedAt, endedAt, id])
     },
 
     async saveDailyCaptureStat(row: DailyCaptureStatRow): Promise<void> {
@@ -262,6 +320,13 @@ export async function createTauriStorage(): Promise<Storage> {
         block_count: r.block_count,
         category_id: r.category_id,
       }))
+    },
+
+    async updateCaptureStatCategory(date: string, process: string, categoryId: string): Promise<void> {
+      await db.execute(
+        'UPDATE daily_capture_stats SET category_id = ? WHERE date = ? AND process = ?',
+        [categoryId, date, process]
+      )
     },
 
     async loadWindowRules(): Promise<WindowRule[]> {
@@ -292,6 +357,66 @@ export async function createTauriStorage(): Promise<Storage> {
 
     async deleteWindowRule(id: string): Promise<void> {
       await db.execute('DELETE FROM window_rules WHERE id = ?', [id])
+    },
+
+    async loadDomainRules(): Promise<DomainRule[]> {
+      const rows = await db.select<{ id: string; domain: string; category_id: string }[]>(
+        'SELECT id, domain, category_id FROM domain_rules ORDER BY rowid'
+      )
+      return rows.map(r => ({ id: r.id, domain: r.domain, categoryId: r.category_id }))
+    },
+
+    async saveDomainRule(rule: DomainRule): Promise<void> {
+      await db.execute(
+        'INSERT OR REPLACE INTO domain_rules (id, domain, category_id) VALUES (?, ?, ?)',
+        [rule.id, rule.domain, rule.categoryId]
+      )
+    },
+
+    async deleteDomainRule(id: string): Promise<void> {
+      await db.execute('DELETE FROM domain_rules WHERE id = ?', [id])
+    },
+
+    async loadCorrections(): Promise<CorrectionRecord[]> {
+      const rows = await db.select<{ context_key: string; category_id: string; count: number }[]>(
+        'SELECT context_key, category_id, count FROM correction_records'
+      )
+      return rows.map(r => ({ contextKey: r.context_key, categoryId: r.category_id, count: r.count }))
+    },
+
+    async saveCorrection(record: CorrectionRecord): Promise<void> {
+      await db.execute(
+        `INSERT INTO correction_records (context_key, category_id, count) VALUES (?, ?, ?)
+         ON CONFLICT(context_key, category_id) DO UPDATE SET count = excluded.count`,
+        [record.contextKey, record.categoryId, record.count]
+      )
+    },
+
+    async loadContextBookmarks(): Promise<ContextBookmark[]> {
+      const rows = await db.select<{
+        id: string; name: string; category_id: string; workspace: string | null; domain: string | null; created_at: number
+      }[]>(
+        'SELECT id, name, category_id, workspace, domain, created_at FROM context_bookmarks ORDER BY created_at DESC'
+      )
+      return rows.map(r => ({
+        id: r.id,
+        name: r.name,
+        categoryId: r.category_id,
+        workspace: r.workspace,
+        domain: r.domain,
+        createdAt: r.created_at,
+      }))
+    },
+
+    async saveContextBookmark(bookmark: ContextBookmark): Promise<void> {
+      await db.execute(
+        'INSERT OR REPLACE INTO context_bookmarks (id, name, category_id, workspace, domain, created_at) VALUES (?, ?, ?, ?, ?, ?)',
+        [bookmark.id, bookmark.name, bookmark.categoryId, bookmark.workspace ?? null, bookmark.domain ?? null, bookmark.createdAt]
+      )
+    },
+
+    async deleteContextBookmark(id: string): Promise<void> {
+      await db.execute('DELETE FROM context_bookmarks WHERE id = ?', [id])
     },
   }
 }

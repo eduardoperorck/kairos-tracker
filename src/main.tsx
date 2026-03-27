@@ -20,7 +20,7 @@ resolveStorage().then(storage => {
   createRoot(document.getElementById('root')!).render(
     <StrictMode>
       <ErrorBoundary>
-        <I18nProvider>
+        <I18nProvider storage={storage}>
           <App storage={storage} />
         </I18nProvider>
       </ErrorBoundary>

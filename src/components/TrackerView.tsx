@@ -1,32 +1,33 @@
 import { useState, useEffect, useMemo, useRef } from 'react'
 import { useI18n } from '../i18n'
+import { deriveQuickTags } from '../domain/sessionNaming'
 import { CategoryItem } from './CategoryItem'
 import { FocusDebtBanner } from './FocusDebtBanner'
 import { NLPTimeEntry } from './NLPTimeEntry'
+import { ManualTimeEntry } from './ManualTimeEntry'
 import { InputIntelligenceWidget } from './InputIntelligenceWidget'
 import { DeadTimeRecoveryWidget } from './DeadTimeRecoveryWidget'
 import { computeWeekMs } from '../domain/timer'
 import { getLastSessionDate, suggestWeeklyGoal } from '../domain/history'
 import {
   toggleMVDItem, removeMVDItem,
-  isMVDAchieved, getMVDProgress,
+  isMVDAchieved, getMVDProgress, createMVDItem, canAddMVDItem,
 } from '../domain/minimumViableDay'
 import type { Category, Session } from '../domain/timer'
 import type { CategoryInsights } from './CategoryItem'
 import type { ParsedTimeEntry } from '../domain/digest'
 import type { Storage } from '../persistence/storage'
 import type { InputActivity } from '../domain/inputIntelligence'
-import type { CaptureBlock, UnclassifiedApp } from '../domain/passiveCapture'
+import type { UnclassifiedApp } from '../domain/passiveCapture'
 import type { ElevationSuggestion } from '../hooks/usePassiveCapture'
 import type { MVDItem } from '../domain/minimumViableDay'
 
-const QUICK_TAGS = ['deep work', 'meeting', 'admin', 'learning']
 
 export type StoreCategory = Category & { accumulatedMs: number; pendingTag?: string }
 
-export type TrackerViewProps = {
-  input: string
-  setInput: (v: string) => void
+// ── M75: Grouped context objects ──────────────────────────────────────────────
+
+export type TimerContext = {
   categories: StoreCategory[]
   sessions: Session[]
   historySessions: Session[]
@@ -36,38 +37,50 @@ export type TrackerViewProps = {
   claudeApiKey: string | null
   breakSkipCount: number
   breakCompletedCount?: number
-  onAdd: () => void
   onStart: (id: string) => void
   onStop: (id: string, tag?: string) => void
-  onDelete: (id: string) => void
   onArchive: (id: string, archived: boolean) => void
   onRename: (id: string, name: string) => void
   onSetGoal: (id: string, ms: number) => void
   onSetColor: (id: string, color: string) => void
   onSetTag: (id: string, tag: string) => void
-  onFocusLock: () => void
+  onAdd: () => void
   onNLPConfirm: (entry: ParsedTimeEntry) => Promise<void>
+  input: string
+  setInput: (v: string) => void
+}
+
+export type CaptureContext = {
+  unclassifiedProcess?: UnclassifiedApp | null
+  unclassifiedWorkspace?: string | null
+  elevationSuggestion?: ElevationSuggestion | null
+  idleMs?: number
+  inputActivity?: InputActivity
+  currentWindow?: { process: string; workspace: string | null; domain: string | null } | null
+  onAssignProcess?: (process: string, categoryId: string) => void
+  onDismissProcess?: (process: string) => void
+  onAssignWorkspace?: (workspace: string, categoryId: string) => void
+  onDismissWorkspace?: (workspace: string) => void
+  onElevateProcess?: (process: string, categoryId: string) => void
+  onDismissElevation?: (process: string) => void
+}
+
+export type MVDContext = {
+  items: MVDItem[]
+  onChange: (items: MVDItem[]) => void
+}
+
+export type TrackerViewProps = {
+  // Grouped contexts (M75)
+  timer: TimerContext
+  capture: CaptureContext
+  mvd?: MVDContext
+  // Remaining props that don't fit cleanly into the above groups
   storage: Storage
+  onFocusLock: () => void
   // kept for API compat
   switchedAt?: number | null
   switchedFromCategory?: string
-  // N5 Dead Time Recovery
-  idleMs?: number
-  // N7 Input Intelligence
-  inputActivity?: InputActivity
-  // N4 Session Naming
-  captureBlocks?: CaptureBlock[]
-  // P1 Unclassified process prompt
-  unclassifiedProcess?: UnclassifiedApp | null
-  onAssignProcess?: (process: string, categoryId: string) => void
-  onDismissProcess?: (process: string) => void
-  // B2 Elevation suggestion
-  elevationSuggestion?: ElevationSuggestion | null
-  onElevateProcess?: (process: string, categoryId: string) => void
-  onDismissElevation?: (process: string) => void
-  // MVD goals at top
-  mvdItems?: MVDItem[]
-  onMVDChange?: (items: MVDItem[]) => void
   // M105 — notify parent when keyboard shortcut used
   onShortcutUsed?: () => void
   // M73 — allow command palette to open NLP panel
@@ -75,45 +88,87 @@ export type TrackerViewProps = {
 }
 
 export function TrackerView({
-  input,
-  setInput,
-  categories,
-  sessions,
-  historySessions,
-  weekDates,
-  categoryInsights,
-  activeCategory,
-  claudeApiKey,
-  breakSkipCount,
-  breakCompletedCount = 0,
-  onAdd,
-  onStart,
-  onStop,
-  onDelete,
-  onArchive,
-  onRename,
-  onSetGoal,
-  onSetColor,
-  onSetTag,
+  timer,
+  capture,
+  mvd,
+  storage: _storage,
   onFocusLock,
-  onNLPConfirm,
-  idleMs = 0,
-  inputActivity,
-  elevationSuggestion = null,
-  onElevateProcess,
-  onDismissElevation,
-  mvdItems = [],
-  onMVDChange,
   onShortcutUsed,
   onOpenNLP,
 }: TrackerViewProps) {
+  // Destructure context objects for convenient local access
+  const {
+    input,
+    setInput,
+    categories,
+    sessions,
+    historySessions,
+    weekDates,
+    categoryInsights,
+    activeCategory,
+    claudeApiKey,
+    breakSkipCount,
+    breakCompletedCount = 0,
+    onAdd,
+    onStart,
+    onStop,
+    onArchive,
+    onRename,
+    onSetGoal,
+    onSetColor,
+    onSetTag,
+    onNLPConfirm,
+  } = timer
+
+  const {
+    idleMs = 0,
+    inputActivity,
+    unclassifiedWorkspace = null,
+    onAssignWorkspace,
+    onDismissWorkspace,
+    elevationSuggestion = null,
+    onElevateProcess,
+    onDismissElevation,
+    currentWindow = null,
+  } = capture
+
+  const mvdItems = mvd?.items ?? []
+  const onMVDChange = mvd?.onChange
   const { t } = useI18n()
   const [deadTimeDismissed, setDeadTimeDismissed] = useState(false)
+
+  // M-UX1: track when workspace/elevation were first detected for context display
+  const [workspaceDetectedAt, setWorkspaceDetectedAt] = useState<number | null>(null)
+  useEffect(() => {
+    if (unclassifiedWorkspace) {
+      setWorkspaceDetectedAt(prev => prev ?? Date.now())
+    } else {
+      setWorkspaceDetectedAt(null)
+    }
+  }, [unclassifiedWorkspace])
+
+  const [elevationDetectedAt, setElevationDetectedAt] = useState<number | null>(null)
+  useEffect(() => {
+    if (elevationSuggestion) {
+      setElevationDetectedAt(prev => prev ?? Date.now())
+    } else {
+      setElevationDetectedAt(null)
+    }
+  }, [elevationSuggestion])
+
+  function ageLabel(detectedAt: number | null, justNowKey: 'tracker.detectedJustNow' | 'tracker.activeJustNow', agoKey: 'tracker.detectedAgo' | 'tracker.activeFor'): string {
+    if (!detectedAt) return t(justNowKey)
+    const n = Math.max(0, Math.round((Date.now() - detectedAt) / 60_000))
+    return n === 0 ? t(justNowKey) : t(agoKey).replace('{n}', String(n))
+  }
   const [showArchived, setShowArchived] = useState(false)
   const activeCount = categories.filter(c => !c.archived).length
   const effectiveCompact = activeCount >= 5
   const [showNLP, setShowNLP] = useState(false)
+  const [logMode, setLogMode] = useState<'ai' | 'manual'>('ai')
   const [addingCategory, setAddingCategory] = useState(false)
+  const [mvdInputVisible, setMvdInputVisible] = useState(false)
+  const [mvdInputValue, setMvdInputValue] = useState('')
 
   // M73: expose setShowNLP to parent so command palette can open NLP panel
   useEffect(() => {
@@ -158,9 +213,6 @@ export function TrackerView({
     if (addingCategory) ghostInputRef.current?.focus()
   }, [addingCategory])
 
-  // Stable timestamp for the current render cycle — avoids Date.now() in render path
-  const now = useMemo(() => Date.now(), [])
-
   // Auto-sort active categories by last tracked date (most recent first)
   const sortedActive = useMemo(() => {
     const active = categories.filter(c => !c.archived)
@@ -175,11 +227,13 @@ export function TrackerView({
     })
   }, [categories, historySessions])
 
+  const quickTags = useMemo(() => deriveQuickTags(sessions, ['deep work', 'meeting', 'admin', 'learning']), [sessions])
+
   function handleStopWithDeferred(id: string) {
     onStop(id) // stop immediately, no modal
     setDeferredTagCatId(id)
     if (deferDismissRef.current) clearTimeout(deferDismissRef.current)
-    deferDismissRef.current = setTimeout(() => setDeferredTagCatId(null), 5_000)
+    deferDismissRef.current = setTimeout(() => setDeferredTagCatId(null), 30_000)
   }
 
   function applyDeferredTag(tag: string | null) {
@@ -191,11 +245,12 @@ export function TrackerView({
     if (tag && deferredTagCatId) onSetTag(deferredTagCatId, tag)
   }
 
-  // Banner priority: deadtime > elevation > focusdebt (unclassified moved to global overlay in App)
+  // Banner priority: deadtime > workspace > elevation > focusdebt (unclassified moved to global overlay in App)
   const showDeadTime = !!activeCategory && !deadTimeDismissed && idleMs >= 3 * 60_000
-  const showElevation = !showDeadTime && !!elevationSuggestion && !!onElevateProcess && !!onDismissElevation
+  const showWorkspace = !showDeadTime && !!unclassifiedWorkspace && !!onAssignWorkspace && !!onDismissWorkspace
+  const showElevation = !showDeadTime && !showWorkspace && !!elevationSuggestion && !!onElevateProcess && !!onDismissElevation
   const isRunning = !!activeCategory?.activeEntry
-  const showFocusDebt = !showDeadTime && !showElevation && !isRunning
+  const showFocusDebt = !showDeadTime && !showWorkspace && !showElevation && !isRunning
 
   const mvdAchieved = isMVDAchieved(mvdItems)
   const mvdProgress = getMVDProgress(mvdItems)
@@ -207,9 +262,43 @@ export function TrackerView({
         <div className="mb-4">
           <DeadTimeRecoveryWidget
             idleMs={idleMs}
+            idleContext={currentWindow?.process ?? undefined}
             onSelectTask={task => { onSetTag(activeCategory!.id, task.text); setDeadTimeDismissed(true) }}
             onDismiss={() => setDeadTimeDismissed(true)}
           />
+        </div>
+      )}
+
+      {showWorkspace && unclassifiedWorkspace && (
+        <div className="mb-4 rounded-lg border border-sky-500/20 bg-sky-500/[0.06] px-4 py-3 text-sm">
+          <div className="mb-2 text-sky-300">
+            <span className="text-zinc-500 mr-1">{t('tracker.workspacePrompt')}</span>
+            <span className="font-medium font-mono">'{unclassifiedWorkspace}'</span>
+            <span className="text-zinc-600 text-xs ml-1">• {ageLabel(workspaceDetectedAt, 'tracker.detectedJustNow', 'tracker.detectedAgo')}</span>
+            <p className="text-xs text-zinc-500 mt-0.5">{t('tracker.workspaceAssign')}</p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {categories.filter(c => !c.archived).map(cat => {
+              const processWord = (unclassifiedWorkspace ?? '').toLowerCase().replace(/[^a-z0-9]/g, '')
+              const catWord = cat.name.toLowerCase().replace(/[^a-z0-9]/g, '')
+              const isSimilar = processWord.length > 1 && catWord.length > 1 &&
+                (catWord.includes(processWord) || processWord.includes(catWord))
+              return (
+                <button key={cat.id} onClick={() => onAssignWorkspace!(unclassifiedWorkspace!, cat.id)}
+                  className={`rounded border px-3 py-1 text-xs transition-all ${
+                    isSimilar
+                      ? 'border-sky-400/40 bg-sky-500/25 text-sky-200 hover:text-sky-100 hover:bg-sky-500/35'
+                      : 'border-sky-500/30 bg-sky-500/10 text-sky-300 hover:text-sky-100 hover:bg-sky-500/20'
+                  }`}>
+                  {cat.name}
+                </button>
+              )
+            })}
+            <button onClick={() => onDismissWorkspace!(unclassifiedWorkspace)}
+              className="rounded border border-white/[0.05] px-3 py-1 text-xs text-zinc-600 hover:text-zinc-400 transition-all">
+              {t('tracker.workspaceIgnore')} '{unclassifiedWorkspace}'
+            </button>
+          </div>
         </div>
       )}
 
@@ -217,7 +306,9 @@ export function TrackerView({
         <div className="mb-4 rounded-lg border border-violet-500/20 bg-violet-500/[0.06] px-4 py-3 text-sm">
           <div className="mb-2 text-violet-300">
             <span className="font-medium">{elevationSuggestion.displayName}</span>
-            {' '}is open — {t('tracker.autoStart')} <span className="font-medium">{activeCategory?.name}</span> {t('tracker.whenever')}
+            {' '}{t('tracker.autoStart')} <span className="font-medium">{activeCategory?.name}</span>
+            {' '}{t('tracker.whenever')}
+            <span className="text-zinc-600 text-xs ml-1">• {ageLabel(elevationDetectedAt, 'tracker.activeJustNow', 'tracker.activeFor')}</span>
           </div>
           <div className="flex gap-2">
             <button onClick={() => onElevateProcess!(elevationSuggestion.process, elevationSuggestion.categoryId)}
@@ -238,7 +329,7 @@ export function TrackerView({
       {deferredTagCatId && (
         <div className="mb-4 flex items-center gap-2 rounded-lg border border-white/[0.07] bg-white/[0.02] px-3 py-2 text-xs animate-in fade-in">
           <span className="text-zinc-500 shrink-0">{t('tracker.tagQuestion')}</span>
-          {QUICK_TAGS.map(tag => (
+          {quickTags.map(tag => (
             <button key={tag} onClick={() => applyDeferredTag(tag)}
               className="rounded border border-white/[0.07] bg-white/[0.03] px-2 py-0.5 text-zinc-400 hover:text-zinc-100 hover:border-white/15 transition-all">
               {tag}
@@ -260,7 +351,7 @@ export function TrackerView({
               <span className="text-xs text-zinc-600 font-mono">{mvdProgress.done}/{mvdProgress.total}</span>
             )}
             {mvdAchieved && (
-              <span className="rounded-full bg-emerald-500/15 px-2 py-0.5 text-[10px] text-emerald-400">✓ Done</span>
+              <span className="rounded-full bg-emerald-500/15 px-2 py-0.5 text-[10px] text-emerald-400">{t('tracker.done')}</span>
             )}
           </div>
           <div className="flex flex-wrap gap-2">
@@ -280,80 +371,134 @@ export function TrackerView({
                 </button>
               </span>
             ))}
-            {mvdItems.length === 0 && (
-              <span className="text-xs text-zinc-700 italic">{t('tracker.noGoalsHint')}</span>
+            {mvdItems.length === 0 && !mvdInputVisible && (
+              <input
+                className="flex-1 min-w-[12rem] rounded border border-dashed border-white/[0.08] bg-transparent px-2 py-1 text-xs text-zinc-500 placeholder-zinc-700 outline-none focus:border-white/[0.15] focus:text-zinc-200 transition-all"
+                placeholder={t('tracker.mvdPlaceholder')}
+                value={mvdInputValue}
+                onChange={e => setMvdInputValue(e.target.value)}
+                onKeyDown={e => {
+                  if (e.key === 'Enter' && mvdInputValue.trim()) {
+                    onMVDChange([...mvdItems, createMVDItem(mvdInputValue.trim())])
+                    setMvdInputValue('')
+                  }
+                  if (e.key === 'Escape') setMvdInputValue('')
+                }}
+              />
+            )}
+            {mvdItems.length > 0 && canAddMVDItem(mvdItems) && !mvdInputVisible && (
+              <button
+                onClick={() => setMvdInputVisible(true)}
+                className="rounded-full border border-dashed border-white/[0.07] px-2 py-1 text-xs text-zinc-700 hover:text-zinc-400 hover:border-white/15 transition-all">
+                +
+              </button>
+            )}
+            {mvdItems.length > 0 && mvdInputVisible && (
+              <input
+                autoFocus
+                className="flex-1 min-w-[12rem] rounded border border-white/[0.1] bg-white/[0.02] px-2 py-1 text-xs text-zinc-200 placeholder-zinc-700 outline-none focus:border-white/[0.2] transition-all"
+                placeholder={t('tracker.mvdPlaceholder')}
+                value={mvdInputValue}
+                onChange={e => setMvdInputValue(e.target.value)}
+                onKeyDown={e => {
+                  if (e.key === 'Enter' && mvdInputValue.trim()) {
+                    onMVDChange([...mvdItems, createMVDItem(mvdInputValue.trim())])
+                    setMvdInputValue('')
+                    setMvdInputVisible(false)
+                  }
+                  if (e.key === 'Escape') { setMvdInputValue(''); setMvdInputVisible(false) }
+                }}
+                onBlur={() => { setMvdInputVisible(false); setMvdInputValue('') }}
+              />
             )}
           </div>
         </div>
       )}
 
-      {/* Controls row — NLP (always visible; AI indicator when API key is set) */}
-      <div className="mb-5 flex items-center justify-end gap-2">
-        <button onClick={() => setShowNLP(v => !v)}
-          className={`rounded border px-2 py-1 text-xs transition-all ${
+      {/* Log session trigger — right-aligned button */}
+      <div className="flex justify-end mb-4">
+        <button
+          onClick={() => setShowNLP(p => !p)}
+          className={`flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-xs transition-all ${
             showNLP
-              ? 'border-indigo-500/30 bg-indigo-500/10 text-indigo-400'
-              : 'border-white/[0.06] text-zinc-600 hover:text-zinc-300'
+              ? 'border-white/[0.12] bg-white/[0.05] text-zinc-200'
+              : 'border-white/[0.07] text-zinc-500 hover:text-zinc-200 hover:border-white/[0.12]'
           }`}
-          title="Log time with natural language">
-          {claudeApiKey ? `${t('tracker.logTime')} (AI)` : t('tracker.logTime')}
+        >
+          <span className="text-[11px] leading-none">+</span>
+          {t('tracker.logTimeManual')}
+          {!claudeApiKey && (
+            <span className="text-zinc-700 text-[10px]" title="AI entry requires an Anthropic API key in Settings">· manual</span>
+          )}
         </button>
       </div>
 
-      {/* NLP Time Entry — expandable; API key required to actually run */}
+      {/* Time Entry panel */}
       {showNLP && (
         <div className="mb-5">
-          {claudeApiKey
-            ? <NLPTimeEntry categories={categories} apiKey={claudeApiKey} onConfirm={onNLPConfirm} />
-            : <p className="text-xs text-zinc-600 rounded-lg border border-white/[0.06] bg-white/[0.02] px-4 py-3">
-                Set an Anthropic API key in Settings to enable AI-powered natural language entry.
-              </p>
-          }
+          {claudeApiKey && (
+            <div className="flex items-center gap-1 mb-3">
+              <button
+                onClick={() => setLogMode('manual')}
+                className={`rounded px-3 py-1 text-xs transition-all ${
+                  logMode === 'manual'
+                    ? 'bg-white/[0.08] text-zinc-200'
+                    : 'text-zinc-600 hover:text-zinc-400'
+                }`}
+              >
+                {t('tracker.logTimeManual')}
+              </button>
+              <button
+                onClick={() => setLogMode('ai')}
+                className={`rounded px-3 py-1 text-xs transition-all ${
+                  logMode === 'ai'
+                    ? 'bg-white/[0.08] text-zinc-200'
+                    : 'text-zinc-600 hover:text-zinc-400'
+                }`}
+              >
+                {t('tracker.logTimeAI')}
+              </button>
+            </div>
+          )}
+          {(!claudeApiKey || logMode === 'manual') ? (
+            <ManualTimeEntry
+              categories={categories.filter(c => !c.archived)}
+              onConfirm={entry => { onNLPConfirm(entry); setShowNLP(false) }}
+            />
+          ) : (
+            <NLPTimeEntry categories={categories} apiKey={claudeApiKey} onConfirm={entry => { onNLPConfirm(entry); setShowNLP(false) }} />
+          )}
         </div>
       )}
 
       {/* Category list */}
-      <ul className={effectiveCompact ? 'space-y-1' : 'space-y-2 lg:grid lg:grid-cols-2 lg:gap-4 lg:space-y-0'}>
+      <ul className={effectiveCompact ? 'space-y-1' : 'space-y-2'}>
         {sortedActive.map((category, idx) => (
-          <li key={category.id} className={effectiveCompact ? '' : 'group/cat relative'}>
-            <CategoryItem
-              category={category}
-              weeklyMs={computeWeekMs(sessions, category.id, weekDates)}
-              todayMs={sessions.filter(s => s.categoryId === category.id).reduce((sum, s) => sum + (s.endedAt - s.startedAt), 0)}
-              lastTracked={getLastSessionDate(historySessions, category.id)}
-              insights={categoryInsights[category.id]}
-              suggestedMs={suggestWeeklyGoal(historySessions, category.id)}
-              onStart={() => onStart(category.id)}
-              onStop={(tag) => tag ? onStop(category.id, tag) : handleStopWithDeferred(category.id)}
-              onDelete={() => onDelete(category.id)}
-              onRename={newName => onRename(category.id, newName)}
-              onSetGoal={ms => onSetGoal(category.id, ms)}
-              onSetColor={color => onSetColor(category.id, color)}
-              onSetTag={tag => onSetTag(category.id, tag)}
-              activeTag={category.pendingTag}
-              lastSessionUntagged={(() => {
-                const last = [...sessions].reverse().find(s => s.categoryId === category.id)
-                return !!last && !last.tag
-              })()}
-              onTagLastSession={tag => onSetTag(category.id, tag)}
-              compact={effectiveCompact}
-              shortcutKey={idx < 9 ? idx + 1 : undefined}
-            />
-            {!effectiveCompact && (() => {
-              const lastUsed = getLastSessionDate(historySessions, category.id)
-              const daysSince = lastUsed ? Math.floor((now - lastUsed) / 86_400_000) : Infinity
-              if (daysSince <= 7 || category.activeEntry) return null
-              return (
-                <button
-                  onClick={() => onArchive(category.id, true)}
-                  title={`Archive — last used ${daysSince === Infinity ? 'never' : `${daysSince}d ago`}`}
-                  className="absolute top-2 right-2 hidden group-hover/cat:inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] text-zinc-700 hover:text-zinc-400 transition-colors"
-                >
-                  archive · {daysSince === Infinity ? 'never used' : `${daysSince}d ago`}
-                </button>
-              )
+          <CategoryItem
+            key={category.id}
+            category={category}
+            weeklyMs={computeWeekMs(sessions, category.id, weekDates)}
+            todayMs={sessions.filter(s => s.categoryId === category.id).reduce((sum, s) => sum + (s.endedAt - s.startedAt), 0)}
+            lastTracked={getLastSessionDate(historySessions, category.id)}
+            insights={categoryInsights[category.id]}
+            suggestedMs={suggestWeeklyGoal(historySessions, category.id)}
+            onStart={() => onStart(category.id)}
+            onStop={(tag) => tag ? onStop(category.id, tag) : handleStopWithDeferred(category.id)}
+            onArchive={() => onArchive(category.id, true)}
+            onRename={newName => onRename(category.id, newName)}
+            onSetGoal={ms => onSetGoal(category.id, ms)}
+            onSetColor={color => onSetColor(category.id, color)}
+            onSetTag={tag => onSetTag(category.id, tag)}
+            activeTag={category.pendingTag}
+            lastSessionUntagged={(() => {
+              const last = [...sessions].reverse().find(s => s.categoryId === category.id)
+              return !!last && !last.tag
             })()}
-          </li>
+            onTagLastSession={tag => onSetTag(category.id, tag)}
+            compact={effectiveCompact}
+            shortcutKey={idx < 9 ? idx + 1 : undefined}
+            quickTags={quickTags}
+          />
         ))}
 
         {/* Ghost card — add category inline */}
@@ -384,7 +529,7 @@ export function TrackerView({
           ) : (
             <button
               onClick={() => setAddingCategory(true)}
-              className={`w-full rounded-lg border border-dashed border-white/[0.06] px-4 text-xs text-zinc-700 hover:text-zinc-400 hover:border-white/[0.12] transition-all text-center ${effectiveCompact ? 'py-2' : 'py-3'}`}
+              className={`w-full rounded-md border border-dashed border-white/[0.08] px-4 text-xs text-zinc-600 hover:text-zinc-300 hover:border-white/[0.15] transition-all text-center ${effectiveCompact ? 'py-1.5' : 'py-2.5'}`}
             >
               {t('tracker.addCategory')}
             </button>
@@ -406,7 +551,7 @@ export function TrackerView({
                   <span>{category.name}</span>
                   <button onClick={() => onArchive(category.id, false)}
                     className="text-xs text-zinc-600 hover:text-zinc-300 transition-colors">
-                    unarchive
+                    {t('tracker.unarchive')}
                   </button>
                 </li>
               ))}

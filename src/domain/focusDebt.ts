@@ -43,11 +43,15 @@ export function getDebtDescription(level: DebtLevel): string {
   return 'Critical debt — strongly consider a full rest period before demanding tasks.'
 }
 
+const HIGH_DWS_THRESHOLD = 70
+
 export function buildDebtEventsFromSessions(
   sessions: { endedAt: number; startedAt: number; date: string }[],
   breakSkipCount: number = 0,
   breakCompletedCount: number = 0,
-  today?: string
+  today?: string,
+  /** Daily DWS scores keyed by date string (YYYY-MM-DD). Days with score ≥ 70 earn a highDwsDay credit. */
+  dailyDwsScores?: Record<string, number>
 ): FocusDebtEvent[] {
   const events: FocusDebtEvent[] = []
   const now = Date.now()
@@ -101,6 +105,15 @@ export function buildDebtEventsFromSessions(
       const dateStr = d.toISOString().slice(0, 10)
       if (!sessionDates.has(dateStr)) {
         events.push({ type: 'restDay', timestamp: new Date(dateStr + 'T12:00:00Z').getTime() })
+      }
+    }
+  }
+
+  // M66/M78: emit highDwsDay credit for days with DWS ≥ 70
+  if (dailyDwsScores) {
+    for (const [dateStr, score] of Object.entries(dailyDwsScores)) {
+      if (score >= HIGH_DWS_THRESHOLD) {
+        events.push({ type: 'highDwsDay', timestamp: new Date(dateStr + 'T12:00:00Z').getTime() })
       }
     }
   }
