@@ -1,0 +1,103 @@
+# cargo deny configuration
+# https://embarkstudios.github.io/cargo-deny/
+
+[advisories]
+version = 2
+ignore = [
+    # ── RUSTSEC-2023-0071: Marvin Attack timing side-channel in `rsa` crate ──────
+    #
+    # Root cause: sqlx-macros-core (a proc-macro crate) unconditionally depends on
+    # sqlx-mysql, which depends on `rsa` for MySQL's RSA-based auth protocols.
+    # This is a compile-time dependency — sqlx-macros-core must know all backends
+    # at compile time regardless of which features are enabled.
+    #
+    # Why it is safe to ignore here:
+    # - We use SQLite exclusively (tauri-plugin-sql features = ["sqlite"]).
+    # - sqlx-mysql is never instantiated at runtime; no MySQL connections are made.
+    # - The Marvin Attack requires an attacker to observe timing of RSA decrypt
+    #   operations. Since we never perform RSA operations, the attack surface is zero.
+    #
+    # Resolution: waiting for sqlx to replace the rsa dependency in sqlx-mysql with
+    # a patched implementation. Track at https://github.com/launchbadge/sqlx/issues
+    #
+    # Audited: 2026-03-27
+    { id = "RUSTSEC-2023-0071" },
+
+    # ── GTK3 crates: no longer maintained (RUSTSEC-2024-0411 through 0420) ────────
+    #
+    # Root cause: Tauri's Linux GUI layer uses gtk-rs GTK3 bindings (atk, gdk,
+    # gdk-sys, gdkx11-sys, glib, gtk, gtk-sys, etc.). The gtk-rs team deprecated
+    # the GTK3 crates in favour of gtk4-rs; all GTK3 crates are now unmaintained.
+    #
+    # Why it is safe to ignore here:
+    # - These are Linux-only transitive deps from Tauri's wry/tao/webkit2gtk stack.
+    # - We do not directly use any GTK API; all GUI interactions go through Tauri.
+    # - "Unmaintained" status means no active security patches — not that a CVE
+    #   with an attack vector exists. Tauri itself accepts these deps.
+    # - This app currently targets Windows. The GTK path is never executed on the
+    #   intended platform.
+    #
+    # Resolution: Tauri v3 is expected to migrate to GTK4. Track upstream.
+    # Audited: 2026-03-27
+    { id = "RUSTSEC-2024-0411" }, # gtk-sys
+    { id = "RUSTSEC-2024-0412" }, # gdk-sys
+    { id = "RUSTSEC-2024-0413" }, # gtk
+    { id = "RUSTSEC-2024-0414" }, # gdk
+    { id = "RUSTSEC-2024-0415" }, # atk
+    { id = "RUSTSEC-2024-0416" }, # glib
+    { id = "RUSTSEC-2024-0417" }, # atk-sys
+    { id = "RUSTSEC-2024-0418" }, # gdkx11-sys
+    { id = "RUSTSEC-2024-0419" }, # glib-sys
+    { id = "RUSTSEC-2024-0420" }, # gobject-sys
+
+    # ── fxhash: unmaintained (RUSTSEC-2025-0057) ─────────────────────────────────
+    #
+    # Root cause: fxhash is pulled in transitively via Tauri's stylesheet/style
+    # parsing stack (servo/stylo). No active CVE — crate is simply unmaintained.
+    # Audited: 2026-03-27
+    { id = "RUSTSEC-2025-0057" },
+
+    # ── proc-macro-error: unmaintained (RUSTSEC-2024-0370) ───────────────────────
+    #
+    # Root cause: proc-macro-error is used by several proc-macro crates in the
+    # Tauri dependency graph. The crate is unmaintained but has no active CVE.
+    # Audited: 2026-03-27
+    { id = "RUSTSEC-2024-0370" },
+
+    # ── unic-* crates: unmaintained (RUSTSEC-2025-0075/0080/0081/0098/0100) ──────
+    #
+    # Root cause: unic-char-property, unic-char-range, unic-common, unic-ucd-ident,
+    # unic-ucd-version are pulled in via Tauri's JavaScript engine / wry for Unicode
+    # identifier validation. All are unmaintained with no active CVE.
+    # Audited: 2026-03-27
+    { id = "RUSTSEC-2025-0075" }, # unic-char-range
+    { id = "RUSTSEC-2025-0080" }, # unic-common
+    { id = "RUSTSEC-2025-0081" }, # unic-char-property
+    { id = "RUSTSEC-2025-0098" }, # unic-ucd-version
+    { id = "RUSTSEC-2025-0100" }, # unic-ucd-ident
+]
+
+[licenses]
+version = 2
+# Allow all OSI-approved permissive and weak-copyleft licenses common in the Rust ecosystem.
+allow = [
+    "MIT",
+    "Apache-2.0",
+    "Apache-2.0 WITH LLVM-exception",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "ISC",
+    "Unicode-DFS-2016",
+    "Unicode-3.0",
+    "CC0-1.0",
+    "MPL-2.0",
+    "Zlib",
+    "OpenSSL",
+]
+
+[bans]
+multiple-versions = "warn"
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"

@@ -1,6 +1,6 @@
 {
   "name": "kairos-tracker",
-  "version": "1.0.0",
+  "version": "1.0.0-alpha",
   "description": "Science-backed productivity tracker with passive window capture, AI weekly digest, and deep focus metrics. Built with Tauri 2 + React + TypeScript.",
   "main": "index.js",
   "scripts": {

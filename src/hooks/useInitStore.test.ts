@@ -3,7 +3,7 @@ import { renderHook, waitFor } from '@testing-library/react'
 import { useInitStore } from './useInitStore'
 import { useTimerStore } from '../store/useTimerStore'
 import { createInMemoryStorage } from '../persistence/inMemoryStorage'
-import { toDateString } from '../domain/timer'
+import { toDateString, getWeekDates } from '../domain/timer'
 
 const today = toDateString(Date.now())
 
@@ -116,9 +116,11 @@ describe('useInitStore', () => {
   it('sessions outside the current week go to historySessions but not sessions', async () => {
     const storage = createInMemoryStorage()
     await storage.saveCategory('id-1', 'Work')
-    // Use a date 5 days ago — within 7-day history window but outside current week
-    const twoWeeksAgo = toDateString(Date.now() - 5 * 86_400_000)
-    await storage.saveSession({ id: 's-old', categoryId: 'id-1', startedAt: 0, endedAt: 1000, date: twoWeeksAgo })
+    // Use the Sunday before the current Monday — always outside the current Mon-Sun week
+    // and always within the 7-day history window (>= historyStart = daysAgo(7, today))
+    const mondayStr = getWeekDates(today)[0]
+    const lastSunday = toDateString(new Date(mondayStr + 'T12:00:00Z').getTime() - 86_400_000)
+    await storage.saveSession({ id: 's-old', categoryId: 'id-1', startedAt: 0, endedAt: 1000, date: lastSunday })
 
     renderHook(() => useInitStore(storage))
 

@@ -42,13 +42,13 @@ jobs:
           tagName: ${{ github.ref_name }}
           releaseName: Kairos Tracker ${{ github.ref_name }}
           releaseBody: |
-            ## Changes
-
-            See [PLAN.md](https://github.com/${{ github.repository }}/blob/main/PLAN.md) for full milestone history.
-
             ## Install
 
             Download the `.msi` installer below and run it. Windows may show a SmartScreen warning on first install — click "More info → Run anyway".
+
+            ## Changes
+
+            See [CHANGELOG.md](https://github.com/${{ github.repository }}/blob/main/CHANGELOG.md) for the full feature inventory and known limitations.
           releaseDraft: false
-          prerelease: false
+          prerelease: true
           includeUpdaterJson: true

@@ -66,6 +66,24 @@ Domain logic must have **zero UI or Tauri dependencies** — it should be fully 
 
 Please do **not** open public issues for security vulnerabilities. Instead, email the maintainer directly. See the Security section in the README for the project's security model.
 
+## Release Process
+
+Only maintainers cut releases. The process is:
+
+1. **Freeze features on `dev`** — no new features after the freeze commit
+2. **Bump versions** — update `package.json`, `src-tauri/tauri.conf.json`, `src-tauri/Cargo.toml`, and `src/version.ts` to the new version number
+3. **Update CHANGELOG.md** — add a dated entry for the new version
+4. **Open a PR from `dev` → `main`** — title: `release: vX.Y.Z`
+5. **Merge the PR** — squash or merge, your choice; the merge commit becomes the release base
+6. **Tag the merge commit** — `git tag vX.Y.Z <merge-commit-sha> && git push origin vX.Y.Z`
+7. **Verify CI** — the `Release` workflow triggers automatically on the tag and produces the `.msi` installer
+
+**Rules:**
+- Never tag a feature commit — always tag the dedicated release-prep merge commit
+- Never bump versions in the same commit as a feature
+- The `CHANGELOG.md` entry must be complete before the PR is opened
+- `npm test`, `npm run typecheck`, and `cargo check` must all pass before tagging
+
 ## License
 
 By contributing, you agree that your contributions will be licensed under the MIT License.
