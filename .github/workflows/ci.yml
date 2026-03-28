@@ -61,13 +61,12 @@ jobs:
         working-directory: src-tauri
         run: cargo check --release
 
-      - name: Install cargo-audit
-        run: cargo install cargo-audit --quiet
+      - name: Install cargo-deny
+        run: cargo install cargo-deny --quiet
 
-      - name: Rust dependency audit (cargo audit)
+      - name: Dependency audit (cargo deny)
         working-directory: src-tauri
-        # RUSTSEC-2023-0071: Marvin Attack in `rsa` crate — transitive dep, no fix available upstream.
-        run: cargo audit --ignore RUSTSEC-2023-0071
+        run: cargo deny check
 
   cargo-check-windows:
     runs-on: windows-latest
