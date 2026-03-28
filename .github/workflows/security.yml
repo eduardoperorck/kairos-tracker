@@ -33,7 +33,7 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: npm
 
       - name: Install dependencies
@@ -45,7 +45,7 @@ jobs:
       - name: npm audit — CLI companion
         working-directory: cli
         run: |
-          npm ci
+          npm ci --ignore-scripts
           npm audit --audit-level=high
 
   # ── 3. Rust crate vulnerability scan ────────────────────────────────────────
@@ -55,22 +55,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: dtolnay/rust-toolchain@stable
-
-      - name: Cache Cargo registry
-        uses: actions/cache@v4
+      - name: Dependency audit (cargo deny)
+        uses: EmbarkStudios/cargo-deny-action@v2
         with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-          key: ${{ runner.os }}-cargo-deny-${{ hashFiles('src-tauri/Cargo.lock') }}
-
-      - name: Install cargo-deny
-        run: cargo install cargo-deny --quiet
-
-      - name: Run cargo deny check
-        working-directory: src-tauri
-        run: cargo deny check
+          manifest-path: src-tauri/Cargo.toml
 
   # ── 4. Semgrep SAST (TypeScript + Rust patterns) ────────────────────────────
   semgrep:

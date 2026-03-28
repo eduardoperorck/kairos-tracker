@@ -73,14 +73,17 @@ First public release.
 **Infrastructure**
 - SQLite persistence via `tauri-plugin-sql` with schema migrations
 - In-memory storage adapter for tests and CI
-- CI: tests + Vite build (Ubuntu), `cargo check` (Ubuntu + Windows)
+- CI: tests + Vite build + CLI `tsc --noEmit` (Ubuntu), `cargo check` (Ubuntu + Windows)
+- Security pipeline: gitleaks (full history), npm audit (root + CLI), cargo deny (advisories + licenses), Semgrep SAST (TypeScript + React + OWASP Top 10)
+- `cargo deny` with `deny.toml` — 18 audited exceptions, all documented with root cause and justification
+- Automatic release workflow: PR merge to `main` → auto-tag → Windows build → `.msi` uploaded to GitHub release
 - 80%+ line coverage, 75%+ branch coverage enforced by Vitest thresholds
 
 ### Known limitations
 
 - Passive capture and screenshots are Windows-only (macOS/Linux builds compile but core features are no-ops)
 - CLI companion (`@kairos-tracker/cli`) must be built from source — not yet published to npm
-- Update check is informational only; there is no in-app installer
+- Update check is informational only; the `.msi` from the release page must be downloaded manually
 
 ---
 
