@@ -49,8 +49,8 @@ jobs:
           npm audit --audit-level=high
 
   # ── 3. Rust crate vulnerability scan ────────────────────────────────────────
-  cargo-audit:
-    name: Cargo Audit (Rust CVEs)
+  cargo-deny:
+    name: Cargo Deny (Rust CVEs + licenses)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -63,31 +63,16 @@ jobs:
           path: |
             ~/.cargo/registry
             ~/.cargo/git
-          key: ${{ runner.os }}-cargo-audit-${{ hashFiles('src-tauri/Cargo.lock') }}
+          key: ${{ runner.os }}-cargo-deny-${{ hashFiles('src-tauri/Cargo.lock') }}
 
-      - name: Install cargo-audit
-        run: cargo install cargo-audit --quiet
+      - name: Install cargo-deny
+        run: cargo install cargo-deny --quiet
 
-      - name: Run cargo audit
+      - name: Run cargo deny check
         working-directory: src-tauri
-        run: cargo audit
+        run: cargo deny check
 
-  # ── 4. OSV supply-chain scan (npm + Rust) ───────────────────────────────────
-  osv-scan:
-    name: OSV Scanner (supply chain)
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Run OSV Scanner
-        uses: google/osv-scanner-action@v1
-        with:
-          scan-args: |-
-            --lockfile=package-lock.json
-            --lockfile=src-tauri/Cargo.lock
-            --lockfile=cli/package-lock.json
-
-  # ── 5. Semgrep SAST (TypeScript + Rust patterns) ────────────────────────────
+  # ── 4. Semgrep SAST (TypeScript + Rust patterns) ────────────────────────────
   semgrep:
     name: SAST (semgrep)
     runs-on: ubuntu-latest
