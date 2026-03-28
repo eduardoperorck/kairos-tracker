@@ -16,7 +16,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: npm
 
       - name: Install dependencies
@@ -27,6 +27,12 @@ jobs:
 
       - name: Build (Vite)
         run: npm run build
+
+      - name: Type-check CLI
+        working-directory: cli
+        run: |
+          npm ci --ignore-scripts
+          npx tsc --noEmit
 
   cargo-check:
     runs-on: ubuntu-latest
@@ -61,12 +67,10 @@ jobs:
         working-directory: src-tauri
         run: cargo check --release
 
-      - name: Install cargo-deny
-        run: cargo install cargo-deny --quiet
-
       - name: Dependency audit (cargo deny)
-        working-directory: src-tauri
-        run: cargo deny check
+        uses: EmbarkStudios/cargo-deny-action@v2
+        with:
+          manifest-path: src-tauri/Cargo.toml
 
   cargo-check-windows:
     runs-on: windows-latest
