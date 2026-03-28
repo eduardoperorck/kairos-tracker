@@ -1,7 +1,7 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
   "productName": "Kairos Tracker",
-  "version": "1.0.0-alpha",
+  "version": "1.0.0",
   "identifier": "com.kairostacker.app",
   "build": {
     "frontendDist": "../dist",
